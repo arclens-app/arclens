@@ -9,9 +9,10 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL })
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { addr: string } }
+  { params }: { params: Promise<{ addr: string }> }
 ) {
-  const addr  = params.addr.toLowerCase()
+  const { addr: rawAddr } = await params
+  const addr  = rawAddr.toLowerCase()
   const limit = parseInt(req.nextUrl.searchParams.get("limit") || "20")
 
   try {
