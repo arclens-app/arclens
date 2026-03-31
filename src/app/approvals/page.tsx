@@ -58,8 +58,8 @@ export default function ApprovalsPage() {
   }, [mounted])
 
   async function connectWallet() {
-    if (!window.ethereum) { alert("MetaMask not detected."); return }
-    const accounts = await window.ethereum.request({ method: "eth_requestAccounts" })
+    if (!(window as any).ethereum) { alert("MetaMask not detected."); return }
+    const accounts = await (window as any).ethereum.request({ method: "eth_requestAccounts" })
     if (accounts[0]) { setWalletAddr(accounts[0]); setAddress(accounts[0]) }
   }
 
@@ -164,11 +164,11 @@ export default function ApprovalsPage() {
   }
 
   async function revoke(approval: Approval) {
-    if (!window.ethereum) { alert("MetaMask not detected."); return }
+    if (!(window as any).ethereum) { alert("MetaMask not detected."); return }
     setApprovals(prev => prev.map(a => a.id === approval.id ? { ...a, status: "revoking" } : a))
     try {
-      const accounts = await window.ethereum.request({ method: "eth_requestAccounts" })
-      const txHash   = await window.ethereum.request({
+      const accounts = await (window as any).ethereum.request({ method: "eth_requestAccounts" })
+      const txHash   = await (window as any).ethereum.request({
         method: "eth_sendTransaction",
         params: [{
           from:    accounts[0],
