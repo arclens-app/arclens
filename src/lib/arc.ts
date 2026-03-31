@@ -8,7 +8,6 @@ import {
   ARC_RPC_WS,
   ARC_CHAIN_ID,
   USDC_ADDRESS,
-  USDC_DECIMALS,
   formatUSDC,
 } from "./constants"
 
@@ -18,8 +17,8 @@ let _httpProvider: ethers.JsonRpcProvider | null = null
 export function getProvider(): ethers.JsonRpcProvider {
   if (!_httpProvider) {
     _httpProvider = new ethers.JsonRpcProvider(ARC_RPC_HTTP, {
-      chainId:  ARC_CHAIN_ID,
-      name:     "arc-testnet",
+      chainId: ARC_CHAIN_ID,
+      name:    "arc-testnet",
     })
   }
   return _httpProvider
@@ -35,7 +34,6 @@ export function getWsProvider(): ethers.WebSocketProvider {
       name:    "arc-testnet",
     })
 
-    // Auto-reconnect on close
     _wsProvider.websocket.addEventListener("close", () => {
       console.warn("[ArcLens] WebSocket closed — reconnecting…")
       _wsProvider = null
@@ -45,7 +43,7 @@ export function getWsProvider(): ethers.WebSocketProvider {
   return _wsProvider
 }
 
-// ─── USDC CONTRACT (minimal ABI — only what we need) ─────────────────────────
+// ─── USDC CONTRACT ────────────────────────────────────────────────────────────
 const USDC_ABI = [
   "function totalSupply() view returns (uint256)",
   "function balanceOf(address) view returns (uint256)",
@@ -66,10 +64,6 @@ export function getUSDCContract(
 
 // ─── TYPED FETCH FUNCTIONS ────────────────────────────────────────────────────
 
-/**
- * Fetch the latest block with full transaction objects.
- * All fee values are converted to USDC display strings.
- */
 export async function getLatestBlock() {
   const provider = getProvider()
   const block = await provider.getBlock("latest", true)
@@ -79,6 +73,10 @@ export async function getLatestBlock() {
     ? Number(ethers.formatUnits(block.baseFeePerGas, "gwei"))
     : 160
 
+  // Use BigInt() instead of bigint literals (160n, 9n, 12n)
+  const baseFee = block.baseFeePerGas ?? BigInt(160) * BigInt(10) ** BigInt(9)
+  const feeRaw  = block.gasUsed * baseFee / BigInt(10) ** BigInt(12)
+
   return {
     number:       block.number,
     hash:         block.hash,
@@ -87,17 +85,12 @@ export async function getLatestBlock() {
     gasUsed:      block.gasUsed,
     gasLimit:     block.gasLimit,
     baseFeeGwei,
-    // Fee collected = gasUsed × baseFee, denominated in USDC (6 decimals)
-    feeUSDC:      formatUSDC(block.gasUsed * (block.baseFeePerGas ?? 160n * 10n ** 9n) / 10n ** 12n),
+    feeUSDC:      formatUSDC(feeRaw),
     validator:    block.miner,
     parentHash:   block.parentHash,
   }
 }
 
-/**
- * Fetch a full transaction with its receipt.
- * Returns gas cost in USDC display format.
- */
 export async function getTransaction(hash: string) {
   const provider = getProvider()
   const [tx, receipt] = await Promise.all([
@@ -107,46 +100,37 @@ export async function getTransaction(hash: string) {
 
   if (!tx) throw new Error(`Transaction not found: ${hash}`)
 
-  const baseFee  = receipt?.effectiveGasPrice ?? tx.gasPrice ?? 160n * 10n ** 9n
-  const gasUsed  = receipt?.gasUsed ?? 0n
+  const baseFee  = receipt?.effectiveGasPrice ?? tx.gasPrice ?? BigInt(160) * BigInt(10) ** BigInt(9)
+  const gasUsed  = receipt?.gasUsed ?? BigInt(0)
   const feeWei   = gasUsed * baseFee
-  // Convert wei → USDC micro (wei / 1e12) then → USDC (/ 1e6)
-  const feeUSDC  = formatUSDC(feeWei / 10n ** 12n)
+  const feeUSDC  = formatUSDC(feeWei / BigInt(10) ** BigInt(12))
+  const valueUSDC = formatUSDC(tx.value / BigInt(10) ** BigInt(12))
 
   return {
-    hash:         tx.hash,
-    blockNumber:  tx.blockNumber,
-    from:         tx.from,
-    to:           tx.to,
-    value:        tx.value,
-    // Value in USDC for display (Arc uses USDC as native, but value field
-    // on non-USDC txs will be 0 — real value is in Transfer events)
-    valueUSDC:    formatUSDC(tx.value / 10n ** 12n),
-    gasUsed:      receipt?.gasUsed ?? 0n,
-    gasPrice:     baseFee,
+    hash:          tx.hash,
+    blockNumber:   tx.blockNumber,
+    from:          tx.from,
+    to:            tx.to,
+    value:         tx.value,
+    valueUSDC,
+    gasUsed:       receipt?.gasUsed ?? BigInt(0),
+    gasPrice:      baseFee,
     feeUSDC,
-    status:       receipt?.status === 1 ? "confirmed" : receipt ? "failed" : "pending",
-    data:         tx.data,
-    nonce:        tx.nonce,
-    logs:         receipt?.logs ?? [],
+    status:        receipt?.status === 1 ? "confirmed" : receipt ? "failed" : "pending",
+    data:          tx.data,
+    nonce:         tx.nonce,
+    logs:          receipt?.logs ?? [],
     confirmations: receipt ? (await provider.getBlockNumber()) - (tx.blockNumber ?? 0) : 0,
   }
 }
 
-/**
- * Fetch address info including USDC balance.
- */
 export async function getAddressInfo(address: string) {
   const provider = getProvider()
   const usdc     = getUSDCContract()
 
-  const [
-    txCount,
-    usdcBalance,
-    code,
-  ] = await Promise.all([
+  const [txCount, usdcBalance, code] = await Promise.all([
     provider.getTransactionCount(address),
-    usdc.balanceOf(address).catch(() => 0n),
+    usdc.balanceOf(address).catch(() => BigInt(0)),
     provider.getCode(address),
   ])
 
@@ -162,9 +146,6 @@ export async function getAddressInfo(address: string) {
   }
 }
 
-/**
- * Fetch current gas price in Gwei and USDC cost per tx type.
- */
 export async function getGasInfo() {
   const provider    = getProvider()
   const feeData     = await provider.getFeeData()
@@ -175,52 +156,44 @@ export async function getGasInfo() {
   return {
     baseFeeGwei: Math.round(baseFeeGwei),
     costs: {
-      transfer:       `$${(baseFeeGwei * 21_000  * 1e-9).toFixed(4)}`,
-      erc20Transfer:  `$${(baseFeeGwei * 46_000  * 1e-9).toFixed(4)}`,
-      contractCall:   `$${(baseFeeGwei * 85_000  * 1e-9).toFixed(4)}`,
-      contractDeploy: `$${(baseFeeGwei * 200_000 * 1e-9).toFixed(4)}`,
+      transfer:       `$${(baseFeeGwei * 21000  * 1e-9).toFixed(4)}`,
+      erc20Transfer:  `$${(baseFeeGwei * 46000  * 1e-9).toFixed(4)}`,
+      contractCall:   `$${(baseFeeGwei * 85000  * 1e-9).toFixed(4)}`,
+      contractDeploy: `$${(baseFeeGwei * 200000 * 1e-9).toFixed(4)}`,
     },
   }
 }
 
-/**
- * Fetch recent blocks (last N blocks).
- */
 export async function getRecentBlocks(count = 10) {
-  const provider   = getProvider()
-  const latest     = await provider.getBlockNumber()
-  const blockNums  = Array.from({ length: count }, (_, i) => latest - i)
+  const provider  = getProvider()
+  const latest    = await provider.getBlockNumber()
+  const blockNums = Array.from({ length: count }, (_, i) => latest - i)
 
   const blocks = await Promise.all(
     blockNums.map(n => provider.getBlock(n, false))
   )
 
-  return blocks.filter(Boolean).map(b => ({
-    number:    b!.number,
-    hash:      b!.hash,
-    timestamp: b!.timestamp,
-    txCount:   b!.transactions.length,
-    gasUsed:   b!.gasUsed,
-    validator: b!.miner,
-    feeUSDC:   formatUSDC(
-      b!.gasUsed * (b!.baseFeePerGas ?? 160n * 10n ** 9n) / 10n ** 12n
-    ),
-  }))
+  return blocks.filter(Boolean).map(b => {
+    const baseFee = b!.baseFeePerGas ?? BigInt(160) * BigInt(10) ** BigInt(9)
+    const feeRaw  = b!.gasUsed * baseFee / BigInt(10) ** BigInt(12)
+    return {
+      number:    b!.number,
+      hash:      b!.hash,
+      timestamp: b!.timestamp,
+      txCount:   b!.transactions.length,
+      gasUsed:   b!.gasUsed,
+      validator: b!.miner,
+      feeUSDC:   formatUSDC(feeRaw),
+    }
+  })
 }
 
-/**
- * Fetch USDC total supply (circulating on Arc).
- */
 export async function getUSDCSupply(): Promise<string> {
   const usdc   = getUSDCContract()
   const supply = await usdc.totalSupply()
   return formatUSDC(supply)
 }
 
-/**
- * Decode ERC-20 Transfer events from transaction logs.
- * Returns human-readable transfer list.
- */
 export function decodeTransferLogs(
   logs: ethers.Log[]
 ): { from: string; to: string; amount: string }[] {

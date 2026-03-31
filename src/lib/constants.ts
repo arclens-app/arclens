@@ -3,8 +3,8 @@ export const ARC_RPC_HTTP = "https://rpc.arc-testnet.io"
 export const ARC_RPC_WS = "wss://ws.arc-testnet.io"
 export const USDC_ADDRESS = "0x3600000000000000000000000000000000000000"
 export const USDC_DECIMALS = 6
-export const BASE_FEE_GWEI = 160n
-export const BASE_FEE_WEI = 160n * 10n ** 9n
+export const BASE_FEE_GWEI = BigInt(160)
+export const BASE_FEE_WEI  = BigInt(160) * BigInt(10) ** BigInt(9)
 
 export const ADD_CHAIN_PARAMS = {
   chainId: "0xA1C",
@@ -21,8 +21,9 @@ export function gasToUSDC(gasUsed: number, baseFeeGwei = 160): string {
 
 export function formatUSDC(raw: bigint | string | number): string {
   const n = typeof raw === "bigint" ? raw : BigInt(String(raw))
-  const whole = n / 1_000_000n
-  const frac = n % 1_000_000n
+  const million = BigInt(1000000)
+  const whole = n / million
+  const frac = n % million
   const fracStr = frac.toString().padStart(6, "0").slice(0, 2)
   return "$" + Number(whole).toLocaleString() + "." + fracStr
 }

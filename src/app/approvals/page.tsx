@@ -47,7 +47,6 @@ export default function ApprovalsPage() {
 
   useEffect(() => { setMounted(true) }, [])
 
-  // Auto-connect if wallet was connected via sidebar
   useEffect(() => {
     if (!mounted) return
     const saved = localStorage.getItem("arclens-wallet")
@@ -74,15 +73,12 @@ export default function ApprovalsPage() {
     setApprovals([])
 
     try {
-      // Step 1: Get all contracts this wallet has sent tokens TO
-      // These are the likely spenders
       const res = await fetch(
         "/api/blockscout?path=v2/addresses/" + addr + "/token-transfers?type=ERC-20&limit=100"
       )
       const data = await res.json()
       const items = data.items || []
 
-      // Collect unique contract addresses that received tokens from this wallet
       const spenderSet = new Set<string>()
 
       for (const item of items) {
@@ -90,13 +86,11 @@ export default function ApprovalsPage() {
         const to   = (item.to?.hash as string || "").toLowerCase()
         const isContract = item.to?.is_contract as boolean
 
-        // If this wallet sent tokens to a contract — that contract is a likely spender
         if (from === addr.toLowerCase() && isContract && to) {
           spenderSet.add(to)
         }
       }
 
-      // Also collect unique tokens
       const tokenMap = new Map<string, { symbol: string; color: string }>()
       tokenMap.set("0x3600000000000000000000000000000000000000", { symbol: "USDC", color: "#00d990" })
 
@@ -104,17 +98,10 @@ export default function ApprovalsPage() {
         const tokenAddr = (item.token?.address_hash || item.token?.address) as string
         const symbol    = (item.token?.symbol as string) || "???"
         if (tokenAddr && !tokenMap.has(tokenAddr.toLowerCase())) {
-          tokenMap.set(tokenAddr.toLowerCase(), {
-            symbol,
-            color: "#1a56ff",
-          })
+          tokenMap.set(tokenAddr.toLowerCase(), { symbol, color: "#1a56ff" })
         }
       }
 
-      console.log("[ArcLens] Found spenders:", [...spenderSet])
-      console.log("[ArcLens] Found tokens:", [...tokenMap.keys()])
-
-      // Step 2: For every token × spender combination, check actual allowance
       const found: Approval[] = []
 
       for (const [tokenAddr, tokenInfo] of tokenMap.entries()) {
@@ -126,9 +113,11 @@ export default function ApprovalsPage() {
             }, "latest"])
 
             const allowance = BigInt(result || "0x0")
+            // Use BigInt(0) instead of 0n to avoid ES2020 target issues
             if (allowance === BigInt(0)) continue
 
-            const MAX       = BigInt("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
+            const MAX = BigInt("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
+            // Use BigInt(2) instead of 2n
             const unlimited = allowance >= MAX / BigInt(2)
             const risk: "high" | "medium" | "low" = unlimited
               ? "high"
@@ -152,7 +141,6 @@ export default function ApprovalsPage() {
         }
       }
 
-      console.log("[ArcLens] Found approvals:", found.length)
       setApprovals(found)
       setScanned(true)
     } catch (e) {
@@ -171,10 +159,9 @@ export default function ApprovalsPage() {
       const txHash   = await (window as any).ethereum.request({
         method: "eth_sendTransaction",
         params: [{
-          from:    accounts[0],
-          to:      approval.tokenAddress,
-          data:    encodeApproveZero(approval.spender),
-
+          from: accounts[0],
+          to:   approval.tokenAddress,
+          data: encodeApproveZero(approval.spender),
         }],
       })
       for (let i = 0; i < 15; i++) {
