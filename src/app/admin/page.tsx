@@ -135,7 +135,7 @@ export default function AdminPage() {
         {/* TOPBAR */}
         <div style={{ display:"flex", alignItems:"center", gap:"16px", marginBottom:"24px" }}>
           <div style={{ fontSize:"20px", fontWeight:700, letterSpacing:"-0.04em", color:t1 }}>Admin Panel</div>
-          <div style={{ fontSize:"11px", fontFamily:mono, color:t3, padding:"3px 10px", borderRadius:"5px", background:"rgba(224,51,72,0.08)", border:"1px solid rgba(224,51,72,0.2)", color:"#e03348" }}>
+          <div style={{ fontSize:"11px", fontFamily:mono, padding:"3px 10px", borderRadius:"5px", background:"rgba(224,51,72,0.08)", border:"1px solid rgba(224,51,72,0.2)", color:"#e03348" }}>
             {pendingCount} pending
           </div>
           <button onClick={() => loadAll()} style={{ marginLeft:"auto", height:"32px", padding:"0 14px", background:"transparent", color:t2, fontSize:"11px", fontFamily:mono, border:"1px solid "+bdr, borderRadius:"6px", cursor:"pointer" }}>
@@ -364,4 +364,3 @@ export default function AdminPage() {
     </ArcLayout>
   )
 }
-
