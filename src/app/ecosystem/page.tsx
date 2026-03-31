@@ -252,7 +252,7 @@ export default function EcosystemPage() {
                     >
                       {logoPreview
                         ? <img src={logoPreview} alt="preview" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                        : <><div style={{ fontSize: "24px", marginBottom: "4px" }}>+</div><div style={{ fontSize: "9px", fontFamily: mono, color: "#6b7da8", textAlign: "center", lineHeight: 1.4, padding: "0 6px" }}>{uploading ? "Uploading..." : "Upload Logo"}</div></>
+                        : <><div style={{ marginBottom: "4px" }}>+</div><div style={{ fontSize: "9px", fontFamily: mono, color: "#6b7da8", textAlign: "center", lineHeight: 1.4, padding: "0 6px" }}>{uploading ? "Uploading..." : "Upload Logo"}</div></>
                       }
                       {uploading && <div style={{ position: "absolute", inset: 0, background: "rgba(5,7,15,0.7)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "11px", fontFamily: mono, color: "#8aaeff" }}>Uploading...</div>}
                     </div>

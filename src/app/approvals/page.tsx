@@ -126,13 +126,13 @@ export default function ApprovalsPage() {
             }, "latest"])
 
             const allowance = BigInt(result || "0x0")
-            if (allowance === 0n) continue
+            if (allowance === BigInt(0)) continue
 
             const MAX       = BigInt("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
-            const unlimited = allowance >= MAX / 2n
+            const unlimited = allowance >= MAX / BigInt(2)
             const risk: "high" | "medium" | "low" = unlimited
               ? "high"
-              : allowance > 1000n * 10n ** 6n
+              : allowance > BigInt(1000) * BigInt(10) ** BigInt(6)
                 ? "medium"
                 : "low"
 

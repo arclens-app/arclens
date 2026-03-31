@@ -261,7 +261,7 @@ export default function TxPage() {
                   <div style={{ fontSize:"12px", fontFamily:mono, color:"#a080ff", marginBottom:"12px" }}>{tx.decodedInput.method_call}</div>
                   {tx.decodedInput.parameters.map((p, i) => (
                     <div key={i} style={{ display:"flex", gap:"16px", padding:"8px 0", borderBottom:"1px solid rgba(128,128,128,0.04)" }}>
-                      <div style={{ fontSize:"10px", fontFamily:mono, color:t3, minWidth:"100px" }}>{p.name} <span style={{ color:"rgba(128,128,128,0.4)" }}>({p.type})</span></div>
+                      <div style={{ fontSize:"10px", fontFamily:mono, minWidth:"100px" }}>{p.name} <span style={{ color:"rgba(128,128,128,0.4)" }}>({p.type})</span></div>
                       <div style={{ fontSize:"11px", fontFamily:mono, color:t2, wordBreak:"break-all" }}>{String(p.value).length > 60 ? String(p.value).slice(0,60)+"..." : String(p.value)}</div>
                     </div>
                   ))}
