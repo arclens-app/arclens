@@ -205,7 +205,7 @@ export default function WalletActivityPage() {
             { label:"USDC Holders",      value:totalHolders||"...",      color:"#8aaeff", sub:"unique addresses holding USDC" },
             { label:"Total USDC Supply", value:totalSupply||"...",        color:"#00d990", sub:"circulating on Arc Testnet" },
             { label:"Largest Transfer",  value:largestTransfer||"...",    color:"#c08828", sub:"in recent USDC transfers" },
-          ].map(s => (
+          ].map((s: any) => (
             <div key={s.label} style={{ background:surf, padding:"18px 22px" }}>
               <div style={{ fontSize:"9.5px", fontFamily:mono, color:"#323e62", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:"8px" }}>{s.label}</div>
               <div style={{ fontSize:"22px", fontWeight:700, letterSpacing:"-0.04em", color:s.color, marginBottom:"4px" }}>{s.value}</div>
@@ -216,7 +216,7 @@ export default function WalletActivityPage() {
 
         {/* TABS */}
         <div style={{ display:"flex", gap:"8px", marginBottom:"20px" }}>
-          {tabs.map(t => (
+          {tabs.map((t: any) => (
             <button key={t.id} onClick={() => setTab(t.id)}
               style={{ height:"34px", padding:"0 16px", background:tab===t.id?"#1a56ff":"transparent", color:tab===t.id?"#fff":"#6b7da8", fontSize:"12px", fontWeight:tab===t.id?600:400, border:"1px solid "+(tab===t.id?"#1a56ff":border), borderRadius:"7px", cursor:"pointer", fontFamily:"'Geist',sans-serif", transition:"all .12s" }}>
               {t.label}
@@ -240,7 +240,7 @@ export default function WalletActivityPage() {
             <div style={{ padding:"48px", textAlign:"center", fontFamily:mono, fontSize:"11px", color:"#323e62" }}>Scanning Arc Testnet...</div>
           ) : tab==="holders" ? (
             <>
-              {holders.map(h => (
+              {holders.map((h: any) => (
                 <div key={h.address} style={{ display:"flex", alignItems:"center", gap:"14px", padding:"13px 18px", borderBottom:"1px solid rgba(128,128,128,0.06)" }}>
                   <div style={{ width:"32px", fontSize:"13px", flexShrink:0, textAlign:"center" }}>
                     {h.rank<=3 ? ["🥇","🥈","🥉"][h.rank-1] : <span style={{ fontSize:"11px", fontFamily:mono, color:"#323e62" }}>#{h.rank}</span>}
@@ -296,7 +296,7 @@ export default function WalletActivityPage() {
             </>
           ) : (
             <>
-              {active.map(a => (
+              {active.map((a: any) => (
                 <div key={a.address} style={{ display:"flex", alignItems:"center", gap:"14px", padding:"13px 18px", borderBottom:"1px solid rgba(128,128,128,0.06)" }}>
                   <div style={{ width:"32px", fontSize:"13px", flexShrink:0, textAlign:"center" }}>
                     {a.rank<=3 ? ["🥇","🥈","🥉"][a.rank-1] : <span style={{ fontSize:"11px", fontFamily:mono, color:"#323e62" }}>#{a.rank}</span>}

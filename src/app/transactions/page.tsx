@@ -81,7 +81,7 @@ export default function TransactionsPage() {
       finally { setLoading(false) }
     }
     load()
-    const t = setInterval(load, 4000)
+    const t = setInterval(load, 15000)
     return () => clearInterval(t)
   }, [mounted])
 
@@ -102,7 +102,7 @@ export default function TransactionsPage() {
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr style={{ borderBottom: "1px solid " + border }}>
-                {["Hash", "Block", "Age", "From", "To", "Value", "Gas (USDC)", "Status"].map(h => (
+                {["Hash", "Block", "Age", "From", "To", "Value", "Gas (USDC)", "Status"].map((h: any) => (
                   <th key={h} style={{ padding: "11px 18px", fontSize: "9.5px", fontFamily: mono, color: "#323e62", textTransform: "uppercase", letterSpacing: "0.07em", textAlign: "left", fontWeight: 400 }}>{h}</th>
                 ))}
               </tr>
@@ -110,7 +110,7 @@ export default function TransactionsPage() {
             <tbody>
               {loading ? (
                 <tr><td colSpan={8} style={{ padding: "48px", textAlign: "center", fontFamily: mono, fontSize: "11px", color: "#323e62" }}>Loading transactions...</td></tr>
-              ) : txs.map(tx => (
+              ) : txs.map((tx: any) => (
                 <tr key={tx.hash}
                   onClick={() => window.location.href = "/tx/" + tx.hash}
                   onMouseEnter={e => (e.currentTarget.style.background = "rgba(128,128,128,0.04)")}

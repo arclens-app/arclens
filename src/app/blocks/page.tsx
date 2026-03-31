@@ -67,7 +67,7 @@ export default function BlocksPage() {
       finally { setLoading(false) }
     }
     load()
-    const t = setInterval(load, 4000)
+    const t = setInterval(load, 15000)
     return () => clearInterval(t)
   }, [mounted])
 
@@ -88,7 +88,7 @@ export default function BlocksPage() {
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr style={{ borderBottom: "1px solid " + border }}>
-                {["Block", "Age", "Txns", "Validator", "Gas Used", "Fees (USDC)"].map(h => (
+                {["Block", "Age", "Txns", "Validator", "Gas Used", "Fees (USDC)"].map((h: any) => (
                   <th key={h} style={{ padding: "11px 18px", fontSize: "9.5px", fontFamily: mono, color: "#323e62", textTransform: "uppercase", letterSpacing: "0.07em", textAlign: "left", fontWeight: 400 }}>{h}</th>
                 ))}
               </tr>
@@ -96,7 +96,7 @@ export default function BlocksPage() {
             <tbody>
               {loading ? (
                 <tr><td colSpan={6} style={{ padding: "48px", textAlign: "center", fontFamily: mono, fontSize: "11px", color: "#323e62" }}>Loading blocks...</td></tr>
-              ) : blocks.map(b => (
+              ) : blocks.map((b: any) => (
                 <tr key={b.number}
                   onClick={() => window.location.href = "/search?q=" + b.number}
                   onMouseEnter={e => (e.currentTarget.style.background = "rgba(128,128,128,0.04)")}

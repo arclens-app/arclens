@@ -71,9 +71,9 @@ export default function ArcLayout({ children, active }: { children: React.ReactN
   }
 
   async function connectWallet() {
-    if (!window.ethereum) { alert("No wallet detected. Install MetaMask or Rabby."); return }
+    if (!(window as any).ethereum) { alert("No wallet detected. Install MetaMask or Rabby."); return }
     try {
-      const accounts = await window.ethereum.request({ method: "eth_requestAccounts" })
+      const accounts = await (window as any).ethereum.request({ method: "eth_requestAccounts" })
       if (accounts[0]) {
         const addr = accounts[0]
         setWalletAddr(addr)
@@ -107,7 +107,7 @@ export default function ArcLayout({ children, active }: { children: React.ReactN
       } catch { setConnected(false) }
     }
     fetchStats()
-    const t = setInterval(fetchStats, 3000)
+    const t = setInterval(fetchStats, 15000)
     return () => clearInterval(t)
   }, [mounted])
 
@@ -134,8 +134,8 @@ export default function ArcLayout({ children, active }: { children: React.ReactN
   }
 
   function addNetwork() {
-    if (!window.ethereum) { alert("No wallet detected"); return }
-    window.ethereum.request({
+    if (!(window as any).ethereum) { alert("No wallet detected"); return }
+    (window as any).ethereum.request({
       method: "wallet_addEthereumChain",
       params: [{ chainId: "0xA1C", chainName: "Arc Testnet", nativeCurrency: { name: "USDC", symbol: "USDC", decimals: 18 }, rpcUrls: ["https://rpc.arc.network"], blockExplorerUrls: ["https://arclens.app"] }]
     })
@@ -206,7 +206,7 @@ export default function ArcLayout({ children, active }: { children: React.ReactN
 
         {/* NAV */}
         <nav style={{ flex: 1, overflowY: "auto", padding: "8px 0" }}>
-          {NAV.map(group => (
+          {NAV.map((group: any) => (
             <div key={group.section} style={{ marginBottom: "4px" }}>
               <div style={{ padding: "10px 16px 4px", fontSize: "9px", fontFamily: mono, color: t3, letterSpacing: "0.12em", textTransform: "uppercase" }}>
                 {group.section}

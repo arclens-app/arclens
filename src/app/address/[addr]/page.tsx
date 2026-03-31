@@ -125,7 +125,7 @@ export default function AddressPage() {
           const namesRes = await fetch("/api/names", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ addresses: toAddrs.map((a: unknown) => (a as string).toLowerCase()) }) })
           const namesMap = await namesRes.json()
           if (Object.keys(namesMap).length > 0) {
-            setTxs(prev => prev.map(t => ({ ...t, toName: t.to ? namesMap[t.to.toLowerCase()]?.name : undefined })))
+            setTxs(prev => prev.map((t: any) => ({ ...t, toName: t.to ? namesMap[t.to.toLowerCase()]?.name : undefined })))
           }
         }
       } catch { /* non-critical */ }
@@ -262,11 +262,11 @@ export default function AddressPage() {
             { id:"txs"    as const, label:"Transactions",   count:txs.length },
             { id:"tokens" as const, label:"Token Holdings", count:tokens.length },
             { id:"info"   as const, label:"Info" },
-          ].map(t => (
+          ].map((t: any) => (
             <button key={t.id} onClick={() => setTab(t.id)}
               style={{ height:"34px", padding:"0 16px", background:tab===t.id?"#1a56ff":"transparent", color:tab===t.id?"#fff":t2, fontSize:"12px", fontWeight:tab===t.id?600:400, border:"1px solid "+(tab===t.id?"#1a56ff":bdr), borderRadius:"7px", cursor:"pointer", fontFamily:"'Geist',sans-serif", transition:"all .12s" }}>
               {t.label}
-              {"count" in t && t.count > 0 && <span style={{ marginLeft:"6px", fontSize:"10px", opacity:.7 }}>({t.count})</span>}
+              {"count" in t && (t.count ?? 0) > 0 && <span style={{ marginLeft:"6px", fontSize:"10px", opacity:.7 }}>({t.count})</span>}
             </button>
           ))}
         </div>
@@ -318,7 +318,7 @@ export default function AddressPage() {
                 </button>
 
                 {/* Page numbers */}
-                {Array.from({ length: totalPages }, (_, i) => i+1).map(n => (
+                {Array.from({ length: totalPages }, (_, i) => i+1).map((n: any) => (
                   <button key={n} onClick={() => goToPage(n)} disabled={loadingPage}
                     style={{ width:"32px", height:"32px", display:"flex", alignItems:"center", justifyContent:"center", background:n===page?"#1a56ff":"transparent", border:"1px solid "+(n===page?"#1a56ff":bdr), borderRadius:"7px", cursor:"pointer", color:n===page?"#fff":t2, fontSize:"12px", fontFamily:mono, fontWeight:n===page?600:400, transition:"all .12s" }}>
                     {loadingPage && n===page ? "..." : n}
@@ -355,7 +355,7 @@ export default function AddressPage() {
               <div style={{ padding:"24px", textAlign:"center", fontFamily:mono, fontSize:"11px", color:t3 }}>Loading tokens...</div>
             ) : tokens.length === 0 ? (
               <div style={{ padding:"24px", textAlign:"center", fontFamily:mono, fontSize:"11px", color:t3 }}>No other tokens held</div>
-            ) : tokens.map(tok => (
+            ) : tokens.map((tok: any) => (
               <div key={tok.address}
                 onClick={() => window.location.href="/address/"+tok.address}
                 onMouseEnter={e => (e.currentTarget.style.background=surf2)}
@@ -389,7 +389,7 @@ export default function AddressPage() {
                 { label:"USDC Balance",   value:usdcBal },
                 { label:"Transactions",   value:txCount||"—" },
                 ...(contractName?[{ label:"Contract Name", value:contractName }]:[]),
-              ].map(row => (
+              ].map((row: any) => (
                 <div key={row.label} style={{ display:"flex", alignItems:"flex-start", gap:"20px", padding:"10px 20px", borderBottom:"1px solid rgba(128,128,128,0.04)" }}>
                   <div style={{ fontSize:"11px", fontFamily:mono, color:t3, textTransform:"uppercase", letterSpacing:"0.08em", minWidth:"140px", flexShrink:0, paddingTop:"1px" }}>{row.label}</div>
                   <div style={{ fontSize:"12.5px", fontFamily:mono, color:t2, wordBreak:"break-all" }}>{row.value}</div>

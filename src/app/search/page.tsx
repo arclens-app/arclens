@@ -243,7 +243,7 @@ function SearchContent() {
           {/* SUGGESTION CHIPS */}
           {!aiResult && !loading && !addrPreview && (
             <div style={{ display:"flex", gap:"8px", marginTop:"12px", flexWrap:"wrap" }}>
-              {["top USDC wallets","bridge activity","large USDC transfers","new contract deploys","whale wallets"].map(s => (
+              {["top USDC wallets","bridge activity","large USDC transfers","new contract deploys","whale wallets"].map((s: any) => (
                 <button key={s} onClick={() => { setQuery(s); runSearch(s) }}
                   style={{ fontSize:"11px", fontFamily:mono, padding:"4px 12px", borderRadius:"99px", border:"1px solid "+bdr, background:"transparent", color:t2, cursor:"pointer", transition:"all .12s" }}
                   onMouseEnter={e => { e.currentTarget.style.borderColor="rgba(26,86,255,0.3)"; e.currentTarget.style.color="#8aaeff" }}
@@ -269,7 +269,7 @@ function SearchContent() {
             {aiResult.suggestions?.length > 0 && (
               <div style={{ display:"flex", gap:"8px", flexWrap:"wrap", alignItems:"center" }}>
                 <div style={{ fontSize:"9.5px", fontFamily:mono, color:t3 }}>Try:</div>
-                {aiResult.suggestions.map(s => (
+                {aiResult.suggestions.map((s: any) => (
                   <button key={s} onClick={() => { setQuery(s); runSearch(s) }}
                     style={{ fontSize:"10.5px", fontFamily:mono, padding:"3px 12px", borderRadius:"99px", border:"1px solid rgba(124,92,252,0.2)", background:"rgba(124,92,252,0.06)", color:"#a080ff", cursor:"pointer" }}>
                     {s}

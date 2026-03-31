@@ -119,9 +119,9 @@ export default function DevPage() {
   }
 
   async function addNetwork() {
-    if (!window.ethereum) { alert("No wallet detected"); return }
+    if (!(window as any).ethereum) { alert("No wallet detected"); return }
     try {
-      await window.ethereum.request({
+      await (window as any).ethereum.request({
         method: "wallet_addEthereumChain",
         params: [{
           chainId: "0xA1C",
@@ -180,7 +180,7 @@ export default function DevPage() {
 
         {/* TABS */}
         <div style={{ display:"flex", gap:"8px", marginBottom:"20px" }}>
-          {[{id:"console",label:"Dev Console"},{id:"faucet",label:"🚰 Faucet"}].map(t => (
+          {[{id:"console",label:"Dev Console"},{id:"faucet",label:"🚰 Faucet"}].map((t: any) => (
             <button key={t.id} onClick={() => setDevTab(t.id as "console"|"faucet")}
               style={{ height:"34px", padding:"0 18px", background:devTab===t.id?"#1a56ff":"transparent", color:devTab===t.id?"#fff":t2, fontSize:"12px", fontWeight:devTab===t.id?600:400, border:"1px solid "+(devTab===t.id?"#1a56ff":bdr), borderRadius:"7px", cursor:"pointer", fontFamily:"'Geist',sans-serif", transition:"all .12s" }}>
               {t.label}
@@ -198,7 +198,7 @@ export default function DevPage() {
                 { label:"Also",        value:"20 EURC", sub:"per request", color:"#4070ff" },
                 { label:"Wait Time",   value:"2 hours", sub:"between claims", color:t2 },
                 { label:"Network",     value:"Arc Testnet", sub:"Chain ID 2588", color:"#8aaeff" },
-              ].map(s => (
+              ].map((s: any) => (
                 <div key={s.label} style={{ background:surf, padding:"16px 20px" }}>
                   <div style={{ fontSize:"9px", fontFamily:mono, color:t3, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:"8px" }}>{s.label}</div>
                   <div style={{ fontSize:"18px", fontWeight:700, letterSpacing:"-0.03em", color:s.color, marginBottom:"3px" }}>{s.value}</div>
@@ -238,7 +238,7 @@ export default function DevPage() {
                   {[
                     { id:"usdc", label:"USDC", val:faucetUsdc, set:setFaucetUsdc, color:usdc },
                     { id:"eurc", label:"EURC", val:faucetEurc, set:setFaucetEurc, color:"#4070ff" },
-                  ].map(tok => (
+                  ].map((tok: any) => (
                     <button key={tok.id} onClick={() => tok.set(!tok.val)}
                       style={{ height:"40px", padding:"0 20px", background:tok.val?"rgba(0,184,122,0.08)":"transparent", color:tok.val?tok.color:t2, fontSize:"13px", fontFamily:mono, fontWeight:tok.val?600:400, border:"1px solid "+(tok.val?"rgba(0,184,122,0.25)":bdr), borderRadius:"8px", cursor:"pointer", transition:"all .12s" }}>
                       {tok.val ? "✓ " : ""}{tok.label}
@@ -272,7 +272,7 @@ export default function DevPage() {
           <>
             {/* STATS */}
             <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:"1px", background:bdr, borderRadius:"14px", overflow:"hidden", border:"1px solid "+bdr, marginBottom:"20px" }}>
-              {stats.map(s => (
+              {stats.map((s: any) => (
                 <div key={s.label} style={{ background:surf, padding:"16px 20px" }}>
                   <div style={{ fontSize:"9px", fontFamily:mono, color:t3, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:"8px" }}>{s.label}</div>
                   <div style={{ fontSize:"18px", fontWeight:700, letterSpacing:"-0.03em", color:s.color, marginBottom:"3px" }}>{s.value}</div>
@@ -321,7 +321,7 @@ export default function DevPage() {
                 { label:"Native Currency",  value:"USDC (18 decimals)" },
                 { label:"USDC Contract",    value:"0x3600000000000000000000000000000000000000" },
                 { label:"Block Explorer",   value:"https://arclens.app" },
-              ].map(row => (
+              ].map((row: any) => (
                 <div key={row.label} style={{ display:"flex", alignItems:"center", gap:"16px", padding:"10px 18px", borderBottom:"1px solid rgba(128,128,128,0.04)" }}>
                   <div style={{ fontSize:"10px", fontFamily:mono, color:t3, minWidth:"140px", textTransform:"uppercase", letterSpacing:"0.06em" }}>{row.label}</div>
                   <div style={{ flex:1, fontSize:"12px", fontFamily:mono, color:t2 }}>{row.value}</div>
@@ -339,7 +339,7 @@ export default function DevPage() {
                 <div style={{ width:"5px", height:"5px", borderRadius:"50%", background:usdc }}/>
                 <span style={{ fontSize:"12.5px", fontWeight:500 }}>RPC Endpoints</span>
               </div>
-              {endpoints.map(ep => (
+              {endpoints.map((ep: any) => (
                 <div key={ep.name} style={{ display:"flex", alignItems:"center", gap:"12px", padding:"12px 18px", borderBottom:"1px solid rgba(128,128,128,0.04)" }}>
                   <div style={{ width:"6px", height:"6px", borderRadius:"50%", background:usdc, flexShrink:0 }}/>
                   <div style={{ flex:1 }}>
@@ -367,7 +367,7 @@ export default function DevPage() {
                 { op:"ERC-20 Transfer",  gas:"46,000",  cost:"$0.011" },
                 { op:"Contract Call",    gas:"85,000",  cost:"$0.020" },
                 { op:"Contract Deploy",  gas:"200,000", cost:"$0.048" },
-              ].map(row => (
+              ].map((row: any) => (
                 <div key={row.op} style={{ display:"flex", alignItems:"center", gap:"16px", padding:"10px 18px", borderBottom:"1px solid rgba(128,128,128,0.04)" }}>
                   <div style={{ flex:1, fontSize:"12px", color:t1 }}>{row.op}</div>
                   <div style={{ fontSize:"11px", fontFamily:mono, color:t2, minWidth:"80px", textAlign:"right" }}>{row.gas} gas</div>
@@ -378,7 +378,7 @@ export default function DevPage() {
 
             {/* CODE SNIPPETS */}
             <div style={{ display:"flex", flexDirection:"column", gap:"12px" }}>
-              {snippets.map(s => (
+              {snippets.map((s: any) => (
                 <div key={s.label} style={{ background:surf, border:border, borderRadius:"12px", overflow:"hidden" }}>
                   <div style={{ padding:"10px 16px", borderBottom:border, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
                     <div style={{ fontSize:"11.5px", fontWeight:500, color:t1 }}>{s.label}</div>

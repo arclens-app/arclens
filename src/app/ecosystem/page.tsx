@@ -274,7 +274,7 @@ export default function EcosystemPage() {
                       { k: "discord",  l: "Discord (optional)",   p: "https://discord.gg/..." },
                       { k: "contract", l: "Contract Address (optional)", p: "0x... deployed on Arc" },
                       { k: "email",    l: "Contact Email (optional)", p: "For update notifications" },
-                    ].map(f => (
+                    ].map((f: any) => (
                       <div key={f.k}>
                         <label style={{ display: "block", fontSize: "9.5px", fontFamily: mono, color: "var(--t3,#323e62)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "5px" }}>{f.l}</label>
                         <input style={inputStyle} value={(form as Record<string,string>)[f.k]} onChange={e => setForm(p => ({ ...p, [f.k]: e.target.value }))} placeholder={f.p} spellCheck={false} />
@@ -320,7 +320,7 @@ export default function EcosystemPage() {
         {/* FILTERS */}
         <div style={{ display: "flex", gap: "8px", marginBottom: "20px", flexWrap: "wrap", alignItems: "center" }}>
           <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", flex: 1 }}>
-            {CATEGORIES.map(cat => (
+            {CATEGORIES.map((cat: any) => (
               <button key={cat} onClick={() => setFilter(cat)} style={{ height: "30px", padding: "0 14px", background: filter === cat ? "#1a56ff" : "transparent", color: filter === cat ? "#fff" : "#6b7da8", fontSize: "11px", fontFamily: mono, border: "1px solid " + (filter === cat ? "#1a56ff" : border), borderRadius: "99px", cursor: "pointer", transition: "all .12s" }}>
                 {cat}
               </button>

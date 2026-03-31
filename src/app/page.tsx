@@ -89,7 +89,7 @@ export default function Home() {
             })
             const namesMap = await namesRes.json()
             if (Object.keys(namesMap).length > 0) {
-              setTxs(prev => prev.map(t => ({
+              setTxs(prev => prev.map((t: any) => ({
                 ...t,
                 toName: t.to ? namesMap[t.to.toLowerCase()]?.name : undefined,
               })))
@@ -99,7 +99,7 @@ export default function Home() {
       } catch { setConnected(false) }
     }
     fetchAll()
-    const t = setInterval(fetchAll, 2000)
+    const t = setInterval(fetchAll, 15000)
     return () => clearInterval(t)
   }, [mounted, lastBlock])
 
@@ -156,7 +156,7 @@ export default function Home() {
 
           {/* STATS BAND */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: "1px", background: bdr, borderRadius: "14px", overflow: "hidden", marginBottom: "16px", border: "1px solid " + bdr }}>
-            {stats.map(s => (
+            {stats.map((s: any) => (
               <div key={s.label} style={{ background: surf, padding: "20px 20px", transition: "background .15s" }}
                 onMouseEnter={e => (e.currentTarget.style.background = surf2)}
                 onMouseLeave={e => (e.currentTarget.style.background = surf)}>
@@ -172,7 +172,7 @@ export default function Home() {
             <div style={{ padding: "11px 16px", fontSize: "9px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.1em", borderRight: "1px solid " + bdr, flexShrink: 0, background: "rgba(0,184,122,0.04)" }}>
               Gas Tracker
             </div>
-            {gasBand.map(g => (
+            {gasBand.map((g: any) => (
               <div key={g.label} style={{ padding: "9px 16px", borderRight: "1px solid " + bdr, flexShrink: 0 }}>
                 <div style={{ fontSize: "9px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "3px" }}>{g.label}</div>
                 <div style={{ fontSize: "13px", fontWeight: 600, color: usdc, letterSpacing: "-0.02em" }}>{g.value}</div>
@@ -196,7 +196,7 @@ export default function Home() {
               </div>
               {blocks.length === 0 ? (
                 <><SkeletonRow /><SkeletonRow /><SkeletonRow /></>
-              ) : blocks.map(b => (
+              ) : blocks.map((b: any) => (
                 <div key={b.number}
                   onClick={() => window.location.href = "/search?q=" + b.number}
                   onMouseEnter={e => (e.currentTarget.style.background = surf2)}
@@ -236,7 +236,7 @@ export default function Home() {
               </div>
               {txs.length === 0 ? (
                 <><SkeletonRow /><SkeletonRow /><SkeletonRow /></>
-              ) : txs.map(tx => (
+              ) : txs.map((tx: any) => (
                 <div key={tx.hash}
                   onClick={() => window.location.href = "/tx/" + tx.hash}
                   onMouseEnter={e => (e.currentTarget.style.background = surf2)}

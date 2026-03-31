@@ -60,8 +60,8 @@ export default function RegistryPage() {
   }, [mounted, tab])
 
   async function connectWallet() {
-    if (!window.ethereum) { alert("MetaMask or Rabby wallet not detected."); return }
-    const accounts = await window.ethereum.request({ method: "eth_requestAccounts" })
+    if (!(window as any).ethereum) { alert("MetaMask or Rabby wallet not detected."); return }
+    const accounts = await (window as any).ethereum.request({ method: "eth_requestAccounts" })
     if (accounts[0]) setWalletAddr(accounts[0])
   }
 
@@ -106,7 +106,7 @@ export default function RegistryPage() {
   }
 
   async function signClaim() {
-    if (!window.ethereum) { alert("Connect your wallet first"); return }
+    if (!(window as any).ethereum) { alert("Connect your wallet first"); return }
     if (!walletAddr) { alert("Connect your wallet first"); return }
     setSigning(true)
     try {
@@ -121,7 +121,7 @@ export default function RegistryPage() {
         "This is a FREE signature. No transaction. No gas. No funds moved.",
       ].join("\n")
 
-      const sig = await window.ethereum.request({
+      const sig = await (window as any).ethereum.request({
         method: "personal_sign",
         params: [message, walletAddr],
       })
@@ -214,7 +214,7 @@ export default function RegistryPage() {
 
         {/* TABS */}
         <div style={{ display: "flex", gap: "8px", marginBottom: "20px" }}>
-          {[{ id: "claim", label: "Claim Identity" }, { id: "browse", label: "Browse Registry" }].map(t => (
+          {[{ id: "claim", label: "Claim Identity" }, { id: "browse", label: "Browse Registry" }].map((t: any) => (
             <button key={t.id} onClick={() => setTab(t.id as "claim"|"browse")} style={{ height: "34px", padding: "0 18px", background: tab === t.id ? "#1a56ff" : "transparent", color: tab === t.id ? "#fff" : "#6b7da8", fontSize: "12.5px", fontWeight: tab === t.id ? 600 : 400, border: "1px solid " + (tab === t.id ? "#1a56ff" : border), borderRadius: "7px", cursor: "pointer", fontFamily: "'Geist',sans-serif" }}>
               {t.label}
             </button>
@@ -369,7 +369,7 @@ export default function RegistryPage() {
                   { badge: "claimed",  desc: "Identity claimed — reviewed by ArcLens" },
                   { badge: "verified", desc: "Source code verified on-chain" },
                   { badge: "official", desc: "Arc core infrastructure — assigned by ArcLens" },
-                ].map(b => (
+                ].map((b: any) => (
                   <div key={b.badge} style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "7px" }}>
                     <Badge badge={b.badge} />
                     <div style={{ fontSize: "10px", color: "#3a4870", fontFamily: mono }}>{b.desc}</div>

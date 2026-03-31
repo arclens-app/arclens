@@ -152,7 +152,7 @@ export default function AdminPage() {
             { id:"pending"   as const, label:`Pending (${pendingCount})` },
             { id:"projects"  as const, label:`All Projects (${projects.length})` },
             { id:"contracts" as const, label:`Contracts (${contracts.length})` },
-          ].map(t => (
+          ].map((t: any) => (
             <button key={t.id} onClick={() => setTab(t.id)}
               style={{ height:"34px", padding:"0 16px", background:tab===t.id?"#1a56ff":"transparent", color:tab===t.id?"#fff":t2, fontSize:"12px", fontWeight:tab===t.id?600:400, border:"1px solid "+(tab===t.id?"#1a56ff":bdr), borderRadius:"7px", cursor:"pointer", fontFamily:"'Geist',sans-serif" }}>
               {t.label}
@@ -183,7 +183,7 @@ export default function AdminPage() {
                   </div>
                 ) : (
                   <div style={{ display:"flex", flexDirection:"column", gap:"10px" }}>
-                    {submissions.map(s => (
+                    {submissions.map((s: any) => (
                       <div key={s.id} style={{ background:surf, border:border, borderRadius:"12px", padding:"16px 20px", display:"flex", alignItems:"center", gap:"16px" }}>
                         {s.logo_url && <img src={s.logo_url} alt={s.name} style={{ width:"40px", height:"40px", borderRadius:"8px", objectFit:"cover", flexShrink:0 }} onError={e=>(e.currentTarget.style.display="none")} />}
                         <div style={{ flex:1, minWidth:0 }}>
@@ -217,7 +217,7 @@ export default function AdminPage() {
               <div style={{ display:"flex", flexDirection:"column", gap:"10px" }}>
                 {projects.length === 0 ? (
                   <div style={{ padding:"48px", textAlign:"center", fontFamily:mono, fontSize:"11px", color:t3 }}>No approved projects yet</div>
-                ) : projects.map(p => (
+                ) : projects.map((p: any) => (
                   <div key={p.id} style={{ background:surf, border:border, borderRadius:"12px", padding:"16px 20px", display:"flex", alignItems:"center", gap:"16px" }}>
                     {p.logo_url && <img src={p.logo_url} alt={p.name} style={{ width:"40px", height:"40px", borderRadius:"8px", objectFit:"cover", flexShrink:0 }} onError={e=>(e.currentTarget.style.display="none")} />}
                     <div style={{ flex:1, minWidth:0 }}>
@@ -250,7 +250,7 @@ export default function AdminPage() {
               <div style={{ display:"flex", flexDirection:"column", gap:"10px" }}>
                 {contracts.length === 0 ? (
                   <div style={{ padding:"48px", textAlign:"center", fontFamily:mono, fontSize:"11px", color:t3 }}>No contract submissions</div>
-                ) : contracts.map(c => (
+                ) : contracts.map((c: any) => (
                   <div key={c.id} style={{ background:surf, border:border, borderRadius:"12px", padding:"16px 20px", display:"flex", alignItems:"center", gap:"16px" }}>
                     <div style={{ flex:1, minWidth:0 }}>
                       <div style={{ display:"flex", alignItems:"center", gap:"8px", marginBottom:"4px" }}>
@@ -303,7 +303,7 @@ export default function AdminPage() {
                 { k:"contract",    l:"Contract Address", type:"text" },
                 { k:"email",       l:"Email",            type:"text" },
                 { k:"logo_url",    l:"Logo URL",         type:"text" },
-              ].map(f => (
+              ].map((f: any) => (
                 <div key={f.k} style={{ marginBottom:"12px" }}>
                   <label style={{ display:"block", fontSize:"10px", fontFamily:mono, color:t3, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:"5px" }}>{f.l}</label>
                   {f.type === "textarea" ? (
@@ -339,7 +339,7 @@ export default function AdminPage() {
                 {[
                   { k:"featured", l:"Featured" },
                   { k:"live",     l:"Live" },
-                ].map(f => (
+                ].map((f: any) => (
                   <label key={f.k} style={{ display:"flex", alignItems:"center", gap:"8px", cursor:"pointer", fontSize:"12px", color:t2 }}>
                     <input type="checkbox" checked={!!(editForm as Record<string,unknown>)[f.k]} onChange={e => setEditForm(p => ({...p, [f.k]: e.target.checked}))} />
                     {f.l}

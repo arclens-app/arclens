@@ -247,7 +247,7 @@ export default function ApprovalsPage() {
                 { label: "Active Approvals", value: active.length.toString(), color: "#8aaeff" },
                 { label: "High Risk", value: highRisk.toString(), color: highRisk > 0 ? "#e03348" : "#00d990" },
                 { label: "Revoked", value: approvals.filter(a => a.status === "revoked").length.toString(), color: "#00d990" },
-              ].map(s => (
+              ].map((s: any) => (
                 <div key={s.label} style={{ background: surf, padding: "16px 20px" }}>
                   <div style={{ fontSize: "9.5px", fontFamily: mono, color: "#323e62", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "8px" }}>{s.label}</div>
                   <div style={{ fontSize: "28px", fontWeight: 700, letterSpacing: "-0.04em", color: s.color }}>{s.value}</div>
@@ -267,7 +267,7 @@ export default function ApprovalsPage() {
                 <div style={{ padding: "48px", textAlign: "center", fontFamily: mono, fontSize: "12px", color: "#323e62" }}>
                   ✓ No active approvals found. This wallet is clean.
                 </div>
-              ) : approvals.map(a => (
+              ) : approvals.map((a: any) => (
                 <div key={a.id} style={{ display: "flex", alignItems: "center", gap: "14px", padding: "14px 18px", borderBottom: "1px solid rgba(128,128,128,0.06)", opacity: a.status === "revoked" ? .45 : 1, transition: "opacity .2s" }}>
                   <div style={{ width: "34px", height: "34px", borderRadius: "50%", background: a.color + "18", border: "1px solid " + a.color + "30", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "11px", fontWeight: 700, fontFamily: mono, color: a.color, flexShrink: 0 }}>
                     {a.symbol[0]}

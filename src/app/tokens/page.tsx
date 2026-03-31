@@ -24,7 +24,7 @@ export default function TokensPage() {
     if (!mounted) return
     async function load() {
       try {
-        const res = await fetch("/api/blockscout?path=v2/tokens?type=ERC-20")
+        const res = await fetch("/api/blockscout?path=v2/tokens%3Ftype%3DERC-20%26sort%3Dholder_count%26order%3Ddesc")
         const data = await res.json()
         const items = (data.items || []).slice(0, 20)
         setTokens(items.map((t: Record<string, unknown>, i: number) => ({
@@ -35,7 +35,7 @@ export default function TokensPage() {
           marketCap: t.circulating_market_cap
             ? "$" + Number(t.circulating_market_cap as string).toLocaleString(undefined, { maximumFractionDigits: 0 })
             : "N/A",
-          holders: t.holders_count ? Number(t.holders_count as string).toLocaleString() : "0",
+          holders: t.holders ? Number(t.holders as string).toLocaleString() : "0",
           color: (t.address as string)?.toLowerCase() === "0x3600000000000000000000000000000000000000" ? "#00d990" : "#1a56ff",
           verified: !!(t.is_verified),
         })))
@@ -75,7 +75,7 @@ export default function TokensPage() {
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr style={{ borderBottom: "1px solid " + border }}>
-                {["#", "Token", "Market Cap", "Holders", "Safety"].map(h => (
+                {["#", "Token", "Market Cap", "Holders", "Safety"].map((h: any) => (
                   <th key={h} style={{ padding: "11px 18px", fontSize: "9.5px", fontFamily: mono, color: "#323e62", textTransform: "uppercase", letterSpacing: "0.07em", textAlign: "left", fontWeight: 400 }}>{h}</th>
                 ))}
               </tr>
@@ -83,7 +83,7 @@ export default function TokensPage() {
             <tbody>
               {loading ? (
                 <tr><td colSpan={5} style={{ padding: "48px", textAlign: "center", fontFamily: mono, fontSize: "11px", color: "#323e62" }}>Loading tokens from Arc Testnet...</td></tr>
-              ) : tokens.map(t => (
+              ) : tokens.map((t: any) => (
                 <tr key={t.address} onClick={() => window.location.href = "/address/" + t.address}
                   onMouseEnter={e => (e.currentTarget.style.background = "rgba(128,128,128,0.04)")}
                   onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
@@ -110,5 +110,3 @@ export default function TokensPage() {
     </ArcLayout>
   )
 }
-
-

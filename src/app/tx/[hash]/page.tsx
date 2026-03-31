@@ -179,7 +179,7 @@ export default function TxPage() {
                 { label:"Gas Paid", value:tx.gasUSDC+" USDC", color:usdc },
                 { label:"Block",    value:tx.blockNumber, color:"#8aaeff" },
                 { label:"Age",      value:tx.timestamp ? timeAgo(tx.timestamp) : "—", color:t1 },
-              ].map(s => (
+              ].map((s: any) => (
                 <div key={s.label} style={{ background:surf, padding:"16px 20px" }}>
                   <div style={{ fontSize:"9px", fontFamily:mono, color:t3, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:"8px" }}>{s.label}</div>
                   <div style={{ fontSize:"18px", fontWeight:700, letterSpacing:"-0.03em", color:s.color }}>{s.value}</div>
