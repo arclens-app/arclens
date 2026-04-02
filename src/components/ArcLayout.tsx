@@ -1,6 +1,5 @@
 ﻿"use client"
 import { useEffect, useState, useRef } from "react"
-import { useRouter } from "next/navigation"
 
 const NAV = [
   { section: "EXPLORER", items: [
@@ -32,33 +31,27 @@ const TAG_STYLE: Record<string, { bg: string; color: string; border: string }> =
 export default function ArcLayout({ children, active }: { children: React.ReactNode; active?: string }) {
   const [mounted, setMounted]       = useState(false)
   const [dark, setDark]             = useState(true)
-
-  // Load saved theme on mount
-  useEffect(() => {
-    const saved = typeof window !== "undefined" ? localStorage.getItem("arclens-theme") : null
-    if (saved === "light") setDark(false)
-    else setDark(true)
-  }, [])
   const [blockNum, setBlockNum]     = useState("")
   const [gas, setGas]               = useState("")
   const [connected, setConnected]   = useState(false)
   const [searchQ, setSearchQ]       = useState("")
-  const [mobileOpen, setMobileOpen] = useState(false)
+  // Sidebar hidden by default on all screens — toggled by hamburger
+  const [sidebarOpen, setSidebarOpen] = useState(false)
   const [walletAddr, setWalletAddr] = useState<string|null>(null)
   const [walletBal, setWalletBal]   = useState<string|null>(null)
-  const router = useRouter()
   const searchRef = useRef<HTMLInputElement>(null)
 
-  useEffect(() => { setMounted(true) }, [])
+  useEffect(() => {
+    setMounted(true)
+    const saved = typeof window !== "undefined" ? localStorage.getItem("arclens-theme") : null
+    if (saved === "light") setDark(false)
+    else setDark(true)
+  }, [])
 
-  // Restore saved wallet on mount
   useEffect(() => {
     if (!mounted) return
     const saved = localStorage.getItem("arclens-wallet")
-    if (saved) {
-      setWalletAddr(saved)
-      fetchWalletBal(saved)
-    }
+    if (saved) { setWalletAddr(saved); fetchWalletBal(saved) }
   }, [mounted])
 
   async function fetchWalletBal(addr: string) {
@@ -99,7 +92,7 @@ export default function ArcLayout({ children, active }: { children: React.ReactN
         ])
         const blockData = await blockRes.json()
         const gasData   = await gasRes.json()
-        const num = parseInt(blockData.result, 16)
+        const num  = parseInt(blockData.result, 16)
         const gwei = parseInt(gasData.result, 16) / 1e9
         setBlockNum(num.toLocaleString())
         setGas("$" + (gwei * 46000 * 1e-9).toFixed(4))
@@ -122,6 +115,20 @@ export default function ArcLayout({ children, active }: { children: React.ReactN
     document.documentElement.style.setProperty("--bdr",   dark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.08)")
   }, [dark, mounted])
 
+  // Close sidebar when clicking outside
+  useEffect(() => {
+    if (!sidebarOpen) return
+    function handleClick(e: MouseEvent) {
+      const sidebar = document.getElementById("arc-sidebar")
+      const hamburger = document.getElementById("arc-hamburger")
+      if (sidebar && !sidebar.contains(e.target as Node) && hamburger && !hamburger.contains(e.target as Node)) {
+        setSidebarOpen(false)
+      }
+    }
+    document.addEventListener("mousedown", handleClick)
+    return () => document.removeEventListener("mousedown", handleClick)
+  }, [sidebarOpen])
+
   function handleSearch(e: React.FormEvent) {
     e.preventDefault()
     const q = searchQ.trim().replace(/\s/g, "")
@@ -135,9 +142,9 @@ export default function ArcLayout({ children, active }: { children: React.ReactN
 
   function addNetwork() {
     if (!(window as any).ethereum) { alert("No wallet detected"); return }
-    (window as any).ethereum.request({
+    ;(window as any).ethereum.request({
       method: "wallet_addEthereumChain",
-      params: [{ chainId: "0xA1C", chainName: "Arc Testnet", nativeCurrency: { name: "USDC", symbol: "USDC", decimals: 18 }, rpcUrls: ["https://rpc.arc.network"], blockExplorerUrls: ["https://arclens.app"] }]
+      params: [{ chainId: "0xA1C", chainName: "Arc Testnet", nativeCurrency: { name: "USDC", symbol: "USDC", decimals: 18 }, rpcUrls: ["https://testnet.arcscan.app/api/eth-rpc"], blockExplorerUrls: ["https://arclens.app"] }]
     })
   }
 
@@ -156,19 +163,38 @@ export default function ArcLayout({ children, active }: { children: React.ReactN
   return (
     <div style={{ display: "flex", minHeight: "100vh", background: "var(--bg, #060812)", color: t1, fontFamily: sans, fontSize: "14px" }}>
 
-      {/* SIDEBAR */}
-      <aside className={`arc-sidebar${mobileOpen ? " open" : ""}`} style={{
-        width: "220px", flexShrink: 0, background: surf,
-        borderRight: "1px solid " + bdr,
-        display: "flex", flexDirection: "column",
-        position: "fixed", top: 0, left: 0, bottom: 0, zIndex: 40,
-        transform: mobileOpen ? "translateX(0)" : undefined,
-        transition: "transform .2s",
-      }}>
-        {/* LOGO */}
-        <div style={{ padding: "20px 16px 16px", borderBottom: "1px solid " + bdr }}>
-          <a href="/" style={{ textDecoration: "none", display: "flex", alignItems: "center", gap: "8px" }}>
-            <svg width="32" height="32" viewBox="0 0 64 64" fill="none" style={{ flexShrink: 0 }}>
+      {/* OVERLAY — shown when sidebar is open */}
+      {sidebarOpen && (
+        <div
+          onClick={() => setSidebarOpen(false)}
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 39, backdropFilter: "blur(2px)" }}
+        />
+      )}
+
+      {/* SIDEBAR — slides in from left, hidden by default */}
+      <aside
+        id="arc-sidebar"
+        style={{
+          width: "220px",
+          flexShrink: 0,
+          background: surf,
+          borderRight: "1px solid " + bdr,
+          display: "flex",
+          flexDirection: "column",
+          position: "fixed",
+          top: 0,
+          left: 0,
+          bottom: 0,
+          zIndex: 40,
+          transform: sidebarOpen ? "translateX(0)" : "translateX(-100%)",
+          transition: "transform 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
+          boxShadow: sidebarOpen ? "4px 0 24px rgba(0,0,0,0.4)" : "none",
+        }}
+      >
+        {/* LOGO + CLOSE */}
+        <div style={{ padding: "16px 16px 14px", borderBottom: "1px solid " + bdr, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <a href="/" style={{ textDecoration: "none", display: "flex", alignItems: "center", gap: "8px" }} onClick={() => setSidebarOpen(false)}>
+            <svg width="30" height="30" viewBox="0 0 64 64" fill="none" style={{ flexShrink: 0 }}>
               <defs>
                 <linearGradient id="archG" x1="32" y1="6" x2="32" y2="52" gradientUnits="userSpaceOnUse">
                   <stop offset="0%" stopColor="#ffffff"/>
@@ -196,9 +222,18 @@ export default function ArcLayout({ children, active }: { children: React.ReactN
               <span style={{ fontSize: "15px", fontWeight: 700, letterSpacing: "-0.03em", color: arc }}>Lens</span>
             </div>
           </a>
+          {/* Close X button */}
+          <button
+            onClick={() => setSidebarOpen(false)}
+            style={{ background: "none", border: "none", color: t2, cursor: "pointer", fontSize: "20px", lineHeight: 1, padding: "2px 6px", borderRadius: "4px" }}
+          >
+            ×
+          </button>
+        </div>
 
-          {/* NETWORK BADGE */}
-          <div style={{ marginTop: "10px", display: "flex", alignItems: "center", gap: "6px", padding: "5px 8px", background: connected ? "rgba(0,184,122,0.06)" : "rgba(26,86,255,0.06)", borderRadius: "6px", border: "1px solid " + (connected ? "rgba(0,184,122,0.15)" : "rgba(26,86,255,0.12)") }}>
+        {/* NETWORK BADGE */}
+        <div style={{ padding: "10px 14px", borderBottom: "1px solid " + bdr }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "6px", padding: "5px 8px", background: connected ? "rgba(0,184,122,0.06)" : "rgba(26,86,255,0.06)", borderRadius: "6px", border: "1px solid " + (connected ? "rgba(0,184,122,0.15)" : "rgba(26,86,255,0.12)") }}>
             <div style={{ width: "5px", height: "5px", borderRadius: "50%", background: connected ? usdc : t3, animation: connected ? "pulse 2s infinite" : "none", flexShrink: 0 }} />
             <span style={{ fontSize: "10px", fontFamily: mono, color: connected ? usdc : t3, letterSpacing: "0.04em" }}>Arc Testnet · 2588</span>
           </div>
@@ -211,11 +246,12 @@ export default function ArcLayout({ children, active }: { children: React.ReactN
               <div style={{ padding: "10px 16px 4px", fontSize: "9px", fontFamily: mono, color: t3, letterSpacing: "0.12em", textTransform: "uppercase" }}>
                 {group.section}
               </div>
-              {group.items.map(item => {
+              {group.items.map((item: any) => {
                 const isActive = active === item.id
                 return (
                   <a key={item.id} href={item.href}
-                    style={{ display: "flex", alignItems: "center", gap: "9px", padding: "7px 16px", margin: "1px 6px", borderRadius: "7px", textDecoration: "none", background: isActive ? "rgba(26,86,255,0.1)" : "transparent", color: isActive ? "#8aaeff" : t2, fontSize: "13px", fontWeight: isActive ? 500 : 400, transition: "all .12s", borderLeft: isActive ? "2px solid " + arc : "2px solid transparent" }}
+                    onClick={() => setSidebarOpen(false)}
+                    style={{ display: "flex", alignItems: "center", gap: "9px", padding: "8px 16px", margin: "1px 6px", borderRadius: "7px", textDecoration: "none", background: isActive ? "rgba(26,86,255,0.1)" : "transparent", color: isActive ? "#8aaeff" : t2, fontSize: "13px", fontWeight: isActive ? 500 : 400, transition: "all .12s", borderLeft: isActive ? "2px solid " + arc : "2px solid transparent" }}
                     onMouseEnter={e => { if (!isActive) { e.currentTarget.style.background = "rgba(255,255,255,0.03)"; e.currentTarget.style.color = t1 } }}
                     onMouseLeave={e => { if (!isActive) { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = t2 } }}
                   >
@@ -233,42 +269,33 @@ export default function ArcLayout({ children, active }: { children: React.ReactN
           ))}
         </nav>
 
-        {/* WALLET CONNECT */}
-        <div style={{ padding:"10px 12px", borderTop:"1px solid "+bdr }}>
+        {/* WALLET */}
+        <div style={{ padding: "10px 12px", borderTop: "1px solid " + bdr }}>
           {walletAddr ? (
             <div>
-              <div style={{ display:"flex", alignItems:"center", gap:"6px", marginBottom:"6px" }}>
-                <div style={{ width:"6px", height:"6px", borderRadius:"50%", background:usdc, flexShrink:0 }}/>
-                <div style={{ fontSize:"9.5px", fontFamily:mono, color:usdc, letterSpacing:"0.04em" }}>Connected</div>
+              <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "6px" }}>
+                <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: usdc, flexShrink: 0 }}/>
+                <div style={{ fontSize: "9.5px", fontFamily: mono, color: usdc }}>Connected</div>
               </div>
-              <div
-                onClick={() => window.location.href="/address/"+walletAddr}
-                style={{ fontSize:"10.5px", fontFamily:mono, color:"#8aaeff", marginBottom:"4px", cursor:"pointer", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}
-                onMouseEnter={e => (e.currentTarget.style.textDecoration="underline")}
-                onMouseLeave={e => (e.currentTarget.style.textDecoration="none")}>
+              <div onClick={() => { window.location.href = "/address/" + walletAddr; setSidebarOpen(false) }}
+                style={{ fontSize: "10.5px", fontFamily: mono, color: "#8aaeff", marginBottom: "4px", cursor: "pointer", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {walletAddr.slice(0,8)}...{walletAddr.slice(-6)}
               </div>
-              {walletBal && (
-                <div style={{ fontSize:"13px", fontWeight:700, color:usdc, letterSpacing:"-0.02em", marginBottom:"6px" }}>{walletBal} USDC</div>
-              )}
-              <div style={{ display:"flex", gap:"6px" }}>
-                <button
-                  onClick={() => window.location.href="/address/"+walletAddr}
-                  style={{ flex:1, height:"26px", background:"rgba(0,184,122,0.08)", color:usdc, fontSize:"10px", fontFamily:mono, border:"1px solid rgba(0,184,122,0.2)", borderRadius:"5px", cursor:"pointer" }}>
+              {walletBal && <div style={{ fontSize: "13px", fontWeight: 700, color: usdc, letterSpacing: "-0.02em", marginBottom: "6px" }}>{walletBal} USDC</div>}
+              <div style={{ display: "flex", gap: "6px" }}>
+                <button onClick={() => { window.location.href = "/address/" + walletAddr; setSidebarOpen(false) }}
+                  style={{ flex: 1, height: "26px", background: "rgba(0,184,122,0.08)", color: usdc, fontSize: "10px", fontFamily: mono, border: "1px solid rgba(0,184,122,0.2)", borderRadius: "5px", cursor: "pointer" }}>
                   My Wallet
                 </button>
-                <button
-                  onClick={disconnectWallet}
-                  style={{ height:"26px", padding:"0 8px", background:"transparent", color:t3, fontSize:"10px", fontFamily:mono, border:"1px solid "+bdr, borderRadius:"5px", cursor:"pointer" }}>
+                <button onClick={disconnectWallet}
+                  style={{ height: "26px", padding: "0 8px", background: "transparent", color: t3, fontSize: "10px", fontFamily: mono, border: "1px solid " + bdr, borderRadius: "5px", cursor: "pointer" }}>
                   ✕
                 </button>
               </div>
             </div>
           ) : (
             <button onClick={connectWallet}
-              style={{ width:"100%", height:"34px", background:"rgba(26,86,255,0.08)", color:"#8aaeff", fontSize:"11px", fontFamily:mono, border:"1px solid rgba(26,86,255,0.2)", borderRadius:"8px", cursor:"pointer", letterSpacing:"0.02em", transition:"all .12s" }}
-              onMouseEnter={e => { e.currentTarget.style.background="rgba(26,86,255,0.15)"; e.currentTarget.style.borderColor="rgba(26,86,255,0.4)" }}
-              onMouseLeave={e => { e.currentTarget.style.background="rgba(26,86,255,0.08)"; e.currentTarget.style.borderColor="rgba(26,86,255,0.2)" }}>
+              style={{ width: "100%", height: "34px", background: "rgba(26,86,255,0.08)", color: "#8aaeff", fontSize: "11px", fontFamily: mono, border: "1px solid rgba(26,86,255,0.2)", borderRadius: "8px", cursor: "pointer" }}>
               Connect Wallet
             </button>
           )}
@@ -285,21 +312,28 @@ export default function ArcLayout({ children, active }: { children: React.ReactN
         </div>
       </aside>
 
-      {/* MOBILE OVERLAY */}
-      {mobileOpen && (
-        <div onClick={() => setMobileOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 39 }} />
-      )}
-
-      {/* MAIN */}
-      <div className="arc-main" style={{ flex: 1, marginLeft: "220px", display: "flex", flexDirection: "column", minHeight: "100vh" }}>
+      {/* MAIN — always full width since sidebar is overlaid */}
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: "100vh", width: "100%" }}>
 
         {/* TOPBAR */}
-        <header style={{ height: "52px", background: surf, borderBottom: "1px solid " + bdr, display: "flex", alignItems: "center", padding: "0 20px", gap: "12px", position: "sticky", top: 0, zIndex: 30, backdropFilter: "blur(8px)" }}>
+        <header style={{ height: "52px", background: surf, borderBottom: "1px solid " + bdr, display: "flex", alignItems: "center", padding: "0 16px", gap: "10px", position: "sticky", top: 0, zIndex: 30, backdropFilter: "blur(8px)" }}>
 
-          {/* MOBILE MENU */}
-          <button onClick={() => setMobileOpen(!mobileOpen)} className="mobile-menu-btn" style={{ background: "none", border: "none", color: t2, cursor: "pointer", padding: "4px", fontSize: "20px", lineHeight: 1, flexShrink: 0 }}>
-            ☰
+          {/* HAMBURGER — always visible */}
+          <button
+            id="arc-hamburger"
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            style={{ background: "none", border: "1px solid " + bdr, color: t2, cursor: "pointer", padding: "5px 8px", fontSize: "16px", lineHeight: 1, flexShrink: 0, borderRadius: "6px", display: "flex", alignItems: "center", justifyContent: "center", transition: "all .12s" }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(26,86,255,0.4)"; e.currentTarget.style.color = t1 }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = bdr; e.currentTarget.style.color = t2 }}
+          >
+            {sidebarOpen ? "×" : "☰"}
           </button>
+
+          {/* LOGO in topbar */}
+          <a href="/" style={{ textDecoration: "none", display: "flex", alignItems: "center", gap: "6px", flexShrink: 0 }}>
+            <span style={{ fontSize: "15px", fontWeight: 700, letterSpacing: "-0.03em", color: t1 }}>Arc</span>
+            <span style={{ fontSize: "15px", fontWeight: 700, letterSpacing: "-0.03em", color: arc }}>Lens</span>
+          </a>
 
           {/* LIVE DOT */}
           <div style={{ display: "flex", alignItems: "center", gap: "5px", flexShrink: 0 }}>
@@ -314,7 +348,7 @@ export default function ArcLayout({ children, active }: { children: React.ReactN
                 ref={searchRef}
                 value={searchQ}
                 onChange={e => setSearchQ(e.target.value)}
-                placeholder="Search addresses, USDC transfers, bridge activity…"
+                placeholder="Search addresses, tx, blocks…"
                 style={{ width: "100%", height: "34px", background: "var(--surf2, #0e1224)", border: "1px solid " + bdr, borderRadius: "8px", padding: "0 12px 0 34px", fontSize: "12px", fontFamily: mono, color: t1, outline: "none", transition: "border-color .12s" }}
                 onFocus={e => (e.currentTarget.style.borderColor = "rgba(26,86,255,0.4)")}
                 onBlur={e => (e.currentTarget.style.borderColor = bdr)}
@@ -327,33 +361,34 @@ export default function ArcLayout({ children, active }: { children: React.ReactN
 
           <div style={{ flex: 1 }} />
 
-          {/* BLOCK + GAS */}
-          <div style={{ display: "flex", alignItems: "center", gap: "14px", flexShrink: 0 }}>
-            <div style={{ fontSize: "11px", fontFamily: mono, color: t3 }}>
+          {/* BLOCK + GAS — hide on very small screens */}
+          <div style={{ display: "flex", alignItems: "center", gap: "12px", flexShrink: 0 }}>
+            <div className="hide-sm" style={{ fontSize: "11px", fontFamily: mono, color: t3 }}>
               Block <span style={{ color: "#8aaeff", fontWeight: 500 }}>#{blockNum || "..."}</span>
             </div>
-            <div style={{ fontSize: "11px", fontFamily: mono, color: t3 }}>
+            <div className="hide-sm" style={{ fontSize: "11px", fontFamily: mono, color: t3 }}>
               Gas <span style={{ color: usdc, fontWeight: 500 }}>{gas || "..."}</span>
             </div>
           </div>
 
           {/* ADD NETWORK */}
-          <button onClick={addNetwork} style={{ height: "30px", padding: "0 12px", background: "transparent", color: t2, fontSize: "11px", fontFamily: mono, border: "1px solid " + bdr, borderRadius: "6px", cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0, transition: "all .12s" }}
+          <button onClick={addNetwork}
+            className="hide-sm"
+            style={{ height: "30px", padding: "0 12px", background: "transparent", color: t2, fontSize: "11px", fontFamily: mono, border: "1px solid " + bdr, borderRadius: "6px", cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0, transition: "all .12s" }}
             onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(26,86,255,0.4)"; e.currentTarget.style.color = "#8aaeff" }}
             onMouseLeave={e => { e.currentTarget.style.borderColor = bdr; e.currentTarget.style.color = t2 }}>
-            + Add Arc Testnet
+            + Add Arc
           </button>
 
           {/* THEME */}
-          <button onClick={() => { const next = !dark; setDark(next); localStorage.setItem("arclens-theme", next ? "dark" : "light") }} style={{ width: "30px", height: "30px", background: "transparent", border: "1px solid " + bdr, borderRadius: "6px", cursor: "pointer", color: t2, fontSize: "14px", display: "flex", alignItems: "center", justifyContent: "center", transition: "all .12s", flexShrink: 0 }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(26,86,255,0.4)"; e.currentTarget.style.color = t1 }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = bdr; e.currentTarget.style.color = t2 }}>
+          <button onClick={() => { const next = !dark; setDark(next); localStorage.setItem("arclens-theme", next ? "dark" : "light") }}
+            style={{ width: "30px", height: "30px", background: "transparent", border: "1px solid " + bdr, borderRadius: "6px", cursor: "pointer", color: t2, fontSize: "14px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
             {dark ? "☀" : "☾"}
           </button>
         </header>
 
-        {/* PAGE CONTENT */}
-        <main style={{ flex: 1 }}>
+        {/* PAGE CONTENT — always full width */}
+        <main style={{ flex: 1, width: "100%" }}>
           {children}
         </main>
       </div>
@@ -366,12 +401,8 @@ export default function ArcLayout({ children, active }: { children: React.ReactN
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 2px; }
         a { color: inherit; }
-        .mobile-menu-btn { display: none; }
-        @media (max-width: 768px) {
-          .mobile-menu-btn { display: flex !important; align-items: center; justify-content: center; }
-          .arc-sidebar { transform: translateX(-100%) !important; }
-          .arc-sidebar.open { transform: translateX(0) !important; }
-          .arc-main { margin-left: 0 !important; }
+        @media (max-width: 640px) {
+          .hide-sm { display: none !important; }
         }
       `}</style>
     </div>
