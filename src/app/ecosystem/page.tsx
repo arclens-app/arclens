@@ -19,6 +19,17 @@ interface Project {
   color: string | null
 }
 
+interface TrendingProject {
+  id: number
+  name: string
+  slug: string | null
+  category: string
+  logo_url: string | null
+  color: string | null
+  view_count: number
+  tx_count: number
+}
+
 const CATEGORIES = ["All", "Infrastructure", "DeFi", "AI", "Payments", "NFT", "Gaming", "Social", "Developer Tools", "Bridge", "Identity", "Wallet", "Exchange", "Lending", "Analytics", "Other"]
 const CAT_COLOR: Record<string, string> = {
   Infrastructure: "#1a56ff", DeFi: "#00d990", NFT: "#c08828",
@@ -41,6 +52,8 @@ export default function EcosystemPage() {
   const [isUpdate, setIsUpdate]       = useState(false)
   const [submitError, setSubmitError] = useState("")
   const fileRef = useRef<HTMLInputElement>(null)
+  const [trending, setTrending] = useState<TrendingProject[]>([])
+  const [sortBy, setSortBy] = useState<"all"|"trending"|"new"|"official"|"verified"|"featured">("all")
 
   useEffect(() => { setMounted(true) }, [])
 
@@ -52,6 +65,7 @@ export default function EcosystemPage() {
         const res  = await fetch("/api/ecosystem")
         const data = await res.json()
         setProjects(data.projects || [])
+        setTrending(data.trending || [])
       } catch { setProjects([]) }
       finally { setLoading(false) }
     }
@@ -106,7 +120,18 @@ export default function EcosystemPage() {
   const filtered = projects.filter(p => {
     const matchCat    = filter === "All" || p.category === filter
     const matchSearch = !search || p.name.toLowerCase().includes(search.toLowerCase()) || p.tagline?.toLowerCase().includes(search.toLowerCase())
-    return matchCat && matchSearch
+    const matchSort   = sortBy === "all" ? true
+      : sortBy === "trending"  ? true
+      : sortBy === "new"       ? (Date.now() - new Date(p.created_at || 0).getTime() < 7 * 24 * 60 * 60 * 1000)
+      : sortBy === "official"  ? p.badge === "official"
+      : sortBy === "verified"  ? p.badge === "verified"
+      : sortBy === "featured"  ? p.featured
+      : true
+    return matchCat && matchSearch && matchSort
+  }).sort((a, b) => {
+    if (sortBy === "new") return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+    if (sortBy === "trending") { const scoreB = (b.view_count || 0) * 50; const scoreA = (a.view_count || 0) * 50; return scoreB - scoreA || b.id - a.id }
+    return 0
   })
 
   function LogoImg({ p, size }: { p: Project; size: number }) {
@@ -131,9 +156,10 @@ export default function EcosystemPage() {
 
     return (
       <div
+        onClick={() => window.location.href = `/ecosystem/${(p as any).slug || p.id}`}
         onMouseEnter={e => { e.currentTarget.style.borderColor = color + "50"; e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = "0 8px 24px rgba(0,0,0,0.12)" }}
         onMouseLeave={e => { e.currentTarget.style.borderColor = border; e.currentTarget.style.transform = "none"; e.currentTarget.style.boxShadow = "none" }}
-        style={{ background: surf, border: "1px solid " + border, borderRadius: "14px", overflow: "hidden", transition: "all .15s", display: "flex", flexDirection: "column" }}>
+        style={{ background: surf, border: "1px solid " + border, borderRadius: "14px", overflow: "hidden", transition: "all .15s", display: "flex", flexDirection: "column", cursor: "pointer" }}>
 
         <div style={{ padding: "16px 16px 10px", display: "flex", alignItems: "center", gap: "12px" }}>
           <LogoImg p={p} size={42} />
@@ -148,15 +174,16 @@ export default function EcosystemPage() {
           </div>
         </div>
 
-        <div style={{ padding: "0 16px 8px", fontSize: "12.5px", color: t1, fontWeight: 500, lineHeight: 1.5 }}>
+        <div style={{ padding: "0 16px 6px", fontSize: "12.5px", color: t1, fontWeight: 500, lineHeight: 1.5 }}>
           {p.tagline}
         </div>
-
         {p.description && (
-          <div style={{ padding: "0 16px 14px", fontSize: "11.5px", color: t2, lineHeight: 1.65, fontWeight: 300, flex: 1 }}>
+          <div style={{ padding: "0 16px 14px", fontSize: "11.5px", color: "#6b7da8", lineHeight: 1.6, fontWeight: 300, flex: 1 }}>
             {p.description.slice(0, 120)}{p.description.length > 120 ? "..." : ""}
           </div>
         )}
+
+
 
         <div style={{ padding: "10px 12px", borderTop: "1px solid " + border, display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
           {p.website  && <a href={p.website}  target="_blank" rel="noopener noreferrer" style={{ fontSize: "10px", fontFamily: mono, padding: "3px 9px", borderRadius: "5px", border: "1px solid " + border, color: t2, textDecoration: "none" }}>Website</a>}
@@ -164,6 +191,33 @@ export default function EcosystemPage() {
           {p.github   && <a href={p.github}   target="_blank" rel="noopener noreferrer" style={{ fontSize: "10px", fontFamily: mono, padding: "3px 9px", borderRadius: "5px", border: "1px solid " + border, color: t2, textDecoration: "none" }}>GitHub</a>}
           {p.discord  && <a href={p.discord}  target="_blank" rel="noopener noreferrer" style={{ fontSize: "10px", fontFamily: mono, padding: "3px 9px", borderRadius: "5px", border: "1px solid " + border, color: t2, textDecoration: "none" }}>Discord</a>}
           {p.contract && <span onClick={() => window.location.href = "/address/" + p.contract} style={{ fontSize: "10px", fontFamily: mono, padding: "3px 9px", borderRadius: "5px", border: "1px solid rgba(26,86,255,0.2)", color: "#8aaeff", cursor: "pointer" }}>Contract ↗</span>}
+        </div>
+      </div>
+    )
+  }
+
+  function TrendingCard({ t, i }: { t: TrendingProject; i: number }) {
+    const tc = t.color || CAT_COLOR[t.category] || "#1a56ff"
+    const proxied = t.logo_url ? `/api/image-proxy?url=${encodeURIComponent(t.logo_url)}` : null
+    const [imgErr, setImgErr] = useState(false)
+    return (
+      <div
+        onClick={() => window.location.href = `/ecosystem/${t.slug || t.id}`}
+        onMouseEnter={e => { e.currentTarget.style.borderColor = tc + "60"; e.currentTarget.style.transform = "translateY(-1px)" }}
+        onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(224,136,16,0.2)"; e.currentTarget.style.transform = "none" }}
+        style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 12px", background: "rgba(224,136,16,0.04)", border: "1px solid rgba(224,136,16,0.2)", borderRadius: "10px", cursor: "pointer", flexShrink: 0, transition: "all .13s", minWidth: "140px", maxWidth: "200px" }}>
+        <div style={{ fontSize: "10px", fontFamily: mono, color: "rgba(224,136,16,0.5)", fontWeight: 700, width: "14px", flexShrink: 0 }}>#{i + 1}</div>
+        <div style={{ width: "26px", height: "26px", borderRadius: "7px", overflow: "hidden", background: tc + "18", border: "1px solid " + tc + "28", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "11px", fontWeight: 700, fontFamily: mono, color: tc, flexShrink: 0 }}>
+          {proxied && !imgErr
+            ? <img src={proxied} alt={t.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={() => setImgErr(true)} />
+            : t.name[0]
+          }
+        </div>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: "12px", fontWeight: 600, color: t1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t.name}</div>
+          <div style={{ fontSize: "9.5px", fontFamily: mono, color: "#e08810", opacity: 0.7 }}>
+            {t.view_count > 0 ? `${t.view_count} views` : ""}
+          </div>
         </div>
       </div>
     )
@@ -275,6 +329,36 @@ export default function EcosystemPage() {
             )}
           </div>
         )}
+
+        {/* TRENDING STRIP */}
+        {trending.length > 0 && (
+          <div style={{ marginBottom: "20px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "10px" }}>
+              <span style={{ fontSize: "11px", fontFamily: mono, color: "#e08810", letterSpacing: "0.06em" }}>TRENDING</span>
+              <div style={{ flex: 1, height: "1px", background: "rgba(224,136,16,0.15)" }} />
+            </div>
+            <div style={{ display: "flex", gap: "8px", overflowX: "auto", paddingBottom: "4px", WebkitOverflowScrolling: "touch" as any }}>
+              {[...projects].sort((a,b)=>(b.view_count||0)-(a.view_count||0)||b.id-a.id).slice(0,5).map((t,i)=><TrendingCard key={t.id} t={t as any} i={i} />)}
+            </div>
+          </div>
+        )}
+
+        {/* SORT TABS */}
+        <div style={{ display: "flex", gap: "6px", marginBottom: "14px", flexWrap: "wrap" }}>
+          {([
+            { key: "all",      label: "All" },
+            { key: "trending", label: "Trending" },
+            { key: "new",      label: "New" },
+            { key: "featured", label: "Featured" },
+            { key: "verified", label: "Verified" },
+            { key: "official", label: "Official" },
+          ] as const).map(tab => (
+            <button key={tab.key} onClick={() => setSortBy(tab.key)}
+              style={{ height: "28px", padding: "0 14px", background: sortBy === tab.key ? "rgba(26,86,255,0.12)" : "transparent", color: sortBy === tab.key ? "#8aaeff" : t2, fontSize: "11.5px", fontFamily: mono, border: "1px solid " + (sortBy === tab.key ? "rgba(26,86,255,0.35)" : border), borderRadius: "6px", cursor: "pointer", transition: "all .12s", whiteSpace: "nowrap", fontWeight: sortBy === tab.key ? 600 : 400 }}>
+              {tab.label}
+            </button>
+          ))}
+        </div>
 
         {/* CATEGORY FILTERS — horizontal scroll on mobile */}
         <div style={{ marginBottom: "16px" }}>
