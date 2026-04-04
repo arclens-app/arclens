@@ -92,11 +92,14 @@ export async function POST(
       )
     `)
 
+    // Use fingerprint portion as dedup key if available, else full deviceId
+    const dedupId = deviceId.includes("_") ? deviceId.split("_")[1] : deviceId
+
     const result = await pool.query(
       `INSERT INTO project_views (project_id, device_id, week_num)
        VALUES ($1, $2, $3)
        ON CONFLICT (project_id, device_id, week_num) DO NOTHING`,
-      [projectId, deviceId, weekNum]
+      [projectId, dedupId, weekNum]
     )
 
     const isNewView = (result.rowCount ?? 0) > 0

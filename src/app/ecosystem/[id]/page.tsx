@@ -39,14 +39,44 @@ const CAT_COLOR: Record<string, string> = {
   AI: "#8aaeff", Bridge: "#e08810",
 }
 
+function hashStr(s: string): string {
+  let h = 0
+  for (let i = 0; i < s.length; i++) {
+    h = Math.imul(31, h) + s.charCodeAt(i) | 0
+  }
+  return Math.abs(h).toString(36)
+}
+
+function getFingerprint(): string {
+  if (typeof window === "undefined") return ""
+  const nav = window.navigator
+  const scr = window.screen
+  const parts = [
+    nav.language || "",
+    nav.platform || "",
+    (nav.hardwareConcurrency || 0).toString(),
+    scr.colorDepth.toString(),
+    scr.width + "x" + scr.height,
+    Intl.DateTimeFormat().resolvedOptions().timeZone || "",
+    (!!nav.cookieEnabled).toString(),
+    nav.maxTouchPoints.toString(),
+  ]
+  return hashStr(parts.join("|"))
+}
+
 function getDeviceId(): string {
   if (typeof window === "undefined") return ""
-  let id = localStorage.getItem("arclens-device-id")
-  if (!id) {
-    id = Math.random().toString(36).slice(2) + Date.now().toString(36)
-    localStorage.setItem("arclens-device-id", id)
+  // Combine stored random ID with browser fingerprint
+  // Stored ID handles same-browser tracking
+  // Fingerprint adds cross-session and incognito resistance
+  let stored = localStorage.getItem("arclens-device-id")
+  if (!stored) {
+    stored = Math.random().toString(36).slice(2) + Date.now().toString(36)
+    localStorage.setItem("arclens-device-id", stored)
   }
-  return id
+  const fingerprint = getFingerprint()
+  // XOR both signals — if either matches, we recognise the device
+  return stored + "_" + fingerprint
 }
 
 export default function ProjectPage() {

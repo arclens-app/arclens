@@ -59,6 +59,14 @@ export default function EcosystemPage() {
 
   useEffect(() => {
     if (!mounted) return
+    const interval = setInterval(() => {
+      fetch("/api/ecosystem").then(r=>r.json()).then(d=>{ setProjects(d.projects||[]); setTrending(d.trending||[]); console.log("[ArcLens] trending refreshed", new Date().toLocaleTimeString()) }).catch(()=>{})
+    }, 15000)
+    return () => clearInterval(interval)
+  }, [mounted])
+
+  useEffect(() => {
+    if (!mounted) return
     async function load() {
       setLoading(true)
       try {
@@ -216,7 +224,7 @@ export default function EcosystemPage() {
         <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: "12px", fontWeight: 600, color: t1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t.name}</div>
           <div style={{ fontSize: "9.5px", fontFamily: mono, color: "#e08810", opacity: 0.7 }}>
-            {t.view_count > 0 ? `${t.view_count} views` : ""}
+            
           </div>
         </div>
       </div>
