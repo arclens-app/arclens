@@ -16,34 +16,11 @@ export async function GET() {
        LIMIT 50`
     )
 
-    // Trending: score = views + (tx_count * 10), top 5 with contracts or views
-    const projectsWithContracts = result.rows.filter(p => p.contract)
-    const trendingCandidates = result.rows.filter(p => p.view_count > 0 || p.contract)
-
-    // Fetch tx counts for projects with contracts (parallel, non-blocking)
-    const trendingWithScores = await Promise.all(
-      trendingCandidates.slice(0, 10).map(async p => {
-        let txCount = 0
-        if (p.contract) {
-          try {
-            const res = await fetch(
-              `https://testnet.arcscan.app/api/v2/addresses/${p.contract}/counters`,
-              { next: { revalidate: 300 } }
-            )
-            const data = await res.json()
-            txCount = parseInt(data?.transactions_count || "0") || 0
-          } catch { txCount = 0 }
-        }
-        // Views weighted 50x more than txs to prevent dev self-spam
-        const score = (p.view_count * 50) + (txCount * 1)
-        return { ...p, tx_count: txCount, score }
-      })
-    )
-
-    const trending = trendingWithScores
-      .sort((a, b) => b.score - a.score)
+    // Trending: purely by views — no external API calls
+    const trending = [...result.rows]
+      .sort((a, b) => (b.view_count || 0) - (a.view_count || 0))
       .slice(0, 5)
-      .map(({ score, ...p }) => p)
+      .map(p => ({ ...p, tx_count: 0 }))
 
     return NextResponse.json({ projects: result.rows, trending })
   } catch {

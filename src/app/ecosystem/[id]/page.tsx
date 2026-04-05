@@ -477,6 +477,16 @@ export default function ProjectPage() {
           </div>
         )}
 
+        {/* FOUNDER CLAIM LINK */}
+        <div style={{ textAlign: "center", marginTop: "24px" }}>
+          <a href={`/dashboard/${id}`}
+            style={{ fontSize: "11px", fontFamily: mono, color: t3, textDecoration: "none", cursor: "pointer" }}
+            onMouseEnter={e => (e.currentTarget.style.color = t2)}
+            onMouseLeave={e => (e.currentTarget.style.color = t3)}>
+            Are you the founder? Claim this project →
+          </a>
+        </div>
+
       </div>
     </ArcLayout>
   )

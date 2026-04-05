@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 import { useEffect, useState } from "react"
 import ArcLayout from "@/components/ArcLayout"
 import { SkeletonRow, SkeletonStatsBand } from "@/components/ArcSkeleton"
@@ -155,7 +155,7 @@ export default function Home() {
           </div>
 
           {/* STATS BAND */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: "1px", background: bdr, borderRadius: "14px", overflow: "hidden", marginBottom: "16px", border: "1px solid " + bdr }}>
+          <div className="s4" style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: "1px", background: bdr, borderRadius: "14px", overflow: "hidden", marginBottom: "16px", border: "1px solid " + bdr }}>
             {stats.map((s: any) => (
               <div key={s.label} style={{ background: surf, padding: "20px 20px", transition: "background .15s" }}
                 onMouseEnter={e => (e.currentTarget.style.background = surf2)}
@@ -181,7 +181,7 @@ export default function Home() {
           </div>
 
           {/* FEEDS */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: "16px" }}>
 
             {/* BLOCKS */}
             <div style={{ background: surf, border: "1px solid " + bdr, borderRadius: "14px", overflow: "hidden" }}>
@@ -266,6 +266,7 @@ export default function Home() {
           </div>
         </div>
       </div>
-    </ArcLayout>
+    
+          <style>{`@media(min-width:640px){.s4{grid-template-columns:repeat(4,1fr)!important}}`}</style></ArcLayout>
   )
 }

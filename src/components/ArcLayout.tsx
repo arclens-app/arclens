@@ -39,6 +39,7 @@ export default function ArcLayout({ children, active }: { children: React.ReactN
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [walletAddr, setWalletAddr] = useState<string|null>(null)
   const [walletBal, setWalletBal]   = useState<string|null>(null)
+  const [myProject, setMyProject]   = useState<{ name: string; slug: string } | null>(null)
   const searchRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -51,7 +52,21 @@ export default function ArcLayout({ children, active }: { children: React.ReactN
   useEffect(() => {
     if (!mounted) return
     const saved = localStorage.getItem("arclens-wallet")
-    if (saved) { setWalletAddr(saved); fetchWalletBal(saved) }
+    if (saved) {
+      setWalletAddr(saved)
+      fetchWalletBal(saved)
+      // Check if saved wallet owns a project
+      fetch("/api/claim", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ wallet: saved }),
+      }).then(r => r.json()).then(d => {
+        if (d.projects?.length > 0) {
+          const p = d.projects[0]
+          setMyProject({ name: p.name, slug: p.slug || String(p.id) })
+        }
+      }).catch(() => {})
+    }
   }, [mounted])
 
   async function fetchWalletBal(addr: string) {
@@ -72,6 +87,19 @@ export default function ArcLayout({ children, active }: { children: React.ReactN
         setWalletAddr(addr)
         localStorage.setItem("arclens-wallet", addr)
         fetchWalletBal(addr)
+        // Check if this wallet owns a project
+        try {
+          const projRes = await fetch("/api/claim", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ wallet: addr }),
+          })
+          const projData = await projRes.json()
+          if (projData.projects?.length > 0) {
+            const p = projData.projects[0]
+            setMyProject({ name: p.name, slug: p.slug || String(p.id) })
+          }
+        } catch { }
       }
     } catch { /* user rejected */ }
   }
@@ -267,6 +295,20 @@ export default function ArcLayout({ children, active }: { children: React.ReactN
               })}
             </div>
           ))}
+          {/* MY PROJECT — dynamic, only when wallet owns a project */}
+          {myProject && (
+            <div style={{ marginBottom: "4px" }}>
+              <div style={{ padding: "10px 16px 4px", fontSize: "9px", fontFamily: mono, color: t3, letterSpacing: "0.12em", textTransform: "uppercase" }}>
+                MY DASHBOARD
+              </div>
+              <a href={`/dashboard/${myProject.slug}`}
+                onClick={() => setSidebarOpen(false)}
+                style={{ display: "flex", alignItems: "center", gap: "9px", padding: "8px 16px", margin: "1px 6px", borderRadius: "7px", textDecoration: "none", background: "rgba(0,184,122,0.08)", color: "#00b87a", fontSize: "13px", fontWeight: 500, borderLeft: "2px solid #00b87a" }}>
+                <span style={{ fontSize: "12px", opacity: .7, fontFamily: mono, flexShrink: 0 }}>◆</span>
+                <span style={{ flex: 1 }}>{myProject.name}</span>
+              </a>
+            </div>
+          )}
         </nav>
 
         {/* WALLET */}
