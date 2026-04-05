@@ -1,4 +1,5 @@
-﻿import { NextRequest, NextResponse } from "next/server"
+﻿export const runtime = "nodejs"
+import { NextRequest, NextResponse } from "next/server"
 import { Pool } from "pg"
 import crypto from "crypto"
 import { Resend } from "resend"
