@@ -30,6 +30,8 @@ export async function POST(req: NextRequest) {
     const base = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"
     const dashboardUrl = `${base}/dashboard/${project.slug || project.id}?token=${token}`
     try {
+      const { Resend } = await import("resend")
+      const resend = new Resend(process.env.RESEND_API_KEY || "")
       await resend.emails.send({
         from: "ArcLens <noreply@arclenz.xyz>",
         to: email.trim(),
