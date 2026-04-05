@@ -480,7 +480,7 @@ export default function ProjectPage() {
         {/* FOUNDER CLAIM LINK */}
         <div style={{ textAlign: "center", marginTop: "24px" }}>
           <a href={`/dashboard/${id}`}
-            style={{ fontSize: "11px", fontFamily: mono, color: t3, textDecoration: "none", cursor: "pointer" }}
+            style={{ fontSize: "12px", fontFamily: mono, color: t2, textDecoration: "none", cursor: "pointer", borderBottom: "1px solid " + t3, paddingBottom: "1px" }}
             onMouseEnter={e => (e.currentTarget.style.color = t2)}
             onMouseLeave={e => (e.currentTarget.style.color = t3)}>
             Are you the founder? Claim this project →
