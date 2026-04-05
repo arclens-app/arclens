@@ -2,10 +2,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { Pool } from "pg"
 import { randomBytes } from "crypto"
-import { Resend } from "resend"
 
-const pool   = new Pool({ connectionString: process.env.DATABASE_URL })
-const resend = new Resend(process.env.RESEND_API_KEY || "")
+const pool = new Pool({ connectionString: process.env.DATABASE_URL })
 
 export async function POST(req: NextRequest) {
   try {
@@ -39,7 +37,7 @@ export async function POST(req: NextRequest) {
         subject: `Your ArcLens dashboard for ${project.name}`,
         html: `<div style="font-family:monospace;max-width:520px;margin:0 auto;padding:40px 20px;background:#060c20;color:#e8ecff;"><div style="margin-bottom:32px;"><span style="font-size:20px;font-weight:700;color:#e8ecff;">Arc</span><span style="font-size:20px;font-weight:700;color:#1a56ff;">Lens</span></div><h1 style="font-size:22px;font-weight:700;margin:0 0 12px;color:#e8ecff;">Your founder dashboard</h1><p style="font-size:14px;color:#6b7da8;line-height:1.7;margin:0 0 28px;">Click below to access your dashboard for <strong style="color:#e8ecff;">${project.name}</strong>. Expires in 30 minutes.</p><a href="${dashboardUrl}" style="display:inline-block;padding:14px 28px;background:#1a56ff;color:#fff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;margin-bottom:28px;">Open my dashboard</a><p style="font-size:12px;color:#2e3a5c;">If you did not request this, ignore this email.</p></div>`,
       })
-    } catch (emailErr) { console.error("[Resend]", emailErr) }
+    } catch (emailErr) { console.error("[Email]", emailErr) }
     return NextResponse.json({ success: true, message: "Check your email for the dashboard link", debug_url: process.env.NODE_ENV === "development" ? dashboardUrl : undefined })
   } catch (err) { console.error("[Claim POST]", err); return NextResponse.json({ error: "Server error" }, { status: 500 }) }
 }
@@ -64,7 +62,7 @@ export async function GET(req: NextRequest) {
         [slug, token]
       )
       if (result.rows.length === 0) return NextResponse.json({ error: "Invalid or expired token" }, { status: 403 })
-      if (new Date(result.rows[0].claim_token_expires) < new Date()) return NextResponse.json({ error: "Token expired — request a new link" }, { status: 403 })
+      if (new Date(result.rows[0].claim_token_expires) < new Date()) return NextResponse.json({ error: "Token expired" }, { status: 403 })
       projectRow = result.rows[0]
       if (!projectRow.claimed_at) await pool.query(`UPDATE projects SET claimed_at = NOW() WHERE id = $1`, [projectRow.id])
     } else {
