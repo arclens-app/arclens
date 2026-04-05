@@ -216,7 +216,7 @@ export default function EcosystemPage() {
         <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: "12px", fontWeight: 600, color: t1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t.name}</div>
           <div style={{ fontSize: "9.5px", fontFamily: mono, color: "#e08810", opacity: 0.7 }}>
-            {t.view_count > 0 ? `${t.view_count} views` : ""}{t.view_count > 0 && t.tx_count > 0 ? " · " : ""}{t.tx_count > 0 ? `${Number(t.tx_count).toLocaleString()} txs` : ""}
+            
           </div>
         </div>
       </div>
