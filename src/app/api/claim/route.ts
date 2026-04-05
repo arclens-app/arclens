@@ -1,7 +1,7 @@
 ﻿export const runtime = "nodejs"
 import { NextRequest, NextResponse } from "next/server"
 import { Pool } from "pg"
-import crypto from "crypto"
+import { randomBytes } from "crypto"
 import { Resend } from "resend"
 
 const pool   = new Pool({ connectionString: process.env.DATABASE_URL })
@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
     if (project.email?.toLowerCase() !== email.trim().toLowerCase()) {
       return NextResponse.json({ error: "Email does not match the submission email for this project" }, { status: 403 })
     }
-    const token   = crypto.randomBytes(32).toString("hex")
+    const token   = randomBytes(32).toString("hex")
     const expires = new Date(Date.now() + 30 * 60 * 1000)
     await pool.query(
       `UPDATE projects SET claim_token = $1, claim_token_expires = $2, owner_email = $3 WHERE id = $4`,
