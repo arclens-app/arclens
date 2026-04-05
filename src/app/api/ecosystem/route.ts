@@ -8,7 +8,7 @@ export async function GET() {
     const result = await pool.query(
       `SELECT id, name, tagline, description, category, logo_url,
               website, twitter, github, discord, contract,
-              featured, color, launched_at, slug, badge, created_at,
+              featured, color, launched_at, slug, badge,
               COALESCE(view_count, 0) as view_count
        FROM projects
        WHERE approved = true AND live = true
@@ -35,7 +35,7 @@ export async function GET() {
           } catch { txCount = 0 }
         }
         // Views weighted 50x more than txs to prevent dev self-spam
-        const score = p.view_count
+        const score = (p.view_count * 50) + (txCount * 1)
         return { ...p, tx_count: txCount, score }
       })
     )

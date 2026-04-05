@@ -59,14 +59,6 @@ export default function EcosystemPage() {
 
   useEffect(() => {
     if (!mounted) return
-    const interval = setInterval(() => {
-      fetch("/api/ecosystem").then(r=>r.json()).then(d=>{ setProjects(d.projects||[]); setTrending(d.trending||[]); console.log("[ArcLens] trending refreshed", new Date().toLocaleTimeString()) }).catch(()=>{})
-    }, 15000)
-    return () => clearInterval(interval)
-  }, [mounted])
-
-  useEffect(() => {
-    if (!mounted) return
     async function load() {
       setLoading(true)
       try {
@@ -130,7 +122,7 @@ export default function EcosystemPage() {
     const matchSearch = !search || p.name.toLowerCase().includes(search.toLowerCase()) || p.tagline?.toLowerCase().includes(search.toLowerCase())
     const matchSort   = sortBy === "all" ? true
       : sortBy === "trending"  ? true
-      : sortBy === "new"       ? (Date.now() - new Date(p.created_at || 0).getTime() < 7 * 24 * 60 * 60 * 1000)
+      : sortBy === "new"       ? (Date.now() - new Date(p.created_at || 0).getTime() < 90 * 24 * 60 * 60 * 1000)
       : sortBy === "official"  ? p.badge === "official"
       : sortBy === "verified"  ? p.badge === "verified"
       : sortBy === "featured"  ? p.featured
@@ -138,7 +130,7 @@ export default function EcosystemPage() {
     return matchCat && matchSearch && matchSort
   }).sort((a, b) => {
     if (sortBy === "new") return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
-    if (sortBy === "trending") { const scoreB = (b.view_count || 0) * 50; const scoreA = (a.view_count || 0) * 50; return scoreB - scoreA || b.id - a.id }
+    if (sortBy === "trending") return (b.view_count || 0) - (a.view_count || 0)
     return 0
   })
 
@@ -224,7 +216,7 @@ export default function EcosystemPage() {
         <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: "12px", fontWeight: 600, color: t1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t.name}</div>
           <div style={{ fontSize: "9.5px", fontFamily: mono, color: "#e08810", opacity: 0.7 }}>
-            
+            {t.view_count > 0 ? `${t.view_count} views` : ""}{t.view_count > 0 && t.tx_count > 0 ? " · " : ""}{t.tx_count > 0 ? `${Number(t.tx_count).toLocaleString()} txs` : ""}
           </div>
         </div>
       </div>
@@ -346,7 +338,7 @@ export default function EcosystemPage() {
               <div style={{ flex: 1, height: "1px", background: "rgba(224,136,16,0.15)" }} />
             </div>
             <div style={{ display: "flex", gap: "8px", overflowX: "auto", paddingBottom: "4px", WebkitOverflowScrolling: "touch" as any }}>
-              {[...projects].sort((a,b)=>(b.view_count||0)-(a.view_count||0)||b.id-a.id).slice(0,5).map((t,i)=><TrendingCard key={t.id} t={t as any} i={i} />)}
+              {trending.map((t, i) => <TrendingCard key={t.id} t={t} i={i} />)}
             </div>
           </div>
         )}
