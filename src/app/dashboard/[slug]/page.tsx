@@ -221,7 +221,7 @@ export default function DashboardPage() {
         </div>
 
         {/* WALLET CONNECT PROMPT — optional, only show if token auth and no wallet saved */}
-        {token && !hasWallet && !walletSaved && (
+        {token && !hasWallet && !walletSaved && connectedWallet && (
           <div style={{ background: "rgba(26,86,255,0.06)", border: "1px solid rgba(26,86,255,0.2)", borderRadius: "12px", padding: "16px 20px", marginBottom: "20px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "12px" }}>
             <div>
               <div style={{ fontSize: "13px", color: t1, marginBottom: "4px" }}>Skip the magic link next time</div>
