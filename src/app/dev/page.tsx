@@ -124,11 +124,11 @@ export default function DevPage() {
       await (window as any).ethereum.request({
         method: "wallet_addEthereumChain",
         params: [{
-          chainId: "0xA1C",
+          chainId: "0x4CE752",
           chainName: "Arc Testnet",
           nativeCurrency: { name: "USDC", symbol: "USDC", decimals: 18 },
-          rpcUrls: ["https://testnet.arcscan.app/api/eth-rpc"],
-          blockExplorerUrls: ["https://arclens.app"],
+          rpcUrls: ["https://rpc.testnet.arc.network"],
+          blockExplorerUrls: ["https://arclenz.xyz"],
         }],
       })
       setNetAdded(true)
@@ -316,11 +316,11 @@ export default function DevPage() {
               </div>
               {[
                 { label:"Network Name",     value:"Arc Testnet" },
-                { label:"Chain ID",         value:"2588 (0xA1C)" },
-                { label:"RPC URL",          value:"https://testnet.arcscan.app/api/eth-rpc" },
+                { label:"Chain ID",         value:"5042002 (0x4CE752)" },
+                { label:"RPC URL",          value:"https://rpc.testnet.arc.network" },
                 { label:"Native Currency",  value:"USDC (18 decimals)" },
                 { label:"USDC Contract",    value:"0x3600000000000000000000000000000000000000" },
-                { label:"Block Explorer",   value:"https://arclens.app" },
+                { label:"Block Explorer",   value:"https://arclenz.xyz" },
               ].map((row: any) => (
                 <div key={row.label} style={{ display:"flex", alignItems:"center", gap:"16px", padding:"10px 18px", borderBottom:"1px solid rgba(128,128,128,0.04)" }}>
                   <div style={{ fontSize:"10px", fontFamily:mono, color:t3, minWidth:"140px", textTransform:"uppercase", letterSpacing:"0.06em" }}>{row.label}</div>
