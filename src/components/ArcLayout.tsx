@@ -172,7 +172,7 @@ export default function ArcLayout({ children, active }: { children: React.ReactN
     if (!(window as any).ethereum) { alert("No wallet detected"); return }
     ;(window as any).ethereum.request({
       method: "wallet_addEthereumChain",
-      params: [{ chainId: "0x4CE752", chainName: "Arc Testnet", nativeCurrency: { name: "USDC", symbol: "USDC", decimals: 18 }, rpcUrls: ["https://rpc.testnet.arc.network"], blockExplorerUrls: ["https://arclenz.xyz"] }]
+      params: [{ chainId: "0x4CE752", chainName: "Arc Testnet", nativeCurrency: { name: "USDC", symbol: "USDC", decimals: 18 }, rpcUrls: ["https://5042002.rpc.thirdweb.com"], blockExplorerUrls: ["https://arclenz.xyz"] }]
     })
   }
 
