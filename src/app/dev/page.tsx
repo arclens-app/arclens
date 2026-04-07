@@ -127,7 +127,7 @@ export default function DevPage() {
           chainId: "0x4CE752",
           chainName: "Arc Testnet",
           nativeCurrency: { name: "USDC", symbol: "USDC", decimals: 18 },
-          rpcUrls: ["https://5042002.rpc.thirdweb.com"],
+          rpcUrls: ["https://rpc.testnet.arc.network"],
           blockExplorerUrls: ["https://arclenz.xyz"],
         }],
       })
@@ -149,13 +149,13 @@ export default function DevPage() {
   const arc    = "#1a56ff"
 
   const endpoints = [
-    { name: "HTTPS RPC",   url: "https://5042002.rpc.thirdweb.com",  status: "live", ms: "~120ms" },
+    { name: "HTTPS RPC",   url: "https://rpc.testnet.arc.network",  status: "live", ms: "~120ms" },
     { name: "Alchemy RPC", url: "https://arc-testnet.g.alchemy.com/v2/...", status: "live", ms: "~80ms"  },
     { name: "WebSocket",   url: "wss://5042002.rpc.thirdweb.com/ws", status: "live", ms: "~90ms"  },
   ]
 
   const snippets = [
-    { label: "Connect to Arc", code: `const provider = new ethers.JsonRpcProvider(\n  "https://5042002.rpc.thirdweb.com",\n  { chainId: 5042002, name: "arc-testnet" }\n)` },
+    { label: "Connect to Arc", code: `const provider = new ethers.JsonRpcProvider(\n  "https://rpc.testnet.arc.network",\n  { chainId: 5042002, name: "arc-testnet" }\n)` },
     { label: "Read USDC Balance", code: `const USDC = "0x3600000000000000000000000000000000000000"\nconst abi  = ["function balanceOf(address) view returns (uint256)"]\nconst usdc = new ethers.Contract(USDC, abi, provider)\nconst bal  = await usdc.balanceOf(address)\nconsole.log(ethers.formatUnits(bal, 6), "USDC")` },
     { label: "Send USDC", code: `const abi  = ["function transfer(address to, uint256 amount) returns (bool)"]\nconst usdc = new ethers.Contract(USDC, abi, signer)\nconst tx   = await usdc.transfer(recipient, ethers.parseUnits("1.00", 6))\nawait tx.wait() // Confirms in < 1 second` },
     { label: "Estimate Gas", code: `const feeData = await provider.getFeeData()\nconst gasGwei = Number(ethers.formatUnits(feeData.gasPrice, "gwei"))\n// Simple transfer: ~21,000 gas × gasGwei × 1e-9 USDC\n// ERC-20 transfer: ~46,000 gas\n// Contract call: ~85,000 gas` },
@@ -290,7 +290,7 @@ export default function DevPage() {
                   <div style={{ fontSize:"12px", color:t2, fontWeight:300 }}>One click to add Arc Testnet (Chain ID 5042002) with USDC as native gas token.</div>
                 </div>
                 <div style={{ display:"flex", gap:"8px", flexShrink:0 }}>
-                  <button onClick={() => copy("https://5042002.rpc.thirdweb.com", "rpc")}
+                  <button onClick={() => copy("https://rpc.testnet.arc.network", "rpc")}
                     style={{ height:"38px", padding:"0 16px", background:"transparent", color:copied==="rpc"?"#00d990":t2, fontSize:"12px", border:"1px solid "+bdr, borderRadius:"8px", cursor:"pointer", fontFamily:"'Geist',sans-serif", whiteSpace:"nowrap" }}>
                     {copied==="rpc"?"✓ Copied":"Copy RPC"}
                   </button>
@@ -309,7 +309,7 @@ export default function DevPage() {
                   <div style={{ width:"5px", height:"5px", borderRadius:"50%", background:"#8aaeff" }}/>
                   <span style={{ fontSize:"12.5px", fontWeight:500 }}>Network Config</span>
                 </div>
-                <button onClick={() => copy(JSON.stringify({chainId:"0x4CE752",chainName:"Arc Testnet",nativeCurrency:{name:"USDC",symbol:"USDC",decimals:18},rpcUrls:["https://5042002.rpc.thirdweb.com"],blockExplorerUrls:["https://arclenz.xyz"]},null,2), "config")}
+                <button onClick={() => copy(JSON.stringify({chainId:"0x4CE752",chainName:"Arc Testnet",nativeCurrency:{name:"USDC",symbol:"USDC",decimals:18},rpcUrls:["https://rpc.testnet.arc.network"],blockExplorerUrls:["https://arclenz.xyz"]},null,2), "config")}
                   style={{ fontSize:"10px", fontFamily:mono, padding:"3px 10px", borderRadius:"5px", border:"1px solid "+bdr, background:"transparent", color:copied==="config"?"#00d990":t2, cursor:"pointer" }}>
                   {copied==="config"?"✓ Copied":"Copy JSON"}
                 </button>
@@ -317,7 +317,7 @@ export default function DevPage() {
               {[
                 { label:"Network Name",     value:"Arc Testnet" },
                 { label:"Chain ID",         value:"5042002 (0x4CE752)" },
-                { label:"RPC URL",          value:"https://5042002.rpc.thirdweb.com" },
+                { label:"RPC URL",          value:"https://rpc.testnet.arc.network" },
                 { label:"Native Currency",  value:"USDC (18 decimals)" },
                 { label:"USDC Contract",    value:"0x3600000000000000000000000000000000000000" },
                 { label:"Block Explorer",   value:"https://arclenz.xyz" },
