@@ -151,7 +151,7 @@ export default function DevPage() {
   const endpoints = [
     { name: "HTTPS RPC",   url: "https://5042002.rpc.thirdweb.com",  status: "live", ms: "~120ms" },
     { name: "Alchemy RPC", url: "https://arc-testnet.g.alchemy.com/v2/...", status: "live", ms: "~80ms"  },
-    { name: "WebSocket",   url: "wss://rpc.testnet.arc.network", status: "live", ms: "~90ms"  },
+    { name: "WebSocket",   url: "wss://5042002.rpc.thirdweb.com/ws", status: "live", ms: "~90ms"  },
   ]
 
   const snippets = [
