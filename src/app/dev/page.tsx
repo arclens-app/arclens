@@ -48,7 +48,7 @@ export default function DevPage() {
         setStats([
           { label: "Latest Block",    value: "#" + blockNum.toLocaleString(), color: "#8aaeff", sub: "live" },
           { label: "ERC-20 Gas Cost", value: "$" + gasUSDC + " USDC",         color: "#00d990", sub: "stable" },
-          { label: "Chain ID",        value: "2588",                           color: "#a080ff", sub: "arc-testnet" },
+          { label: "Chain ID",        value: "5042002",                       color: "#a080ff", sub: "arc-testnet" },
           { label: "Finality",        value: "< 1 second",                    color: "#00d990", sub: "deterministic" },
         ])
       } catch { /* ignore */ }
@@ -149,13 +149,13 @@ export default function DevPage() {
   const arc    = "#1a56ff"
 
   const endpoints = [
-    { name: "HTTPS RPC",   url: "https://testnet.arcscan.app/api/eth-rpc",  status: "live", ms: "~120ms" },
+    { name: "HTTPS RPC",   url: "https://rpc.testnet.arc.network",  status: "live", ms: "~120ms" },
     { name: "Alchemy RPC", url: "https://arc-testnet.g.alchemy.com/v2/...", status: "live", ms: "~80ms"  },
-    { name: "WebSocket",   url: "wss://testnet.arcscan.app/api/eth-rpc/ws", status: "live", ms: "~90ms"  },
+    { name: "WebSocket",   url: "wss://rpc.testnet.arc.network", status: "live", ms: "~90ms"  },
   ]
 
   const snippets = [
-    { label: "Connect to Arc", code: `const provider = new ethers.JsonRpcProvider(\n  "https://testnet.arcscan.app/api/eth-rpc",\n  { chainId: 2588, name: "arc-testnet" }\n)` },
+    { label: "Connect to Arc", code: `const provider = new ethers.JsonRpcProvider(\n  "https://rpc.testnet.arc.network",\n  { chainId: 5042002, name: "arc-testnet" }\n)` },
     { label: "Read USDC Balance", code: `const USDC = "0x3600000000000000000000000000000000000000"\nconst abi  = ["function balanceOf(address) view returns (uint256)"]\nconst usdc = new ethers.Contract(USDC, abi, provider)\nconst bal  = await usdc.balanceOf(address)\nconsole.log(ethers.formatUnits(bal, 6), "USDC")` },
     { label: "Send USDC", code: `const abi  = ["function transfer(address to, uint256 amount) returns (bool)"]\nconst usdc = new ethers.Contract(USDC, abi, signer)\nconst tx   = await usdc.transfer(recipient, ethers.parseUnits("1.00", 6))\nawait tx.wait() // Confirms in < 1 second` },
     { label: "Estimate Gas", code: `const feeData = await provider.getFeeData()\nconst gasGwei = Number(ethers.formatUnits(feeData.gasPrice, "gwei"))\n// Simple transfer: ~21,000 gas × gasGwei × 1e-9 USDC\n// ERC-20 transfer: ~46,000 gas\n// Contract call: ~85,000 gas` },
@@ -197,7 +197,7 @@ export default function DevPage() {
                 { label:"Available",   value:"20 USDC", sub:"per request", color:usdc },
                 { label:"Also",        value:"20 EURC", sub:"per request", color:"#4070ff" },
                 { label:"Wait Time",   value:"2 hours", sub:"between claims", color:t2 },
-                { label:"Network",     value:"Arc Testnet", sub:"Chain ID 2588", color:"#8aaeff" },
+                { label:"Network",     value:"Arc Testnet", sub:"Chain ID 5042002", color:"#8aaeff" },
               ].map((s: any) => (
                 <div key={s.label} style={{ background:surf, padding:"16px 20px" }}>
                   <div style={{ fontSize:"9px", fontFamily:mono, color:t3, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:"8px" }}>{s.label}</div>
@@ -287,10 +287,10 @@ export default function DevPage() {
               <div style={{ padding:"20px 22px", display:"flex", alignItems:"center", gap:"16px" }}>
                 <div style={{ flex:1 }}>
                   <div style={{ fontSize:"14px", fontWeight:600, letterSpacing:"-0.02em", marginBottom:"4px", color:t1 }}>Add Arc Testnet to MetaMask</div>
-                  <div style={{ fontSize:"12px", color:t2, fontWeight:300 }}>One click to add Arc Testnet (Chain ID 2588) with USDC as native gas token.</div>
+                  <div style={{ fontSize:"12px", color:t2, fontWeight:300 }}>One click to add Arc Testnet (Chain ID 5042002) with USDC as native gas token.</div>
                 </div>
                 <div style={{ display:"flex", gap:"8px", flexShrink:0 }}>
-                  <button onClick={() => copy("https://testnet.arcscan.app/api/eth-rpc", "rpc")}
+                  <button onClick={() => copy("https://rpc.testnet.arc.network", "rpc")}
                     style={{ height:"38px", padding:"0 16px", background:"transparent", color:copied==="rpc"?"#00d990":t2, fontSize:"12px", border:"1px solid "+bdr, borderRadius:"8px", cursor:"pointer", fontFamily:"'Geist',sans-serif", whiteSpace:"nowrap" }}>
                     {copied==="rpc"?"✓ Copied":"Copy RPC"}
                   </button>
