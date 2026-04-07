@@ -124,7 +124,7 @@ export default function DevPage() {
       await (window as any).ethereum.request({
         method: "wallet_addEthereumChain",
         params: [{
-          chainId: "0x4CE752",
+          chainId: "0x4cef52",
           chainName: "Arc Testnet",
           nativeCurrency: { name: "USDC", symbol: "USDC", decimals: 18 },
           rpcUrls: ["https://rpc.testnet.arc.network"],
@@ -309,14 +309,14 @@ export default function DevPage() {
                   <div style={{ width:"5px", height:"5px", borderRadius:"50%", background:"#8aaeff" }}/>
                   <span style={{ fontSize:"12.5px", fontWeight:500 }}>Network Config</span>
                 </div>
-                <button onClick={() => copy(JSON.stringify({chainId:"0x4CE752",chainName:"Arc Testnet",nativeCurrency:{name:"USDC",symbol:"USDC",decimals:18},rpcUrls:["https://rpc.testnet.arc.network"],blockExplorerUrls:["https://arclenz.xyz"]},null,2), "config")}
+                <button onClick={() => copy(JSON.stringify({chainId:"0x4cef52",chainName:"Arc Testnet",nativeCurrency:{name:"USDC",symbol:"USDC",decimals:18},rpcUrls:["https://rpc.testnet.arc.network"],blockExplorerUrls:["https://arclenz.xyz"]},null,2), "config")}
                   style={{ fontSize:"10px", fontFamily:mono, padding:"3px 10px", borderRadius:"5px", border:"1px solid "+bdr, background:"transparent", color:copied==="config"?"#00d990":t2, cursor:"pointer" }}>
                   {copied==="config"?"✓ Copied":"Copy JSON"}
                 </button>
               </div>
               {[
                 { label:"Network Name",     value:"Arc Testnet" },
-                { label:"Chain ID",         value:"5042002 (0x4CE752)" },
+                { label:"Chain ID",         value:"5042002 (0x4cef52)" },
                 { label:"RPC URL",          value:"https://rpc.testnet.arc.network" },
                 { label:"Native Currency",  value:"USDC (18 decimals)" },
                 { label:"USDC Contract",    value:"0x3600000000000000000000000000000000000000" },

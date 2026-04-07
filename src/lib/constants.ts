@@ -7,7 +7,7 @@ export const BASE_FEE_GWEI = BigInt(160)
 export const BASE_FEE_WEI  = BigInt(160) * BigInt(10) ** BigInt(9)
 
 export const ADD_CHAIN_PARAMS = {
-  chainId: "0x4CE752",
+  chainId: "0x4cef52",
   chainName: "Arc Testnet",
   nativeCurrency: { name: "USD Coin", symbol: "USDC", decimals: 6 },
   rpcUrls: ["https://rpc.testnet.arc.network"],
