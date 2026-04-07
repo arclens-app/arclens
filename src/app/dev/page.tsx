@@ -309,7 +309,7 @@ export default function DevPage() {
                   <div style={{ width:"5px", height:"5px", borderRadius:"50%", background:"#8aaeff" }}/>
                   <span style={{ fontSize:"12.5px", fontWeight:500 }}>Network Config</span>
                 </div>
-                <button onClick={() => copy(JSON.stringify({chainId:"0xA1C",chainName:"Arc Testnet",nativeCurrency:{name:"USDC",symbol:"USDC",decimals:18},rpcUrls:["https://testnet.arcscan.app/api/eth-rpc"],blockExplorerUrls:["https://arclens.app"]},null,2), "config")}
+                <button onClick={() => copy(JSON.stringify({chainId:"0x4CE752",chainName:"Arc Testnet",nativeCurrency:{name:"USDC",symbol:"USDC",decimals:18},rpcUrls:["https://rpc.testnet.arc.network"],blockExplorerUrls:["https://arclenz.xyz"]},null,2), "config")}
                   style={{ fontSize:"10px", fontFamily:mono, padding:"3px 10px", borderRadius:"5px", border:"1px solid "+bdr, background:"transparent", color:copied==="config"?"#00d990":t2, cursor:"pointer" }}>
                   {copied==="config"?"✓ Copied":"Copy JSON"}
                 </button>
