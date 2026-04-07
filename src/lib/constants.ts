@@ -1,5 +1,5 @@
 ﻿export const ARC_CHAIN_ID = 5042002
-export const ARC_RPC_HTTP = "https://rpc.testnet.arc.network"
+export const ARC_RPC_HTTP = "https://5042002.rpc.thirdweb.com"
 export const ARC_RPC_WS = "wss://ws.arc-testnet.io"
 export const USDC_ADDRESS = "0x3600000000000000000000000000000000000000"
 export const USDC_DECIMALS = 6
@@ -10,7 +10,7 @@ export const ADD_CHAIN_PARAMS = {
   chainId: "0x4CE752",
   chainName: "Arc Testnet",
   nativeCurrency: { name: "USD Coin", symbol: "USDC", decimals: 6 },
-  rpcUrls: ["https://rpc.testnet.arc.network"],
+  rpcUrls: ["https://5042002.rpc.thirdweb.com"],
   blockExplorerUrls: ["https://arclenz.xyz"],
 } as const
 
