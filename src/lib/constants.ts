@@ -1,5 +1,5 @@
-﻿export const ARC_CHAIN_ID = 2588
-export const ARC_RPC_HTTP = "https://rpc.arc-testnet.io"
+﻿export const ARC_CHAIN_ID = 5042002
+export const ARC_RPC_HTTP = "https://rpc.testnet.arc.network"
 export const ARC_RPC_WS = "wss://ws.arc-testnet.io"
 export const USDC_ADDRESS = "0x3600000000000000000000000000000000000000"
 export const USDC_DECIMALS = 6
@@ -7,11 +7,11 @@ export const BASE_FEE_GWEI = BigInt(160)
 export const BASE_FEE_WEI  = BigInt(160) * BigInt(10) ** BigInt(9)
 
 export const ADD_CHAIN_PARAMS = {
-  chainId: "0xA1C",
+  chainId: "0x4CE752",
   chainName: "Arc Testnet",
   nativeCurrency: { name: "USD Coin", symbol: "USDC", decimals: 6 },
-  rpcUrls: ["https://rpc.arc-testnet.io"],
-  blockExplorerUrls: ["https://arclens.app"],
+  rpcUrls: ["https://rpc.testnet.arc.network"],
+  blockExplorerUrls: ["https://arclenz.xyz"],
 } as const
 
 export function gasToUSDC(gasUsed: number, baseFeeGwei = 160): string {
