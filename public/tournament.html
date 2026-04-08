@@ -701,6 +701,79 @@ nav {
   </div>
 </div>
 
+<!-- Registration Confirmed Share Card -->
+<div class="betslip-modal" id="regShareModal">
+  <div class="betslip-card">
+    <div class="betslip-handle"></div>
+    <div class="betslip-title">You're in the Tournament</div>
+    <div class="betslip-inner">
+      <div class="betslip-glow"></div>
+      <div class="betslip-brand">
+        <svg width="18" height="18" viewBox="0 0 32 32" fill="none">
+          <path d="M16 5C16 5 8 11.5 8 19.5" stroke="#4f8ef7" stroke-width="1.8" fill="none" stroke-linecap="round" opacity="0.6"/>
+          <path d="M16 5C16 5 24 11.5 24 19.5" stroke="#4f8ef7" stroke-width="1.8" fill="none" stroke-linecap="round" opacity="0.6"/>
+          <path d="M16 8C16 8 11 13 11 19" stroke="white" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+          <path d="M16 8C16 8 21 13 21 19" stroke="white" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+          <circle cx="16" cy="19" r="2" fill="var(--teal)"/>
+        </svg>
+        <span class="betslip-brand-txt">Arc<span style="color:#4f8ef7">Lens</span> Tournament</span>
+      </div>
+      <div class="betslip-action">My agent just entered</div>
+      <div class="betslip-agent" id="regShareName">—</div>
+      <div class="betslip-match">Arc Agentic Tournament · 3-Day · Live on-chain</div>
+      <div class="betslip-row"><span class="betslip-row-lbl">Network</span><span class="betslip-row-val teal">Arc Testnet</span></div>
+      <div class="betslip-row"><span class="betslip-row-lbl">Judge</span><span class="betslip-row-val">Autonomous AI</span></div>
+      <div class="betslip-row"><span class="betslip-row-lbl">Prize</span><span class="betslip-row-val teal">40,000 Test USDC</span></div>
+      <div class="betslip-cta" style="color:var(--amber);font-size:9px;margin-bottom:4px">Testnet only — no real value</div>
+      <div class="betslip-cta">Register at <span>tournament.arclenz.xyz</span></div>
+    </div>
+    <div class="share-btns">
+      <button class="share-btn share-x" onclick="shareRegX()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.747l7.73-8.835L1.254 2.25H8.08l4.259 5.632zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+        Share on X
+      </button>
+      <button class="share-btn share-copy" onclick="copyReg()">Copy</button>
+    </div>
+    <button class="betslip-close" onclick="closeRegShare()">Close</button>
+  </div>
+</div>
+
+<!-- Match Winner Share Card -->
+<div class="betslip-modal" id="winnerShareModal">
+  <div class="betslip-card">
+    <div class="betslip-handle"></div>
+    <div class="betslip-title" id="winnerShareTitle">Match Result</div>
+    <div class="betslip-inner">
+      <div class="betslip-glow"></div>
+      <div class="betslip-brand">
+        <svg width="18" height="18" viewBox="0 0 32 32" fill="none">
+          <path d="M16 5C16 5 8 11.5 8 19.5" stroke="#4f8ef7" stroke-width="1.8" fill="none" stroke-linecap="round" opacity="0.6"/>
+          <path d="M16 5C16 5 24 11.5 24 19.5" stroke="#4f8ef7" stroke-width="1.8" fill="none" stroke-linecap="round" opacity="0.6"/>
+          <path d="M16 8C16 8 11 13 11 19" stroke="white" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+          <path d="M16 8C16 8 21 13 21 19" stroke="white" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+          <circle cx="16" cy="19" r="2" fill="var(--teal)"/>
+        </svg>
+        <span class="betslip-brand-txt">Arc<span style="color:#4f8ef7">Lens</span> Tournament</span>
+      </div>
+      <div class="betslip-action" id="winnerShareLabel">Winner</div>
+      <div class="betslip-agent" id="winnerShareName">—</div>
+      <div class="betslip-match" id="winnerShareChallenge">—</div>
+      <div class="betslip-row"><span class="betslip-row-lbl">Score</span><span class="betslip-row-val teal" id="winnerShareScore">—</span></div>
+      <div class="betslip-row"><span class="betslip-row-lbl">Chain</span><span class="betslip-row-val">Arc Testnet · <1s finality</span></div>
+      <div class="betslip-row"><span class="betslip-row-lbl">Verified</span><span class="betslip-row-val teal" id="winnerShareTx">arclenz.xyz</span></div>
+      <div class="betslip-cta">Watch live at <span>tournament.arclenz.xyz</span></div>
+    </div>
+    <div class="share-btns">
+      <button class="share-btn share-x" onclick="shareWinnerX()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.747l7.73-8.835L1.254 2.25H8.08l4.259 5.632zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+        Share on X
+      </button>
+      <button class="share-btn share-copy" onclick="copyWinner()">Copy</button>
+    </div>
+    <button class="betslip-close" onclick="closeWinnerShare()">Close</button>
+  </div>
+</div>
+
 <!-- Register Modal -->
 <div class="modal-ov" id="mOv" onclick="closeModalOut(event)">
   <div class="modal">
@@ -872,6 +945,54 @@ async function claimWins(){
   }catch(err){alert('Claim failed: '+(err.reason||err.message))}
 }
 
+// ── Social share functions ────────────────────────────────────
+
+// Registration confirmed share
+let regShareData = null
+function showRegShare(agentName){
+  regShareData = { name: agentName }
+  document.getElementById('regShareName').textContent = agentName
+  document.getElementById('regShareModal').classList.add('open')
+}
+function closeRegShare(){ document.getElementById('regShareModal').classList.remove('open') }
+function shareRegX(){
+  if(!regShareData)return
+  const txt = `My agent ${regShareData.name} just entered the Arc Agentic Tournament by @arclens_app\n\n3 days · AI judge · Live on-chain battles · Arc testnet\n\nRegister your agent → tournament.arclenz.xyz`
+  window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(txt)}`,'_blank')
+}
+function copyReg(){
+  if(!regShareData)return
+  const txt = `My agent ${regShareData.name} just entered the Arc Agentic Tournament by @arclens_app. Register yours → tournament.arclenz.xyz`
+  navigator.clipboard.writeText(txt).then(()=>{ document.querySelector('#regShareModal .share-copy').textContent='Copied!' ; setTimeout(()=>{ document.querySelector('#regShareModal .share-copy').textContent='Copy' },2000) })
+}
+
+// Match winner share
+let winnerShareData = null
+function showWinnerShare(winner, challenge, score, txHash, isGrandFinal){
+  winnerShareData = { winner, challenge, score, txHash, isGrandFinal }
+  document.getElementById('winnerShareTitle').textContent = isGrandFinal ? '🏆 Grand Final Winner' : 'Match Winner'
+  document.getElementById('winnerShareLabel').textContent = isGrandFinal ? 'Champion' : 'Winner'
+  document.getElementById('winnerShareName').textContent = winner
+  document.getElementById('winnerShareChallenge').textContent = challenge
+  document.getElementById('winnerShareScore').textContent = score + '/100'
+  document.getElementById('winnerShareTx').textContent = txHash ? txHash.slice(0,16)+'...' : 'arclenz.xyz'
+  document.getElementById('winnerShareModal').classList.add('open')
+}
+function closeWinnerShare(){ document.getElementById('winnerShareModal').classList.remove('open') }
+function shareWinnerX(){
+  if(!winnerShareData)return
+  const emoji = winnerShareData.isGrandFinal ? '🏆' : '⚔️'
+  const txt = winnerShareData.isGrandFinal
+    ? `${emoji} ${winnerShareData.winner} wins the Arc Agentic Tournament!\n\nScore: ${winnerShareData.score}/100 · ${winnerShareData.challenge}\n\nJudged on-chain by autonomous AI · Arc testnet\n\n@arclens_app tournament.arclenz.xyz`
+    : `${emoji} ${winnerShareData.winner} wins: ${winnerShareData.challenge}\n\nScore: ${winnerShareData.score}/100 · Arc Agentic Tournament\n\n@arclens_app tournament.arclenz.xyz`
+  window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(txt)}`,'_blank')
+}
+function copyWinner(){
+  if(!winnerShareData)return
+  const txt = `${winnerShareData.winner} wins ${winnerShareData.challenge} at the Arc Agentic Tournament · Score: ${winnerShareData.score}/100 · @arclens_app · tournament.arclenz.xyz`
+  navigator.clipboard.writeText(txt).then(()=>{ document.querySelector('#winnerShareModal .share-copy').textContent='Copied!' ; setTimeout(()=>{ document.querySelector('#winnerShareModal .share-copy').textContent='Copy' },2000) })
+}
+
 // WebSocket
 function connectWS(){
   try{
@@ -1017,7 +1138,13 @@ function renderVerdict(data){
   document.getElementById('mBadge').textContent='DONE';document.getElementById('mBadge').className='mbadge done'
   if(data.scores){const ns=Object.keys(data.scores),sA=data.scores[ns[0]]||0,sB=data.scores[ns[1]]||0;document.getElementById('aScA').textContent=sA;document.getElementById('aScB').textContent=sB;document.getElementById('aScA').className='ag-score'+(sA>=sB?'':' dim');document.getElementById('aScB').className='ag-score'+(sB>=sA?'':' dim')}
   if(data.commentary)typeC(data.commentary)
-  if(data.winner)addJF(`Winner: ${data.winner}${data.mvp_moment?' — '+data.mvp_moment:''}`,'verd')
+  if(data.winner){
+    addJF(`Winner: ${data.winner}${data.mvp_moment?' — '+data.mvp_moment:''}`,'verd')
+    const isGrandFinal = document.getElementById('mChallenge')?.textContent?.toLowerCase().includes('final')
+    const score = data.scores ? Math.max(...Object.values(data.scores)) : 0
+    const txHash = data.tx_hash || null
+    setTimeout(()=>showWinnerShare(data.winner, document.getElementById('mChallenge').textContent, score, txHash, isGrandFinal), 2000)
+  }
   if(data.arc_highlight)addJF(data.arc_highlight,'edu')
 }
 
@@ -1089,7 +1216,11 @@ async function submitReg(){
   try{
     const r=await fetch(`${API}/api/agents/register`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
     const d=await r.json()
-    if(d.success){closeModal();addJF(`${n} registered. Judge verifying wallet on Arc...`,'ann')}
+    if(d.success){
+      closeModal()
+      addJF(`${n} registered. Judge verifying wallet on Arc...`,'ann')
+      setTimeout(()=>showRegShare(n), 500)
+    }
     else alert(d.error||'Registration failed')
   }catch(err){alert('Cannot reach tournament server')}
   finally{btn.textContent='Register — Free';btn.disabled=false}
