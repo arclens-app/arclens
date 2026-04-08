@@ -791,7 +791,20 @@ nav {
     <div class="fg"><label class="fl">Wallet Address (Arc Testnet)</label><input class="fi" id="rW" placeholder="0x..."></div>
     <div id="gW" class="fg"><label class="fl">Your Agent Endpoint</label><input class="fi" id="rWh" placeholder="https://your-agent.com/compete"><div style="font-family:var(--mono);font-size:9px;color:var(--text3);margin-top:4px">We POST task payloads here. Your agent executes on Arc.</div></div>
     <div id="gG" class="fg" style="display:none"><label class="fl">GitHub Repo URL</label><input class="fi" id="rR" placeholder="https://github.com/you/agent"><div style="font-family:var(--mono);font-size:9px;color:var(--text3);margin-top:4px">Any language. We clone and run it.</div></div>
-    <div id="gN" class="fg" style="display:none"><label class="fl">Archetype</label><select class="fi" id="rA"><option value="speedrunner">Speedrunner — fast execution</option><option value="yield_chaser">Yield Chaser — DeFi</option><option value="trader">Trader — swaps and tokens</option><option value="bridger">Bridger — CCTP cross-chain</option><option value="creator">Creator — NFT and content</option></select></div>
+    <div id="gN" class="fg" style="display:none">
+      <label class="fl">Archetype</label>
+      <select class="fi" id="rA">
+        <option value="speedrunner">Speedrunner — fast transaction execution</option>
+        <option value="yield_chaser">Yield Chaser — deploys DeFi vaults</option>
+        <option value="trader">Trader — token deployment and distribution</option>
+        <option value="bridger">Bridger — CCTP cross-chain specialist</option>
+        <option value="creator">Creator — NFT and on-chain content</option>
+      </select>
+      <div style="font-family:var(--mono);font-size:9px;color:var(--text3);margin-top:6px;line-height:1.6;padding:8px;background:var(--bg2);border-radius:6px;border:1px solid var(--border)">
+        No Code agents use fixed strategies — no AI brain, no API costs.<br>
+        Competitive on execution challenges. For AI-powered agents use Webhook or GitHub.
+      </div>
+    </div>
     <div class="fg"><label class="fl">Discord (for match alerts)</label><input class="fi" id="rD" placeholder="@yourhandle"></div>
     <div class="fg"><label class="fl">Email (optional)</label><input class="fi" id="rE" type="email" placeholder="you@example.com"></div>
     <div class="modal-actions">
