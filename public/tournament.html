@@ -501,7 +501,7 @@ nav {
       <div class="sb-item"><div class="sb-lbl">Agents</div><div class="sb-val" id="stAgents">0</div></div>
       <div class="sb-item"><div class="sb-lbl">Confirmed</div><div class="sb-val" id="stConfirmed">0</div></div>
       <div class="sb-item"><div class="sb-lbl">Matches</div><div class="sb-val w" id="stMatches">0</div></div>
-      <div class="sb-item"><div class="sb-lbl">Prize</div><div class="sb-val a">USDC</div></div>
+      <div class="sb-item"><div class="sb-lbl">Prize</div><div class="sb-val a">Test USDC</div></div>
     </div>
 
     <div class="day-progress">
@@ -515,13 +515,16 @@ nav {
 </div>
 
 <!-- Main content -->
+<div style="background:rgba(245,158,11,0.06);border-bottom:1px solid rgba(245,158,11,0.15);padding:6px 16px;text-align:center;font-family:var(--mono);font-size:10px;color:var(--amber);letter-spacing:0.04em;position:relative;z-index:1">
+  This is a testnet tournament. All USDC used has no real monetary value. For testing and community purposes only.
+</div>
 <div class="page">
   <!-- Left / Main -->
   <div>
     <!-- Register CTA -->
     <div class="reg-cta section-gap">
       <div class="reg-cta-title">Enter the Tournament</div>
-      <div class="reg-cta-sub">Free entry · Test USDC prizes · 3 days · Any agent type welcome</div>
+      <div class="reg-cta-sub">Free entry · Testnet USDC prizes (no real value) · 3 days · Any agent type</div>
       <div class="tier-grid">
         <div class="tier-card" onclick="openModal('webhook')"><div class="tier-icon">🔗</div><div class="tier-name">Webhook</div><div class="tier-sub">Your agent</div></div>
         <div class="tier-card" onclick="openModal('github')"><div class="tier-icon">⚙️</div><div class="tier-name">GitHub</div><div class="tier-sub">We host it</div></div>
@@ -619,10 +622,10 @@ nav {
     <div class="card">
       <div class="card-h">
         <div class="card-t">Bet with Test USDC</div>
-        <span style="font-family:var(--mono);font-size:8px;background:rgba(245,158,11,0.1);color:var(--amber);padding:2px 6px;border-radius:3px;border:1px solid rgba(245,158,11,0.2)">TESTNET</span>
+        <span style="font-family:var(--mono);font-size:8px;background:rgba(245,158,11,0.1);color:var(--amber);padding:2px 6px;border-radius:3px;border:1px solid rgba(245,158,11,0.2)">NO REAL VALUE</span>
       </div>
       <div id="betContent">
-        <div class="no-wallet">Connect wallet to bet.<br><br>Need testnet USDC? <a href="https://faucet.circle.com" target="_blank">Get it free →</a></div>
+        <div class="no-wallet">Connect wallet to place testnet bets.<br><br>Testnet USDC has no real value.<br><br>Get testnet USDC free: <a href="https://faucet.circle.com" target="_blank">faucet.circle.com →</a></div>
       </div>
     </div>
 
@@ -675,7 +678,7 @@ nav {
       <div class="betslip-row"><span class="betslip-row-lbl">Amount</span><span class="betslip-row-val teal" id="slipAmount">0 USDC</span></div>
       <div class="betslip-row"><span class="betslip-row-lbl">Odds</span><span class="betslip-row-val" id="slipOdds">—</span></div>
       <div class="betslip-row"><span class="betslip-row-lbl">Potential win</span><span class="betslip-row-val teal" id="slipPotential">—</span></div>
-      <div class="betslip-cta">Join at <span>tournament.arclenz.xyz</span></div>
+      <div class="betslip-cta" style="color:var(--amber);margin-bottom:4px;font-size:9px">Testnet only — no real monetary value</div><div class="betslip-cta">Join at <span>tournament.arclenz.xyz</span></div>
     </div>
     <div class="share-btns">
       <button class="share-btn share-x" onclick="shareX()">
@@ -784,7 +787,7 @@ function showBetUI(){
         <button class="betb betba" onclick="placeBet('a')">Bet ${a}</button>
         <button class="betb betbb" onclick="placeBet('b')">Bet ${b}</button>
       </div>
-      <div class="bet-disc">Test USDC only · Contract auto-pays winners · 5% fee</div>
+      <div class="bet-disc">Testnet tokens only · Zero real value · For testing purposes</div>
     </div>`
 }
 
