@@ -470,7 +470,7 @@ nav {
     <div class="ws-ind"><div class="ws-dot" id="wsDot"></div><span id="wsLbl">—</span></div>
     <button class="tbtn" onclick="toggleTheme()">◑</button>
     <button class="wbtn" id="walletBtn" onclick="connectWallet()">Connect</button>
-    <button class="reg-btn" onclick="openModal()">Register</button>
+    <button class="reg-btn" onclick="openModal()">Register Agent</button>
   </div>
 </nav>
 
@@ -775,7 +775,7 @@ function showBetUI(){
   const a=curAgents[0]||'—',b=curAgents[1]||'—'
   document.getElementById('betContent').innerHTML=`
     <div class="bet-wrap">
-      <div class="bet-match-title" id="bTitle">Current Match</div>
+      <div class="bet-match-title" id="bTitle">${document.getElementById('mChallenge')?.textContent||'Current Match'}</div>
       <div class="bet-agents">
         <div class="bet-ag"><div class="bet-ag-name">${a}</div><div class="bet-odds" id="bOA">${curOdds.a}</div></div>
         <div class="bet-vs">VS</div>
@@ -864,10 +864,23 @@ async function claimWins(){
 
 // WebSocket
 function connectWS(){
-  ws=new WebSocket(WS_URL)
-  ws.onopen=()=>{document.getElementById('wsDot').className='ws-dot on';document.getElementById('wsLbl').textContent='live'}
-  ws.onclose=()=>{document.getElementById('wsDot').className='ws-dot';document.getElementById('wsLbl').textContent='—';setTimeout(connectWS,3000)}
-  ws.onmessage=(e)=>{try{handle(JSON.parse(e.data))}catch(err){}}
+  try{
+    ws=new WebSocket(WS_URL)
+    ws.onopen=()=>{
+      document.getElementById('wsDot').className='ws-dot on'
+      document.getElementById('wsLbl').textContent='live'
+      pollBlock() // refresh immediately on connect
+    }
+    ws.onclose=()=>{
+      document.getElementById('wsDot').className='ws-dot'
+      document.getElementById('wsLbl').textContent='—'
+      setTimeout(connectWS,3000)
+    }
+    ws.onerror=()=>{
+      document.getElementById('wsDot').className='ws-dot'
+    }
+    ws.onmessage=(e)=>{try{handle(JSON.parse(e.data))}catch(err){}}
+  }catch(e){setTimeout(connectWS,3000)}
 }
 
 function handle({type,data}){
@@ -1017,9 +1030,28 @@ function fmtPh(p){return{registration:'Registration',time_trials:'Time Trials',d
 
 // Block poll
 async function pollBlock(){
-  try{const r=await fetch(`${API}/health`);const d=await r.json();if(d.current_block){document.getElementById('blockNum').textContent='#'+d.current_block.toLocaleString();document.getElementById('chainBlk').textContent=d.current_block.toLocaleString()}if(d.agents!==undefined)document.getElementById('stAgents').textContent=d.agents}catch(e){}
+  try{
+    const r=await fetch(`${API}/health`,{mode:'cors'})
+    const d=await r.json()
+    if(d.current_block){
+      const blk='#'+d.current_block.toLocaleString()
+      document.getElementById('blockNum').textContent=blk
+      document.getElementById('chainBlk').textContent=d.current_block.toLocaleString()
+    }
+    if(d.agents!==undefined){
+      document.getElementById('stAgents').textContent=d.agents
+      updThresh(d.agents)
+    }
+    if(d.ws_clients!==undefined){
+      const wsLbl=document.getElementById('wsLbl')
+      if(wsLbl&&wsLbl.textContent!=='live')wsLbl.textContent=d.ws_clients>0?'live':'—'
+    }
+  }catch(e){
+    // Railway cold start — retry faster
+    setTimeout(pollBlock,3000)
+  }
 }
-pollBlock();setInterval(pollBlock,8000)
+pollBlock();setInterval(pollBlock,6000)
 
 // Modal
 function openModal(t){if(t)selT(t);document.getElementById('mOv').classList.add('open')}
