@@ -549,7 +549,10 @@ nav {
         </div>
         <div class="mtimer" id="mTimer">—</div>
       </div>
-      <div class="agents-row">
+      <div id="matchWaiting" style="padding:20px 14px;text-align:center;font-family:var(--mono);font-size:11px;color:var(--text3)">
+        Waiting for first match to begin...
+      </div>
+      <div class="agents-row" id="agentsRow" style="display:none">
         <div class="ag">
           <div class="ag-name" id="aNmA">—</div>
           <div class="ag-tier" id="aTrA"></div>
@@ -904,6 +907,8 @@ function handle({type,data}){
     case 'match_starting':
       curMatchId=data.matchId;curAgents=data.agents||[]
       document.getElementById('mBadge').textContent='LIVE';document.getElementById('mBadge').className='mbadge live'
+      document.getElementById('matchWaiting').style.display='none'
+      document.getElementById('agentsRow').style.display='grid'
       document.getElementById('mChallenge').textContent=data.challenge+(data.roundName?' — '+data.roundName:'')
       document.getElementById('aNmA').textContent=data.agents?.[0]||'—'
       document.getElementById('aNmB').textContent=data.agents?.[1]||'Solo'
