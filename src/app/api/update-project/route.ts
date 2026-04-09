@@ -3,7 +3,8 @@ import { Pool } from "pg"
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL })
 
-// Update project details — only by verified owner
+const ALLOWED = ["tagline", "description", "website", "twitter", "github", "discord", "contract", "color"]
+
 export async function POST(req: NextRequest) {
   try {
     const { token, slug, wallet, updates } = await req.json()
@@ -13,6 +14,7 @@ export async function POST(req: NextRequest) {
     }
 
     let projectId: number | null = null
+    let projectRow: any = null
 
     // Auth by token
     if (token) {
@@ -41,29 +43,38 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
     }
 
-    // Only allow safe fields to be updated
-    const allowed = ["tagline", "description", "website", "twitter", "github", "discord", "contract", "color"]
-    const setClauses: string[] = []
-    const values: any[] = []
-
-    for (const [key, value] of Object.entries(updates)) {
-      if (allowed.includes(key) && typeof value === "string") {
-        values.push(value.trim())
-        setClauses.push(`${key} = $${values.length}`)
-      }
-    }
-
-    if (setClauses.length === 0) {
-      return NextResponse.json({ error: "No valid fields to update" }, { status: 400 })
-    }
-
-    values.push(projectId)
-    await pool.query(
-      `UPDATE projects SET ${setClauses.join(", ")} WHERE id = $${values.length}`,
-      values
+    // Get current project values
+    const current = await pool.query(
+      `SELECT tagline, description, website, twitter, github, discord, contract, color FROM projects WHERE id = $1`,
+      [projectId]
     )
+    projectRow = current.rows[0]
 
-    return NextResponse.json({ success: true })
+    // Write each changed field to pending_updates
+    let changeCount = 0
+    for (const [key, value] of Object.entries(updates)) {
+      if (!ALLOWED.includes(key) || typeof value !== "string") continue
+      const newVal = (value as string).trim()
+      const oldVal = projectRow[key] || ""
+      if (newVal === oldVal) continue
+
+      await pool.query(
+        `INSERT INTO pending_updates (project_id, field, old_value, new_value)
+         VALUES ($1, $2, $3, $4)`,
+        [projectId, key, oldVal, newVal]
+      )
+      changeCount++
+    }
+
+    if (changeCount === 0) {
+      return NextResponse.json({ success: true, message: "No changes detected" })
+    }
+
+    return NextResponse.json({ 
+      success: true, 
+      pending: true,
+      message: `${changeCount} change${changeCount > 1 ? "s" : ""} submitted for review. Updates will appear after approval.`
+    })
   } catch (err) {
     console.error("[Update Project]", err)
     return NextResponse.json({ error: "Server error" }, { status: 500 })

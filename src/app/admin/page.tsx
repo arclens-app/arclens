@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 import { useEffect, useState } from "react"
 import ArcLayout from "@/components/ArcLayout"
 
@@ -16,6 +16,10 @@ interface Contract {
   website: string|null; twitter: string|null; badge: string|null; deployer: string|null
   flag_reason: string|null; verified: boolean; created_at: string
 }
+interface PendingUpdate {
+  id: number; project_id: number; field: string; old_value: string; new_value: string
+  submitted_at: string; status: string; project_name: string; project_slug: string
+}
 
 export default function AdminPage() {
   const [mounted, setMounted]         = useState(false)
@@ -23,10 +27,11 @@ export default function AdminPage() {
   const [pw, setPw]                   = useState("")
   const [password, setPassword]       = useState("")
   const [loading, setLoading]         = useState(false)
-  const [tab, setTab]                 = useState<"pending"|"projects"|"contracts">("pending")
+  const [tab, setTab]                 = useState<"pending"|"updates"|"projects"|"contracts">("pending")
   const [submissions, setSubmissions] = useState<Project[]>([])
   const [projects, setProjects]       = useState<Project[]>([])
   const [contracts, setContracts]     = useState<Contract[]>([])
+  const [pendingUpdates, setPendingUpdates] = useState<PendingUpdate[]>([])
   const [acting, setActing]           = useState(false)
   const [msg, setMsg]                 = useState<{ok:boolean;text:string}|null>(null)
   const [editing, setEditing]         = useState<Project|null>(null)
@@ -58,6 +63,7 @@ export default function AdminPage() {
       setSubmissions(data.submissions || [])
       setProjects(data.projects || [])
       setContracts(data.contracts || [])
+      setPendingUpdates(data.pendingUpdates || [])
     } finally { setLoading(false) }
   }
 
@@ -72,7 +78,7 @@ export default function AdminPage() {
       })
       const data = await res.json()
       if (data.success || data.ok) {
-        setMsg({ ok: true, text: action === "approve" ? "✓ Approved" : action === "delete" || action === "reject" ? "✓ Deleted" : "✓ Done" })
+        setMsg({ ok: true, text: action === "approve" ? "✓ Approved" : action === "approve-update" ? "✓ Update applied" : action === "reject-update" ? "✓ Update rejected" : action === "delete" || action === "reject" ? "✓ Deleted" : "✓ Done" })
         loadAll()
       } else {
         setMsg({ ok: false, text: data.error || "Failed" })
@@ -136,7 +142,7 @@ export default function AdminPage() {
         <div style={{ display:"flex", alignItems:"center", gap:"16px", marginBottom:"24px" }}>
           <div style={{ fontSize:"20px", fontWeight:700, letterSpacing:"-0.04em", color:t1 }}>Admin Panel</div>
           <div style={{ fontSize:"11px", fontFamily:mono, padding:"3px 10px", borderRadius:"5px", background:"rgba(224,51,72,0.08)", border:"1px solid rgba(224,51,72,0.2)", color:"#e03348" }}>
-            {pendingCount} pending
+            {pendingCount + pendingUpdates.length} pending
           </div>
           <button onClick={() => loadAll()} style={{ marginLeft:"auto", height:"32px", padding:"0 14px", background:"transparent", color:t2, fontSize:"11px", fontFamily:mono, border:"1px solid "+bdr, borderRadius:"6px", cursor:"pointer" }}>
             ↻ Refresh
@@ -147,9 +153,10 @@ export default function AdminPage() {
         </div>
 
         {/* TABS */}
-        <div style={{ display:"flex", gap:"8px", marginBottom:"20px" }}>
+        <div style={{ display:"flex", gap:"8px", marginBottom:"20px", flexWrap:"wrap" }}>
           {[
-            { id:"pending"   as const, label:`Pending (${pendingCount})` },
+            { id:"pending"   as const, label:`Submissions (${pendingCount})` },
+            { id:"updates"   as const, label:`Updates (${pendingUpdates.length})` },
             { id:"projects"  as const, label:`All Projects (${projects.length})` },
             { id:"contracts" as const, label:`Contracts (${contracts.length})` },
           ].map((t: any) => (
@@ -172,7 +179,7 @@ export default function AdminPage() {
           <div style={{ padding:"48px", textAlign:"center", fontFamily:mono, fontSize:"11px", color:t3 }}>Loading...</div>
         ) : (
           <>
-            {/* PENDING TAB */}
+            {/* PENDING SUBMISSIONS TAB */}
             {tab === "pending" && (
               <div>
                 {submissions.length === 0 && contracts.filter(c=>!c.verified).length === 0 ? (
@@ -204,6 +211,58 @@ export default function AdminPage() {
                             style={{ height:"32px", padding:"0 14px", background:"rgba(224,51,72,0.08)", color:"#e03348", fontSize:"12px", border:"1px solid rgba(224,51,72,0.2)", borderRadius:"6px", cursor:"pointer", fontFamily:"'Geist',sans-serif" }}>
                             Reject
                           </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* PENDING UPDATES TAB */}
+            {tab === "updates" && (
+              <div>
+                {pendingUpdates.length === 0 ? (
+                  <div style={{ padding:"60px", textAlign:"center" }}>
+                    <div style={{ fontSize:"32px", marginBottom:"10px" }}>✅</div>
+                    <div style={{ fontSize:"14px", fontWeight:600, color:t1, marginBottom:"4px" }}>No pending updates</div>
+                    <div style={{ fontSize:"11px", color:t2 }}>Founder listing changes will appear here</div>
+                  </div>
+                ) : (
+                  <div style={{ display:"flex", flexDirection:"column", gap:"10px" }}>
+                    {pendingUpdates.map((u: any) => (
+                      <div key={u.id} style={{ background:surf, border:border, borderRadius:"12px", padding:"16px 20px" }}>
+                        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"12px", flexWrap:"wrap", gap:"8px" }}>
+                          <div>
+                            <span style={{ fontSize:"14px", fontWeight:600, color:t1 }}>{u.project_name}</span>
+                            <span style={{ fontSize:"11px", fontFamily:mono, color:t3, marginLeft:"10px" }}>wants to update</span>
+                            <span style={{ fontSize:"11px", fontFamily:mono, color:"#8aaeff", marginLeft:"6px", padding:"1px 8px", background:"rgba(26,86,255,0.1)", borderRadius:"4px", border:"1px solid rgba(26,86,255,0.2)" }}>{u.field}</span>
+                          </div>
+                          <span style={{ fontSize:"10px", fontFamily:mono, color:t3 }}>{new Date(u.submitted_at).toLocaleDateString()}</span>
+                        </div>
+                        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"12px", marginBottom:"14px" }}>
+                          <div style={{ padding:"10px 14px", background:"rgba(224,51,72,0.04)", border:"1px solid rgba(224,51,72,0.12)", borderRadius:"7px" }}>
+                            <div style={{ fontSize:"9px", fontFamily:mono, color:"#e03348", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:"4px" }}>Current</div>
+                            <div style={{ fontSize:"12px", color:t2, wordBreak:"break-all" }}>{u.old_value || "—"}</div>
+                          </div>
+                          <div style={{ padding:"10px 14px", background:"rgba(0,184,122,0.04)", border:"1px solid rgba(0,184,122,0.12)", borderRadius:"7px" }}>
+                            <div style={{ fontSize:"9px", fontFamily:mono, color:"#00b87a", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:"4px" }}>Proposed</div>
+                            <div style={{ fontSize:"12px", color:t1, wordBreak:"break-all" }}>{u.new_value}</div>
+                          </div>
+                        </div>
+                        <div style={{ display:"flex", gap:"8px" }}>
+                          <button onClick={() => act(u.id, "approve-update")} disabled={acting}
+                            style={{ height:"32px", padding:"0 16px", background:"rgba(0,184,122,0.1)", color:"#00d990", fontSize:"12px", border:"1px solid rgba(0,184,122,0.2)", borderRadius:"6px", cursor:"pointer", fontFamily:"'Geist',sans-serif" }}>
+                            Apply Update
+                          </button>
+                          <button onClick={() => act(u.id, "reject-update")} disabled={acting}
+                            style={{ height:"32px", padding:"0 16px", background:"rgba(224,51,72,0.08)", color:"#e03348", fontSize:"12px", border:"1px solid rgba(224,51,72,0.2)", borderRadius:"6px", cursor:"pointer", fontFamily:"'Geist',sans-serif" }}>
+                            Reject
+                          </button>
+                          <a href={`/ecosystem/${u.project_slug}`} target="_blank" rel="noopener noreferrer"
+                            style={{ height:"32px", padding:"0 12px", display:"flex", alignItems:"center", background:"transparent", color:"#8aaeff", fontSize:"12px", border:"1px solid rgba(26,86,255,0.2)", borderRadius:"6px", textDecoration:"none" }}>
+                            View Project ↗
+                          </a>
                         </div>
                       </div>
                     ))}
@@ -291,7 +350,6 @@ export default function AdminPage() {
                 <div style={{ fontSize:"16px", fontWeight:600, color:t1 }}>Edit: {editing.name}</div>
                 <button onClick={() => setEditing(null)} style={{ background:"none", border:"none", color:t2, cursor:"pointer", fontSize:"20px" }}>×</button>
               </div>
-
               {[
                 { k:"name",        l:"Name",             type:"text" },
                 { k:"tagline",     l:"Tagline",          type:"text" },
@@ -315,8 +373,6 @@ export default function AdminPage() {
                   )}
                 </div>
               ))}
-
-              {/* Dropdowns */}
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"12px", marginBottom:"12px" }}>
                 <div>
                   <label style={{ display:"block", fontSize:"10px", fontFamily:mono, color:t3, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:"5px" }}>Category</label>
@@ -333,8 +389,6 @@ export default function AdminPage() {
                   </select>
                 </div>
               </div>
-
-              {/* Toggles */}
               <div style={{ display:"flex", gap:"16px", marginBottom:"20px" }}>
                 {[
                   { k:"featured", l:"Featured" },
@@ -346,7 +400,6 @@ export default function AdminPage() {
                   </label>
                 ))}
               </div>
-
               <div style={{ display:"flex", gap:"10px" }}>
                 <button onClick={saveEdit} disabled={acting}
                   style={{ flex:1, height:"40px", background:"#1a56ff", color:"#fff", fontSize:"13px", fontWeight:600, border:"none", borderRadius:"8px", cursor:"pointer", fontFamily:"'Geist',sans-serif" }}>
