@@ -355,7 +355,7 @@ export default function ArcLayout({ children, active }: { children: React.ReactN
       </aside>
 
       {/* MAIN — always full width since sidebar is overlaid */}
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: "100vh", width: "100%" }}>
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: "100vh", width: "100%", maxWidth: "100vw", overflow: "hidden" }}>
 
         {/* TOPBAR */}
         <header style={{ height: "52px", background: surf, borderBottom: "1px solid " + bdr, display: "flex", alignItems: "center", padding: "0 16px", gap: "10px", position: "sticky", top: 0, zIndex: 30, backdropFilter: "blur(8px)" }}>
