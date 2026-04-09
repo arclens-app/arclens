@@ -81,16 +81,18 @@ export default function RegistryPage() {
         alert("This address has no contract code on Arc Testnet. Are you on the right network?"); return
       }
 
-      // Get deployer from Blockscout
+      // Get deployer from Blockscout — FIX: was always setting null due to broken ternary
       const bsRes  = await fetch("/api/blockscout?path=v2/addresses/" + addr.trim())
       const bsData = await bsRes.json()
-      const foundDeployer = bsData.creator_address_hash || bsData.creation_tx_hash ? null : null
+      let deployerAddr = bsData.creator_address_hash || ""
 
-      // Try to get from smart-contracts endpoint
-      const scRes  = await fetch("/api/blockscout?path=v2/smart-contracts/" + addr.trim())
-      const scData = await scRes.json()
+      // Fallback: try smart-contracts endpoint if address lookup didn't return deployer
+      if (!deployerAddr) {
+        const scRes  = await fetch("/api/blockscout?path=v2/smart-contracts/" + addr.trim())
+        const scData = await scRes.json()
+        deployerAddr = scData.deployer_address || scData.creator_address_hash || ""
+      }
 
-      const deployerAddr = scData.deployed_bytecode ? (bsData.creator_address_hash || "") : (bsData.creator_address_hash || "")
       setDeployer(deployerAddr)
       setDeployerChecked(true)
 
@@ -412,6 +414,7 @@ export default function RegistryPage() {
             ))}
           </div>
         )}
+
       </div>
     </ArcLayout>
   )

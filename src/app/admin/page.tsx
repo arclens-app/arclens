@@ -15,6 +15,7 @@ interface Contract {
   id: number; address: string; name: string; type: string; email: string|null
   website: string|null; twitter: string|null; badge: string|null; deployer: string|null
   flag_reason: string|null; verified: boolean; created_at: string
+  description: string|null; source_code: string|null
 }
 interface PendingUpdate {
   id: number; project_id: number; field: string; old_value: string; new_value: string
@@ -36,6 +37,7 @@ export default function AdminPage() {
   const [msg, setMsg]                 = useState<{ok:boolean;text:string}|null>(null)
   const [editing, setEditing]         = useState<Project|null>(null)
   const [editForm, setEditForm]       = useState<Partial<Project>>({})
+  const [expandedContract, setExpandedContract] = useState<string|null>(null)
 
   const mono  = "'DM Mono', monospace"
   const surf  = "var(--surf, #0a0e1a)"
@@ -67,7 +69,7 @@ export default function AdminPage() {
     } finally { setLoading(false) }
   }
 
-  async function act(id: number, action: string, table = "projects") {
+  async function act(id: number|string, action: string, table = "projects") {
     setActing(true)
     setMsg(null)
     try {
@@ -310,31 +312,75 @@ export default function AdminPage() {
                 {contracts.length === 0 ? (
                   <div style={{ padding:"48px", textAlign:"center", fontFamily:mono, fontSize:"11px", color:t3 }}>No contract submissions</div>
                 ) : contracts.map((c: any) => (
-                  <div key={c.id} style={{ background:surf, border:border, borderRadius:"12px", padding:"16px 20px", display:"flex", alignItems:"center", gap:"16px" }}>
-                    <div style={{ flex:1, minWidth:0 }}>
-                      <div style={{ display:"flex", alignItems:"center", gap:"8px", marginBottom:"4px" }}>
-                        <div style={{ fontSize:"14px", fontWeight:600, color:t1 }}>{c.name}</div>
-                        {c.verified && <span style={{ fontSize:"9px", fontFamily:mono, padding:"1px 6px", borderRadius:"3px", background:"rgba(0,184,122,0.08)", color:"#00b87a", border:"1px solid rgba(0,184,122,0.2)" }}>Verified</span>}
-                        {c.flag_reason && <span style={{ fontSize:"9px", fontFamily:mono, padding:"1px 6px", borderRadius:"3px", background:"rgba(224,136,16,0.1)", color:"#e08810", border:"1px solid rgba(224,136,16,0.2)" }}>⚠ Flagged</span>}
+                  <div key={c.address} style={{ background:surf, border:border, borderRadius:"12px", overflow:"hidden" }}>
+
+                    {/* MAIN ROW */}
+                    <div style={{ padding:"16px 20px", display:"flex", alignItems:"center", gap:"16px" }}>
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ display:"flex", alignItems:"center", gap:"8px", marginBottom:"4px" }}>
+                          <div style={{ fontSize:"14px", fontWeight:600, color:t1 }}>{c.name}</div>
+                          {c.verified && <span style={{ fontSize:"9px", fontFamily:mono, padding:"1px 6px", borderRadius:"3px", background:"rgba(0,184,122,0.08)", color:"#00b87a", border:"1px solid rgba(0,184,122,0.2)" }}>Verified</span>}
+                          {c.flag_reason && <span style={{ fontSize:"9px", fontFamily:mono, padding:"1px 6px", borderRadius:"3px", background:"rgba(224,136,16,0.1)", color:"#e08810", border:"1px solid rgba(224,136,16,0.2)" }}>⚠ Flagged</span>}
+                        </div>
+                        <div style={{ fontSize:"10.5px", fontFamily:mono, color:"#8aaeff", marginBottom:"4px" }}>{c.address}</div>
+                        <div style={{ fontSize:"10px", fontFamily:mono, color:t3 }}>{c.type} · {c.email || "No email"} · {new Date(c.created_at).toLocaleDateString()}</div>
+                        {c.flag_reason && <div style={{ fontSize:"10px", fontFamily:mono, color:"#e08810", marginTop:"4px" }}>{c.flag_reason}</div>}
                       </div>
-                      <div style={{ fontSize:"10.5px", fontFamily:mono, color:"#8aaeff", marginBottom:"4px" }}>{c.address}</div>
-                      <div style={{ fontSize:"10px", fontFamily:mono, color:t3 }}>{c.type} · {c.email || "No email"} · {new Date(c.created_at).toLocaleDateString()}</div>
-                      {c.flag_reason && <div style={{ fontSize:"10px", fontFamily:mono, color:"#e08810", marginTop:"4px" }}>{c.flag_reason}</div>}
+                      <div style={{ display:"flex", gap:"8px", flexShrink:0 }}>
+                        <button onClick={() => setExpandedContract(expandedContract === c.address ? null : c.address)}
+                          style={{ height:"32px", padding:"0 12px", background:"transparent", color:t2, fontSize:"12px", border:"1px solid "+bdr, borderRadius:"6px", cursor:"pointer", fontFamily:"'Geist',sans-serif" }}>
+                          {expandedContract === c.address ? "Hide ▲" : "Review ▼"}
+                        </button>
+                        {!c.verified && <button onClick={() => act(c.address, "approve", "contracts")} disabled={acting}
+                          style={{ height:"32px", padding:"0 14px", background:"rgba(0,184,122,0.1)", color:"#00d990", fontSize:"12px", border:"1px solid rgba(0,184,122,0.2)", borderRadius:"6px", cursor:"pointer", fontFamily:"'Geist',sans-serif" }}>
+                          Approve
+                        </button>}
+                        <a href={"/address/"+c.address} target="_blank" rel="noopener noreferrer"
+                          style={{ height:"32px", padding:"0 12px", display:"flex", alignItems:"center", background:"transparent", color:"#8aaeff", fontSize:"12px", border:"1px solid rgba(26,86,255,0.2)", borderRadius:"6px", textDecoration:"none" }}>
+                          View ↗
+                        </a>
+                        <button onClick={() => act(c.address, "delete", "contracts")} disabled={acting}
+                          style={{ height:"32px", padding:"0 14px", background:"rgba(224,51,72,0.06)", color:"#e03348", fontSize:"12px", border:"1px solid rgba(224,51,72,0.15)", borderRadius:"6px", cursor:"pointer", fontFamily:"'Geist',sans-serif" }}>
+                          Delete
+                        </button>
+                      </div>
                     </div>
-                    <div style={{ display:"flex", gap:"8px", flexShrink:0 }}>
-                      {!c.verified && <button onClick={() => act(c.id, "approve", "contracts")} disabled={acting}
-                        style={{ height:"32px", padding:"0 14px", background:"rgba(0,184,122,0.1)", color:"#00d990", fontSize:"12px", border:"1px solid rgba(0,184,122,0.2)", borderRadius:"6px", cursor:"pointer", fontFamily:"'Geist',sans-serif" }}>
-                        Approve
-                      </button>}
-                      <a href={"/address/"+c.address} target="_blank" rel="noopener noreferrer"
-                        style={{ height:"32px", padding:"0 12px", display:"flex", alignItems:"center", background:"transparent", color:"#8aaeff", fontSize:"12px", border:"1px solid rgba(26,86,255,0.2)", borderRadius:"6px", textDecoration:"none" }}>
-                        View ↗
-                      </a>
-                      <button onClick={() => act(c.id, "delete", "contracts")} disabled={acting}
-                        style={{ height:"32px", padding:"0 14px", background:"rgba(224,51,72,0.06)", color:"#e03348", fontSize:"12px", border:"1px solid rgba(224,51,72,0.15)", borderRadius:"6px", cursor:"pointer", fontFamily:"'Geist',sans-serif" }}>
-                        Delete
-                      </button>
-                    </div>
+
+                    {/* EXPANDED DETAIL PANEL */}
+                    {expandedContract === c.address && (
+                      <div style={{ borderTop:"1px solid "+bdr, padding:"16px 20px", background:"rgba(0,0,0,0.2)" }}>
+                        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"12px", marginBottom:"12px" }}>
+                          {[
+                            { label:"Deployer",    value: c.deployer },
+                            { label:"Website",     value: c.website  },
+                            { label:"Twitter",     value: c.twitter  },
+                            { label:"Email",       value: c.email    },
+                          ].map(f => (
+                            <div key={f.label}>
+                              <div style={{ fontSize:"9px", fontFamily:mono, color:t3, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:"3px" }}>{f.label}</div>
+                              <div style={{ fontSize:"11px", fontFamily:mono, color: f.value ? t1 : t3, wordBreak:"break-all" }}>{f.value || "—"}</div>
+                            </div>
+                          ))}
+                        </div>
+                        {c.description && (
+                          <div style={{ marginBottom:"12px" }}>
+                            <div style={{ fontSize:"9px", fontFamily:mono, color:t3, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:"4px" }}>Description</div>
+                            <div style={{ fontSize:"12px", color:t2, lineHeight:1.6 }}>{c.description}</div>
+                          </div>
+                        )}
+                        {c.source_code && (
+                          <div>
+                            <div style={{ fontSize:"9px", fontFamily:mono, color:t3, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:"6px" }}>Source Code <span style={{ color:"#00b87a" }}>✓ Submitted</span></div>
+                            <pre style={{ fontSize:"10px", fontFamily:mono, color:"#6b7da8", background:"rgba(0,0,0,0.3)", border:"1px solid "+bdr, borderRadius:"6px", padding:"12px", maxHeight:"160px", overflowY:"auto", whiteSpace:"pre-wrap", wordBreak:"break-all", margin:0 }}>
+                              {c.source_code.slice(0, 800)}{c.source_code.length > 800 ? "\n\n... [truncated]" : ""}
+                            </pre>
+                          </div>
+                        )}
+                        {!c.source_code && (
+                          <div style={{ fontSize:"10px", fontFamily:mono, color:t3 }}>No source code submitted</div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

@@ -53,15 +53,28 @@ export async function POST(req: NextRequest) {
   try {
     if (action === "approve") {
       if (table === "contracts") {
-        await pool.query("UPDATE contracts SET verified = true WHERE id = $1", [id])
+        // contracts table uses address as PK — id passed from page is c.address
+        await pool.query("UPDATE contracts SET verified = true WHERE address = $1", [id])
+        // sync names cache so name appears in tx feeds immediately
+        await pool.query(
+          `INSERT INTO contract_names_cache (address, name, verified, flagged)
+           SELECT address, name, verified, flagged FROM contracts WHERE address = $1
+           ON CONFLICT (address) DO UPDATE SET verified = true, updated_at = NOW()`,
+          [id]
+        )
       } else {
         await pool.query("UPDATE projects SET approved = true, live = true WHERE id = $1", [id])
       }
       return NextResponse.json({ success: true })
     }
     if (action === "reject" || action === "delete") {
-      const tbl = table === "contracts" ? "contracts" : "projects"
-      await pool.query(`DELETE FROM ${tbl} WHERE id = $1`, [id])
+      if (table === "contracts") {
+        // contracts table uses address as PK
+        await pool.query("DELETE FROM contracts WHERE address = $1", [id])
+        await pool.query("DELETE FROM contract_names_cache WHERE address = $1", [id])
+      } else {
+        await pool.query("DELETE FROM projects WHERE id = $1", [id])
+      }
       return NextResponse.json({ success: true })
     }
     if (action === "update" && data) {

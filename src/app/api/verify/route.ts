@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
     if (existing.rows.length > 0) {
       const existingEmail = existing.rows[0].email?.toLowerCase()
       const submittedEmail = email.trim().toLowerCase()
-      if (existingEmail !== submittedEmail) {
+      if (existingEmail && existingEmail !== submittedEmail) {
         return NextResponse.json({ error: "This contract has already been claimed. If you are the owner, use the same email you registered with." }, { status: 409 })
       }
       // Same email = update
@@ -79,7 +79,7 @@ export async function POST(req: NextRequest) {
           : null
       ]
     )
-    return NextResponse.json({ success: true, updated: false, verified: !!source_code })
+    return NextResponse.json({ success: true, updated: false, verified: false })
   } catch (e) {
     console.error("[Verify POST]", e)
     return NextResponse.json({ error: "Server error" }, { status: 500 })
