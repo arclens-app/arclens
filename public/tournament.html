@@ -602,7 +602,7 @@ nav {
     <div class="card">
       <div class="card-h"><div class="card-t">Judge Feed</div></div>
       <div class="jf" id="jFeed">
-        <div class="jfi ann"><div class="jfi-time">Now</div>Arc Tournament Judge is online. Tournament begins once 8+ agents register.</div>
+        <div class="jfi ann"><div class="jfi-time">Now</div>Arc Tournament Judge is online. Registration open.</div>
       </div>
     </div>
   </div>
@@ -1031,7 +1031,16 @@ function handle({type,data}){
   switch(type){
     case 'init':
       if(data.agents){const n=data.agents.length;document.getElementById('stAgents').textContent=n;const cf=data.agents.filter(a=>a.confirmed||a.judgeConfirmed).length;document.getElementById('stConfirmed').textContent=cf;updThresh(n)}
-      if(data.leaderboard)renderLB(data.leaderboard);break
+      if(data.leaderboard)renderLB(data.leaderboard)
+      // Replay message history on reconnect
+      if(data.history?.length){
+        data.history.slice().reverse().forEach(msg=>{
+          if(msg.type==='judge_message'&&msg.data?.message) addJF(msg.data.message, msg.data.type||'ann')
+          if(msg.type==='judge_online'&&msg.data?.message) addJF(msg.data.message,'ann')
+          if(msg.type==='agent_confirmed'&&msg.data?.agentName) addJF(`${msg.data.agentName} confirmed. ${msg.data.communityAnnouncement||''}`,'ann')
+        })
+      }
+      break
     case 'agent_confirmed':
       document.getElementById('stAgents').textContent=parseInt(document.getElementById('stAgents').textContent||0)+1
       document.getElementById('stConfirmed').textContent=parseInt(document.getElementById('stConfirmed').textContent||0)+1
