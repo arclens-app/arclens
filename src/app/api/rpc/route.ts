@@ -1,32 +1,28 @@
-﻿import { NextRequest, NextResponse } from "next/server"
-
-const cache = new Map<string, { data: any; ts: number }>()
-const CACHE_TTL = 5000 // 5 seconds
+﻿impo { NextRequest, NextResponse } from "next/server"
 
 export async function POST(req: NextRequest) {
   const rpc = process.env.ARC_RPC_HTTP
   if (!rpc) return NextResponse.json({ error: "RPC not configured" }, { status: 500 })
 
-  const body = await req.json()
-  const method = body.method || ""
-
-  // Cache read-only calls only
-  const cacheable = ["eth_blockNumber", "eth_gasPrice", "eth_chainId"].includes(method)
-  if (cacheable) {
-    const cached = cache.get(method)
-    if (cached && Date.now() - cached.ts < CACHE_TTL) {
-      return NextResponse.json(cached.data)
-    }
-  }
-
+  const body     = await req.json()
   const response = await fetch(rpc, {
-    method: "POST",
+    method:  "POST",
     headers: { "Content-Type": "application/json", "accept": "application/json" },
-    body: JSON.stringify(body),
+    body:    JSON.stringify(body),
   })
+
   const data = await response.json()
 
-  if (cacheable) cache.set(method, { data, ts: Date.now() })
+  // eth_getCode changes very rarely — cache for 60s
+  // eth_blockNumber changes every block — cache for 5s
+  const method = body?.method || ""
+  const maxAge = method === "eth_getCode" ? 60
+               : method === "eth_blockNumber" ? 5
+               : 10
 
-  return NextResponse.json(data)
+  return NextResponse.json(data, {
+    headers: {
+      "Cache-Control": `public, s-maxage=${maxAge}, stale-while-revalidate=30`,
+    },
+  })
 }

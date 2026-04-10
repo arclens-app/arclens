@@ -4,9 +4,7 @@ import { useEffect, useState, useRef } from "react"
 const NAV = [
   { section: "EXPLORER", items: [
     { id: "overview",     label: "Overview",          icon: "◈", href: "/" },
-    { id: "blocks",       label: "Blocks",            icon: "⊟", href: "/blocks" },
     { id: "transactions", label: "Transactions",      icon: "⇄", href: "/transactions" },
-    { id: "tokens",       label: "Tokens",            icon: "◎", href: "/tokens" },
   ]},
   { section: "ANALYTICS", items: [
     { id: "wallets",      label: "Wallet Activity",   icon: "◉", href: "/wallets", tag: "NEW" },
@@ -115,8 +113,8 @@ export default function ArcLayout({ children, active }: { children: React.ReactN
     async function fetchStats() {
       try {
         const [blockRes, gasRes] = await Promise.all([
-          fetch("/api/rpc", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", method: "eth_blockNumber", params: [], id: 1 }) }),
-          fetch("/api/rpc", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", method: "eth_gasPrice", params: [], id: 2 }) }),
+          fetch("https://rpc.testnet.arc.network", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", method: "eth_blockNumber", params: [], id: 1 }) }),
+          fetch("https://rpc.testnet.arc.network", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", method: "eth_gasPrice", params: [], id: 2 }) }),
         ])
         const blockData = await blockRes.json()
         const gasData   = await gasRes.json()
@@ -128,7 +126,7 @@ export default function ArcLayout({ children, active }: { children: React.ReactN
       } catch { setConnected(false) }
     }
     fetchStats()
-    const t = setInterval(fetchStats, 15000)
+    const t = setInterval(fetchStats, 30000)
     return () => clearInterval(t)
   }, [mounted])
 

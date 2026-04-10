@@ -14,7 +14,7 @@ interface Tx {
 }
 
 async function rpc(method: string, params: unknown[] = []) {
-  const res = await fetch("/api/rpc", {
+  const res = await fetch("https://rpc.testnet.arc.network", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ jsonrpc: "2.0", method, params, id: 1 }),

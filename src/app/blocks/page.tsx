@@ -12,7 +12,7 @@ interface Block {
 }
 
 async function rpc(method: string, params: unknown[] = []) {
-  const res = await fetch("/api/rpc", {
+  const res = await fetch("https://rpc.testnet.arc.network", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ jsonrpc: "2.0", method, params, id: 1 }),
@@ -67,7 +67,7 @@ export default function BlocksPage() {
       finally { setLoading(false) }
     }
     load()
-    const t = setInterval(load, 15000)
+    const t = setInterval(load, 30000)
     return () => clearInterval(t)
   }, [mounted])
 

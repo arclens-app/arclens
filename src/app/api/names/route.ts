@@ -12,18 +12,23 @@ export async function POST(req: NextRequest) {
     const { addresses } = await req.json()
     if (!addresses?.length) return NextResponse.json({})
 
-    const lower = addresses.map((a: string) => a.toLowerCase())
+    const lower  = addresses.map((a: string) => a.toLowerCase())
     const result = await pool.query(
-      `SELECT address, name, badge, type FROM contracts
-       WHERE address = ANY($1) AND verified = true`,
+      `SELECT address, name, verified, flagged FROM contract_names_cache
+       WHERE address = ANY($1)`,
       [lower]
     )
 
     const map: Record<string, { name: string; badge: string; type: string }> = {}
     for (const row of result.rows) {
-      map[row.address] = { name: row.name, badge: row.badge, type: row.type }
+      map[row.address] = { name: row.name, badge: row.verified ? "verified" : "claimed", type: "" }
     }
-    return NextResponse.json(map)
+
+    return NextResponse.json(map, {
+      headers: {
+        "Cache-Control": "public, s-maxage=60, stale-while-revalidate=120",
+      },
+    })
   } catch {
     return NextResponse.json({})
   }

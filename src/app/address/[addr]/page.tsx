@@ -1,5 +1,5 @@
 "use client"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 import { useParams } from "next/navigation"
 import ArcLayout from "@/components/ArcLayout"
 
@@ -36,12 +36,33 @@ export default function AddressPage() {
   const [nextPage, setNextPage]       = useState<string|null>(null)
   const totalPages = nextPage ? page + 1 : page
 
+  // Cache names per session — never re-fetch same address
+  const namesCache = useRef<Record<string, string>>({})
+
   useEffect(() => { setMounted(true) }, [])
 
   useEffect(() => {
     if (!mounted || !addr) return
     load()
   }, [mounted, addr])
+
+  async function lookupNames(items: Record<string, unknown>[]) {
+    try {
+      const toAddrs = [...new Set(items.map((t) => (t.to as Record<string,string>)?.hash).filter(Boolean))] as string[]
+      const uncached = toAddrs.filter(a => !(a.toLowerCase() in namesCache.current))
+      if (uncached.length > 0) {
+        const namesRes = await fetch("/api/names", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ addresses: uncached.map(a => a.toLowerCase()) }),
+        })
+        const namesMap = await namesRes.json()
+        Object.keys(namesMap).forEach(a => {
+          namesCache.current[a] = namesMap[a]?.name || ""
+        })
+      }
+    } catch { /* non-critical */ }
+  }
 
   async function load() {
     setLoading(true)
@@ -96,20 +117,23 @@ export default function AddressPage() {
       // Transactions
       const items = txData.items || []
       const hasMore = !!txData.next_page_params
-      // Only set tx count from items if counters didn't provide it
       if (!countersData?.transactions_count && !countersData?.transaction_count) {
         setTxCount(hasMore ? items.length + "+" : items.length.toString())
       }
+
+      // Look up names — only uncached addresses
+      await lookupNames(items)
+
       setTxs(items.map((t: Record<string,unknown>) => {
         const feeObj = t.fee as Record<string,string>
         const feeWei = Number(feeObj?.value || 0)
-        // On Arc, gas is paid in USDC. fee.value is in wei (18 decimals) but represents USDC micro-units
-        // actual USDC cost = fee_wei / 1e18 (it's already in USDC wei)
         const gasUSDC = (feeWei / 1e18).toFixed(6)
+        const toAddr = (t.to as Record<string,string>)?.hash || null
         return {
           hash:      t.hash as string,
           from:      (t.from as Record<string,string>)?.hash || "",
-          to:        (t.to as Record<string,string>)?.hash || null,
+          to:        toAddr,
+          toName:    toAddr ? namesCache.current[toAddr.toLowerCase()] || undefined : undefined,
           value:     "$" + (Number((t.value as string)||0) / 1e18).toFixed(4),
           gas:       "$" + gasUSDC,
           timestamp: t.timestamp as string || "",
@@ -118,23 +142,11 @@ export default function AddressPage() {
         }
       }))
 
-      // Look up contract names for to-addresses
-      try {
-        const toAddrs = [...new Set(items.map((t: Record<string,unknown>) => (t.to as Record<string,string>)?.hash).filter(Boolean))]
-        if (toAddrs.length > 0) {
-          const namesRes = await fetch("/api/names", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ addresses: toAddrs.map((a: unknown) => (a as string).toLowerCase()) }) })
-          const namesMap = await namesRes.json()
-          if (Object.keys(namesMap).length > 0) {
-            setTxs(prev => prev.map((t: any) => ({ ...t, toName: t.to ? namesMap[t.to.toLowerCase()]?.name : undefined })))
-          }
-        }
-      } catch { /* non-critical */ }
-
       if (txData.next_page_params) {
         const p = txData.next_page_params
         const cursor = `v2/addresses/${addr}/transactions?block_number=${p.block_number}&index=${p.index}`
         setNextPage(cursor)
-        setPageCursors([null, cursor]) // page 1 = null cursor, page 2 = this cursor
+        setPageCursors([null, cursor])
       } else {
         setNextPage(null)
       }
@@ -147,30 +159,35 @@ export default function AddressPage() {
     if (p === page || loadingPage) return
     setLoadingPage(true)
     try {
-      const cursor = pageCursors[p - 1] // cursor for requested page (0-indexed)
+      const cursor = pageCursors[p - 1]
       const path   = cursor
         ? "/api/blockscout?path=" + cursor
         : "/api/blockscout?path=v2/addresses/" + addr + "/transactions"
       const res    = await fetch(path)
       const data   = await res.json()
-      const items  = (data.items || []).map((t: Record<string,unknown>) => {
+      const items  = data.items || []
+
+      // Look up names — only uncached addresses
+      await lookupNames(items)
+
+      setTxs(items.map((t: Record<string,unknown>) => {
         const feeObj = t.fee as Record<string,string>
         const feeWei = Number(feeObj?.value || 0)
+        const toAddr = (t.to as Record<string,string>)?.hash || null
         return {
           hash:      t.hash as string,
           from:      (t.from as Record<string,string>)?.hash || "",
-          to:        (t.to as Record<string,string>)?.hash || null,
+          to:        toAddr,
+          toName:    toAddr ? namesCache.current[toAddr.toLowerCase()] || undefined : undefined,
           value:     "$" + (Number((t.value as string)||0) / 1e18).toFixed(4),
           gas:       "$" + (feeWei / 1e18).toFixed(6),
           timestamp: t.timestamp as string || "",
           method:    t.method as string|null,
           success:   (t.result as string) === "success" || (t.status as string) === "ok",
         }
-      })
-      setTxs(items)
+      }))
       setPage(p)
 
-      // Store next cursor if we don't have it yet
       if (data.next_page_params && !pageCursors[p]) {
         const np = data.next_page_params
         const newCursor = `v2/addresses/${addr}/transactions?block_number=${np.block_number}&index=${np.index}`
@@ -183,7 +200,6 @@ export default function AddressPage() {
       } else if (!data.next_page_params) {
         setNextPage(null)
       }
-      // Scroll to top of tx list
       window.scrollTo({ top: 300, behavior: "smooth" })
     } catch (e) { console.error(e) }
     finally { setLoadingPage(false) }
@@ -311,21 +327,16 @@ export default function AddressPage() {
             {/* PAGINATION */}
             {(page > 1 || nextPage) && (
               <div style={{ padding:"14px 18px", display:"flex", alignItems:"center", justifyContent:"center", gap:"6px", borderTop:"1px solid "+bdr }}>
-                {/* Prev */}
                 <button onClick={() => goToPage(page-1)} disabled={page===1||loadingPage}
                   style={{ width:"32px", height:"32px", display:"flex", alignItems:"center", justifyContent:"center", background:"transparent", border:"1px solid "+bdr, borderRadius:"7px", cursor:page===1?"not-allowed":"pointer", color:page===1?t3:t2, fontSize:"13px", opacity:page===1?.4:1 }}>
                   ←
                 </button>
-
-                {/* Page numbers */}
                 {Array.from({ length: totalPages }, (_, i) => i+1).map((n: any) => (
                   <button key={n} onClick={() => goToPage(n)} disabled={loadingPage}
                     style={{ width:"32px", height:"32px", display:"flex", alignItems:"center", justifyContent:"center", background:n===page?"#1a56ff":"transparent", border:"1px solid "+(n===page?"#1a56ff":bdr), borderRadius:"7px", cursor:"pointer", color:n===page?"#fff":t2, fontSize:"12px", fontFamily:mono, fontWeight:n===page?600:400, transition:"all .12s" }}>
                     {loadingPage && n===page ? "..." : n}
                   </button>
                 ))}
-
-                {/* Next */}
                 <button onClick={() => goToPage(page+1)} disabled={!nextPage||loadingPage}
                   style={{ width:"32px", height:"32px", display:"flex", alignItems:"center", justifyContent:"center", background:"transparent", border:"1px solid "+bdr, borderRadius:"7px", cursor:!nextPage?"not-allowed":"pointer", color:!nextPage?t3:t2, fontSize:"13px", opacity:!nextPage?.4:1 }}>
                   →

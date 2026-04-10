@@ -1,10 +1,10 @@
 ﻿"use client"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 import ArcLayout from "@/components/ArcLayout"
 import { SkeletonRow, SkeletonStatsBand } from "@/components/ArcSkeleton"
 
 async function rpc(method: string, params: unknown[] = []) {
-  const res = await fetch("/api/rpc", {
+  const res = await fetch("https://rpc.testnet.arc.network", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ jsonrpc: "2.0", method, params, id: 1 }),
@@ -35,6 +35,9 @@ export default function Home() {
   const [txs, setTxs]           = useState<Tx[]>([])
   const [lastBlock, setLastBlock] = useState(0)
   const [connected, setConnected] = useState(false)
+
+  // Cache names so we never re-fetch the same address
+  const namesCache = useRef<Record<string, string>>({})
 
   useEffect(() => { setMounted(true) }, [])
 
@@ -78,28 +81,34 @@ export default function Home() {
         setBlocks(newBlocks)
         setTxs(newTxs)
 
-        // Look up registered contract names for to-addresses
+        // Only fetch names for addresses not already in cache
         const toAddrs = [...new Set(newTxs.map(t => t.to).filter(Boolean))] as string[]
-        if (toAddrs.length > 0) {
+        const uncached = toAddrs.filter(a => !(a.toLowerCase() in namesCache.current))
+        if (uncached.length > 0) {
           try {
             const namesRes = await fetch("/api/names", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ addresses: toAddrs.map(a => a.toLowerCase()) }),
+              body: JSON.stringify({ addresses: uncached.map(a => a.toLowerCase()) }),
             })
             const namesMap = await namesRes.json()
-            if (Object.keys(namesMap).length > 0) {
-              setTxs(prev => prev.map((t: any) => ({
-                ...t,
-                toName: t.to ? namesMap[t.to.toLowerCase()]?.name : undefined,
-              })))
-            }
+            // Merge into cache
+            Object.keys(namesMap).forEach(addr => {
+              namesCache.current[addr] = namesMap[addr]?.name || ""
+            })
           } catch { /* names lookup is non-critical */ }
         }
+
+        // Apply cached names to txs
+        setTxs(prev => prev.map((t: any) => ({
+          ...t,
+          toName: t.to ? namesCache.current[t.to.toLowerCase()] || undefined : undefined,
+        })))
+
       } catch { setConnected(false) }
     }
     fetchAll()
-    const t = setInterval(fetchAll, 15000)
+    const t = setInterval(fetchAll, 30000)
     return () => clearInterval(t)
   }, [mounted, lastBlock])
 
@@ -266,7 +275,8 @@ export default function Home() {
           </div>
         </div>
       </div>
-    
-          <style>{`@media(min-width:640px){.s4{grid-template-columns:repeat(4,1fr)!important}}`}</style></ArcLayout>
+
+      <style>{`@media(min-width:640px){.s4{grid-template-columns:repeat(4,1fr)!important}}`}</style>
+    </ArcLayout>
   )
 }
