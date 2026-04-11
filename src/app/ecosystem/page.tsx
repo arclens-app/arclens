@@ -17,6 +17,9 @@ interface Project {
   featured: boolean
   badge: string | null
   color: string | null
+  slug: string | null
+  created_at?: string
+  view_count?: number
 }
 
 interface TrendingProject {
@@ -30,7 +33,12 @@ interface TrendingProject {
   tx_count: number
 }
 
-const CATEGORIES = ["All", "Infrastructure", "DeFi", "AI", "Payments", "NFT", "Gaming", "Social", "Developer Tools", "Bridge", "Identity", "Wallet", "Exchange", "Lending", "Analytics", "Other"]
+function imgSrc(url: string | null): string | null {
+  if (!url) return null
+  return `/api/image-proxy?url=${encodeURIComponent(url)}`
+}
+
+const CATEGORIES = ["All", "Infrastructure", "DeFi", "AI", "Payments", "NFT", "Gaming", "Social", "Developer Tools", "Bridge", "Identity", "Wallet", "Exchange", "Lending", "Prediction Market", "RWA", "DAO", "Stablecoin", "Derivatives", "Insurance", "Launchpad", "Oracle", "Analytics", "Other"]
 const CAT_COLOR: Record<string, string> = {
   Infrastructure: "#1a56ff", DeFi: "#00d990", NFT: "#c08828",
   Payments: "#00d990", Gaming: "#a855f7", Social: "#ec4899",
@@ -51,9 +59,35 @@ export default function EcosystemPage() {
   const [submitted, setSubmitted]     = useState(false)
   const [isUpdate, setIsUpdate]       = useState(false)
   const [submitError, setSubmitError] = useState("")
-  const fileRef = useRef<HTMLInputElement>(null)
+  const [nameWarn, setNameWarn]       = useState("")
+  const [contractErr, setContractErr] = useState("")
+  const fileRef             = useRef<HTMLInputElement>(null)
+  const existingNames       = useRef<Set<string>>(new Set())
+  const existingContracts   = useRef<Set<string>>(new Set())
   const [trending, setTrending] = useState<TrendingProject[]>([])
   const [sortBy, setSortBy] = useState<"all"|"trending"|"new"|"official"|"verified"|"featured">("all")
+  const [page, setPage] = useState(1)
+  const [cols, setCols] = useState(4)
+  const gridWrapRef = useRef<HTMLDivElement>(null)
+
+  // Observe content area width → exact column count → always 6 complete rows
+  useEffect(() => {
+    if (!mounted) return
+    const el = gridWrapRef.current
+    if (!el) return
+    const obs = new ResizeObserver(() => {
+      const w = el.clientWidth
+      const c = Math.max(1, Math.floor((w + 12) / (280 + 12)))
+      setCols(c)
+    })
+    obs.observe(el)
+    return () => obs.disconnect()
+  }, [mounted])
+
+  // Reset page when column count changes (window resize)
+  useEffect(() => { setPage(1) }, [cols])
+
+  const pageSize = cols * 6  // always exactly 6 full rows
 
   useEffect(() => { setMounted(true) }, [])
 
@@ -64,8 +98,12 @@ export default function EcosystemPage() {
       try {
         const res  = await fetch("/api/ecosystem")
         const data = await res.json()
-        setProjects(data.projects || [])
+        const loaded: Project[] = data.projects || []
+        setProjects(loaded)
         setTrending(data.trending || [])
+        // Build lookup sets for duplicate detection — done once, checked instantly
+        existingNames.current     = new Set(loaded.map(p => p.name.toLowerCase().trim()))
+        existingContracts.current = new Set(loaded.filter(p => p.contract).map(p => p.contract!.toLowerCase().trim()))
       } catch { setProjects([]) }
       finally { setLoading(false) }
     }
@@ -88,9 +126,26 @@ export default function EcosystemPage() {
     finally { setUploading(false) }
   }
 
+  function checkName(val: string) {
+    if (val.trim() && existingNames.current.has(val.toLowerCase().trim())) {
+      setNameWarn("A project with this name already exists. If this is an update, use the same email you registered with.")
+    } else {
+      setNameWarn("")
+    }
+  }
+
+  function checkContract(val: string) {
+    if (val.trim() && existingContracts.current.has(val.toLowerCase().trim())) {
+      setContractErr("This contract address is already registered. Use the same email to submit an update.")
+    } else {
+      setContractErr("")
+    }
+  }
+
   async function submitProject() {
     if (!form.name.trim())    { setSubmitError("Project name is required"); return }
     if (!form.tagline.trim()) { setSubmitError("Tagline is required"); return }
+    if (contractErr)          { setSubmitError(contractErr); return }
     setSubmitting(true)
     setSubmitError("")
     try {
@@ -134,10 +189,17 @@ export default function EcosystemPage() {
     return 0
   })
 
+  const totalPages  = Math.max(1, Math.ceil(filtered.length / pageSize))
+  const paginated   = filtered.slice((page - 1) * pageSize, page * pageSize)
+
+  function setFilterAndReset(val: string) { setFilter(val); setPage(1) }
+  function setSortAndReset(val: typeof sortBy) { setSortBy(val); setPage(1) }
+  function setSearchAndReset(val: string) { setSearch(val); setPage(1) }
+
   function LogoImg({ p, size }: { p: Project; size: number }) {
     const color = p.color || CAT_COLOR[p.category] || "#1a56ff"
     const [err, setErr] = useState(false)
-    const proxied = p.logo_url ? `/api/image-proxy?url=${encodeURIComponent(p.logo_url)}` : null
+    const proxied = imgSrc(p.logo_url)
     return (
       <div style={{ width: size, height: size, borderRadius: "12px", overflow: "hidden", background: (!proxied || err) ? color + "18" : "transparent", border: "1px solid " + color + "28", display: "flex", alignItems: "center", justifyContent: "center", fontSize: size * 0.38, fontWeight: 700, fontFamily: mono, color, flexShrink: 0 }}>
         {proxied && !err
@@ -156,7 +218,7 @@ export default function EcosystemPage() {
 
     return (
       <div
-        onClick={() => window.location.href = `/ecosystem/${(p as any).slug || p.id}`}
+        onClick={() => window.location.href = `/ecosystem/${p.slug || p.id}`}
         onMouseEnter={e => { e.currentTarget.style.borderColor = color + "50"; e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = "0 8px 24px rgba(0,0,0,0.12)" }}
         onMouseLeave={e => { e.currentTarget.style.borderColor = border; e.currentTarget.style.transform = "none"; e.currentTarget.style.boxShadow = "none" }}
         style={{ background: surf, border: "1px solid " + border, borderRadius: "14px", overflow: "hidden", transition: "all .15s", display: "flex", flexDirection: "column", cursor: "pointer" }}>
@@ -198,7 +260,7 @@ export default function EcosystemPage() {
 
   function TrendingCard({ t, i }: { t: TrendingProject; i: number }) {
     const tc = t.color || CAT_COLOR[t.category] || "#1a56ff"
-    const proxied = t.logo_url ? `/api/image-proxy?url=${encodeURIComponent(t.logo_url)}` : null
+    const proxied = imgSrc(t.logo_url)
     const [imgErr, setImgErr] = useState(false)
     return (
       <div
@@ -238,7 +300,7 @@ export default function EcosystemPage() {
               Every project building on Arc. DeFi, NFTs, payments, and infrastructure running on USDC gas with sub-second finality.
             </div>
           </div>
-          <button onClick={() => { setShowForm(!showForm); setSubmitted(false); setSubmitError("") }}
+          <button onClick={() => { setShowForm(!showForm); setSubmitted(false); setSubmitError(""); setNameWarn(""); setContractErr("") }}
             style={{ height: "40px", padding: "0 20px", background: showForm ? "transparent" : "#1a56ff", color: showForm ? t2 : "#fff", fontSize: "12.5px", fontWeight: 600, border: "1px solid " + (showForm ? border : "#1a56ff"), borderRadius: "9px", cursor: "pointer", fontFamily: "'Geist', sans-serif", whiteSpace: "nowrap", transition: "all .13s", flexShrink: 0 }}>
             {showForm ? "Cancel" : "+ Submit Project"}
           </button>
@@ -278,7 +340,8 @@ export default function EcosystemPage() {
                   <div style={{ flex: 1, minWidth: "200px", display: "flex", flexDirection: "column", gap: "10px" }}>
                     <div>
                       <label style={{ display: "block", fontSize: "9.5px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "5px" }}>Project Name *</label>
-                      <input style={inputStyle} value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g. ArcSwap" />
+                      <input style={{ ...inputStyle, borderColor: nameWarn ? "rgba(224,136,16,0.5)" : undefined }} value={form.name} onChange={e => { setForm(p => ({ ...p, name: e.target.value })); checkName(e.target.value) }} placeholder="e.g. ArcSwap" />
+                      {nameWarn && <div style={{ fontSize: "10px", fontFamily: mono, color: "#e08810", marginTop: "4px", lineHeight: 1.5 }}>⚠ {nameWarn}</div>}
                     </div>
                     <div>
                       <label style={{ display: "block", fontSize: "9.5px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "5px" }}>Tagline *</label>
@@ -290,24 +353,29 @@ export default function EcosystemPage() {
                 {/* Fields grid — single column on mobile */}
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "10px", marginBottom: "10px" }}>
                   {[
-                    { k: "website",  l: "Website",          p: "https://..." },
-                    { k: "twitter",  l: "Twitter / X",      p: "@handle" },
-                    { k: "github",   l: "GitHub",           p: "https://github.com/..." },
-                    { k: "discord",  l: "Discord",          p: "https://discord.gg/..." },
-                    { k: "contract", l: "Contract Address", p: "0x... on Arc" },
-                    { k: "email",    l: "Contact Email",    p: "you@email.com" },
-                    { k: "city",     l: "City",             p: "e.g. Lagos" },
-                    { k: "country",  l: "Country",          p: "e.g. Nigeria" },
+                    { k: "website",  l: "Website",      p: "https://..." },
+                    { k: "twitter",  l: "Twitter / X",  p: "@handle" },
+                    { k: "github",   l: "GitHub",        p: "https://github.com/..." },
+                    { k: "discord",  l: "Discord",       p: "https://discord.gg/..." },
+                    { k: "email",    l: "Contact Email", p: "you@email.com" },
+                    { k: "city",     l: "City",          p: "e.g. Lagos" },
+                    { k: "country",  l: "Country",       p: "e.g. Nigeria" },
                   ].map((f: any) => (
                     <div key={f.k}>
                       <label style={{ display: "block", fontSize: "9.5px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "5px" }}>{f.l}</label>
                       <input style={inputStyle} value={(form as any)[f.k]} onChange={e => setForm(p => ({ ...p, [f.k]: e.target.value }))} placeholder={f.p} spellCheck={false} />
                     </div>
                   ))}
+                  {/* Contract — separate so we can show inline duplicate error */}
+                  <div>
+                    <label style={{ display: "block", fontSize: "9.5px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "5px" }}>Contract Address</label>
+                    <input style={{ ...inputStyle, borderColor: contractErr ? "rgba(224,51,72,0.5)" : undefined }} value={form.contract} onChange={e => { setForm(p => ({ ...p, contract: e.target.value })); checkContract(e.target.value) }} placeholder="0x... on Arc" spellCheck={false} />
+                    {contractErr && <div style={{ fontSize: "10px", fontFamily: mono, color: "#e03348", marginTop: "4px", lineHeight: 1.5 }}>✗ {contractErr}</div>}
+                  </div>
                   <div>
                     <label style={{ display: "block", fontSize: "9.5px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "5px" }}>Category</label>
                     <select style={{ ...inputStyle }} value={form.category} onChange={e => setForm(p => ({ ...p, category: e.target.value }))}>
-                      {["Infrastructure","DeFi","AI","Payments","NFT","Gaming","Social","Developer Tools","Bridge","Identity","Wallet","Exchange","Lending","Analytics","Other"].map(c => <option key={c} value={c}>{c}</option>)}
+                      {["Infrastructure","DeFi","AI","Payments","NFT","Gaming","Social","Developer Tools","Bridge","Identity","Wallet","Exchange","Lending","Prediction Market","RWA","DAO","Stablecoin","Derivatives","Insurance","Launchpad","Oracle","Analytics","Other"].map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
                   </div>
                 </div>
@@ -355,7 +423,7 @@ export default function EcosystemPage() {
             { key: "verified", label: "Verified" },
             { key: "official", label: "Official" },
           ] as const).map(tab => (
-            <button key={tab.key} onClick={() => setSortBy(tab.key)}
+            <button key={tab.key} onClick={() => setSortAndReset(tab.key)}
               style={{ height: "28px", padding: "0 14px", background: sortBy === tab.key ? "rgba(26,86,255,0.12)" : "transparent", color: sortBy === tab.key ? "#8aaeff" : t2, fontSize: "11.5px", fontFamily: mono, border: "1px solid " + (sortBy === tab.key ? "rgba(26,86,255,0.35)" : border), borderRadius: "6px", cursor: "pointer", transition: "all .12s", whiteSpace: "nowrap", fontWeight: sortBy === tab.key ? 600 : 400 }}>
               {tab.label}
             </button>
@@ -366,32 +434,76 @@ export default function EcosystemPage() {
         <div style={{ marginBottom: "16px" }}>
           <div style={{ display: "flex", gap: "6px", overflowX: "auto", paddingBottom: "8px", WebkitOverflowScrolling: "touch" as any }}>
             {CATEGORIES.map((cat: any) => (
-              <button key={cat} onClick={() => setFilter(cat)}
+              <button key={cat} onClick={() => setFilterAndReset(cat)}
                 style={{ height: "30px", padding: "0 14px", background: filter === cat ? "#1a56ff" : "transparent", color: filter === cat ? "#fff" : t2, fontSize: "11px", fontFamily: mono, border: "1px solid " + (filter === cat ? "#1a56ff" : border), borderRadius: "99px", cursor: "pointer", transition: "all .12s", whiteSpace: "nowrap", flexShrink: 0 }}>
                 {cat}
               </button>
             ))}
           </div>
           {/* Search */}
-          <input
-            style={{ width: "100%", height: "36px", background: surf, border: "1px solid " + border, borderRadius: "8px", padding: "0 12px", fontSize: "12px", fontFamily: mono, color: t1, outline: "none", marginTop: "8px" }}
-            value={search} onChange={e => setSearch(e.target.value)} placeholder="Search projects..."
-          />
+          <div style={{ position: "relative", marginTop: "8px" }}>
+            <span style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", fontSize: "13px", color: t3, pointerEvents: "none", lineHeight: 1 }}>⌕</span>
+            <input
+              style={{ width: "100%", height: "38px", background: surf, border: "1px solid " + border, borderRadius: "8px", padding: "0 36px 0 32px", fontSize: "12px", fontFamily: mono, color: t1, outline: "none", boxSizing: "border-box" }}
+              value={search} onChange={e => setSearchAndReset(e.target.value)} placeholder="Search projects by name or description..."
+            />
+            {search && (
+              <button onClick={() => setSearchAndReset("")}
+                style={{ position: "absolute", right: "10px", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: t3, cursor: "pointer", fontSize: "14px", lineHeight: 1, padding: "2px 4px" }}>
+                ×
+              </button>
+            )}
+          </div>
         </div>
 
-        {/* PROJECT GRID — responsive: 1 col mobile, 2 col tablet, 3-4 col desktop */}
+        {/* PROJECT GRID — ref wrapper always rendered so ResizeObserver can measure width */}
+        <div ref={gridWrapRef}>
         {loading ? (
           <div style={{ padding: "60px", textAlign: "center", fontFamily: mono, fontSize: "11px", color: t3 }}>Loading Arc Ecosystem...</div>
         ) : filtered.length === 0 ? (
           <div style={{ padding: "60px", textAlign: "center" }}>
-            <div style={{ fontSize: "14px", fontWeight: 600, marginBottom: "6px", color: t1 }}>No projects yet</div>
-            <div style={{ fontSize: "12px", color: t2, fontWeight: 300 }}>Be the first to submit a project on Arc.</div>
+            <div style={{ fontSize: "14px", fontWeight: 600, marginBottom: "6px", color: t1 }}>No projects found</div>
+            <div style={{ fontSize: "12px", color: t2, fontWeight: 300 }}>Try a different filter or be the first to submit.</div>
           </div>
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "12px" }}>
-            {filtered.map(p => <ProjectCard key={p.id} p={p} />)}
-          </div>
+          <>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "12px" }}>
+              {paginated.map(p => <ProjectCard key={p.id} p={p} />)}
+            </div>
+
+            {/* PAGINATION */}
+            {totalPages > 1 && (
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "24px", gap: "12px", flexWrap: "wrap" }}>
+                <div style={{ fontSize: "11px", fontFamily: mono, color: t3 }}>
+                  {((page - 1) * pageSize) + 1}–{Math.min(page * pageSize, filtered.length)} of {filtered.length} projects
+                </div>
+                <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                  <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
+                    style={{ height: "30px", padding: "0 14px", background: "transparent", color: page === 1 ? t3 : t2, fontSize: "11px", fontFamily: mono, border: "1px solid " + border, borderRadius: "6px", cursor: page === 1 ? "not-allowed" : "pointer", opacity: page === 1 ? .4 : 1 }}>
+                    ← Prev
+                  </button>
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).filter(n => n === 1 || n === totalPages || Math.abs(n - page) <= 1).reduce<(number|"…")[]>((acc, n, idx, arr) => {
+                    if (idx > 0 && n - (arr[idx - 1] as number) > 1) acc.push("…")
+                    acc.push(n)
+                    return acc
+                  }, []).map((n, i) => (
+                    n === "…"
+                      ? <span key={"ellipsis-" + i} style={{ fontSize: "11px", fontFamily: mono, color: t3, padding: "0 4px" }}>…</span>
+                      : <button key={n} onClick={() => setPage(n as number)}
+                          style={{ width: "30px", height: "30px", background: page === n ? "rgba(26,86,255,0.15)" : "transparent", color: page === n ? "#8aaeff" : t2, fontSize: "11px", fontFamily: mono, border: "1px solid " + (page === n ? "rgba(26,86,255,0.35)" : border), borderRadius: "6px", cursor: "pointer", fontWeight: page === n ? 600 : 400 }}>
+                          {n}
+                        </button>
+                  ))}
+                  <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}
+                    style={{ height: "30px", padding: "0 14px", background: "transparent", color: page === totalPages ? t3 : t2, fontSize: "11px", fontFamily: mono, border: "1px solid " + border, borderRadius: "6px", cursor: page === totalPages ? "not-allowed" : "pointer", opacity: page === totalPages ? .4 : 1 }}>
+                    Next →
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
         )}
+        </div>{/* end gridWrapRef */}
 
         {/* CTA */}
         <div style={{ marginTop: "36px", background: "linear-gradient(135deg, rgba(26,86,255,0.08) 0%, rgba(0,184,122,0.06) 100%)", border: "1px solid rgba(26,86,255,0.18)", borderRadius: "14px", padding: "24px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "16px", flexWrap: "wrap" }}>
@@ -400,7 +512,7 @@ export default function EcosystemPage() {
             <div style={{ fontSize: "13px", color: t2, fontWeight: 300, maxWidth: "400px", lineHeight: 1.65 }}>List your project and get discovered by every Arc user and builder. Free, takes 2 minutes.</div>
           </div>
           <div style={{ display: "flex", gap: "10px", flexShrink: 0, flexWrap: "wrap" }}>
-            <button onClick={() => { setShowForm(true); window.scrollTo({ top: 0, behavior: "smooth" }) }}
+            <button onClick={() => { setShowForm(true); setSubmitted(false); setSubmitError(""); setNameWarn(""); setContractErr(""); window.scrollTo({ top: 0, behavior: "smooth" }) }}
               style={{ height: "40px", padding: "0 20px", background: "#1a56ff", color: "#fff", fontSize: "12.5px", fontWeight: 600, border: "none", borderRadius: "9px", cursor: "pointer", fontFamily: "'Geist', sans-serif", whiteSpace: "nowrap" }}>
               Submit Project
             </button>

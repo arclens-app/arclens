@@ -10,11 +10,12 @@ export async function GET() {
               website, twitter, github, discord, contract,
               featured, color, launched_at, slug, badge,
               city, country, lat, lng,
-              COALESCE(view_count, 0) as view_count
+              COALESCE(view_count, 0) as view_count,
+              created_at
        FROM projects
        WHERE approved = true AND live = true
        ORDER BY featured DESC, COALESCE(view_count, 0) DESC, created_at DESC
-       LIMIT 50`
+       LIMIT 200`
     )
 
     // Trending: purely by views — no external API calls

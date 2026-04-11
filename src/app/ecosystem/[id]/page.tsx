@@ -3,6 +3,11 @@ import { useEffect, useState } from "react"
 import { useParams } from "next/navigation"
 import ArcLayout from "@/components/ArcLayout"
 
+function imgSrc(url: string | null): string | null {
+  if (!url) return null
+  return `/api/image-proxy?url=${encodeURIComponent(url)}`
+}
+
 interface Project {
   id: number
   name: string
@@ -233,7 +238,7 @@ export default function ProjectPage() {
   const twitterUrl  = project.twitter
     ? project.twitter.startsWith("http") ? project.twitter : "https://x.com/" + project.twitter.replace("@", "")
     : null
-  const proxiedLogo = project.logo_url ? `/api/image-proxy?url=${encodeURIComponent(project.logo_url)}` : null
+  const proxiedLogo = imgSrc(project.logo_url)
 
   return (
     <ArcLayout active="ecosystem">
@@ -477,7 +482,7 @@ export default function ProjectPage() {
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "10px" }}>
               {related.map(r => {
                 const rc    = r.color || CAT_COLOR[r.category] || "#1a56ff"
-                const rLogo = r.logo_url ? `/api/image-proxy?url=${encodeURIComponent(r.logo_url)}` : null
+                const rLogo = imgSrc(r.logo_url)
                 return (
                   <div key={r.id}
                     onClick={() => window.location.href = `/ecosystem/${(r as any).slug || r.id}`}
