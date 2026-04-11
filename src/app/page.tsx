@@ -447,7 +447,7 @@ export default function HomePage() {
       <div style={{ fontFamily: "'Geist',system-ui,sans-serif", background: "#060812", color: "#e8ecff", minHeight: "100vh" }}>
 
         {/* ── HERO ─────────────────────────────────────── */}
-        <div style={{ position: "relative", minHeight: "100vh", display: "flex", alignItems: "center", overflow: "hidden" }}>
+        <div className="hp-hero" style={{ position: "relative", minHeight: "100vh", display: "flex", alignItems: "center", overflow: "hidden" }}>
           <div style={{ position: "absolute", top: "-10%", right: "-5%", width: "65%", height: "120%", background: "radial-gradient(ellipse at center, rgba(26,86,255,0.07) 0%, transparent 60%)", pointerEvents: "none" }} />
           <div style={{ position: "absolute", bottom: "5%", left: "2%", width: "35%", height: "60%", background: "radial-gradient(ellipse, rgba(0,184,122,0.04) 0%, transparent 65%)", pointerEvents: "none" }} />
 
@@ -534,7 +534,7 @@ export default function HomePage() {
 
         {/* ── FEATURED BUILDERS — editorial, no card boxes ─ */}
         {featured.length > 0 && (
-          <div style={{ maxWidth: "1200px", margin: "0 auto", padding: "96px 28px 0" }}>
+          <div className="hp-featured" style={{ maxWidth: "1200px", margin: "0 auto", padding: "96px 28px 0" }}>
             <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: "52px" }}>
               <div>
                 <div style={{ fontSize: "10px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: "10px" }}>Featured Builders</div>
@@ -553,12 +553,12 @@ export default function HomePage() {
               const tw = p.twitter ? (p.twitter.startsWith("http") ? p.twitter : "https://x.com/" + p.twitter.replace("@", "")) : null
               return (
                 <div key={p.id}
-                  style={{ display: "grid", gridTemplateColumns: "72px 1fr auto", gap: "28px", alignItems: "center", padding: "32px 0", borderBottom: `1px solid ${bdr}`, cursor: "pointer" }}
+                  style={{ display: "grid", gridTemplateColumns: "72px 1fr auto", gap: "28px", alignItems: "center", padding: "32px 0", borderBottom: `1px solid ${bdr}`, cursor: "pointer" }} className="hp-featured-row"
                   onClick={() => p.website && window.open(p.website, "_blank")}
                   onMouseEnter={e => (e.currentTarget.style.opacity = "0.85")}
                   onMouseLeave={e => (e.currentTarget.style.opacity = "1")}>
                   {/* Logo */}
-                  <div style={{ width: "72px", height: "72px", borderRadius: "16px", overflow: "hidden", background: "rgba(26,86,255,0.06)", border: `1px solid ${bdr}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "24px", fontWeight: 700, color: arc, flexShrink: 0 }}>
+                  <div style={{ width: "100%", aspectRatio: "1", borderRadius: "14px", overflow: "hidden", background: "rgba(26,86,255,0.06)", border: `1px solid ${bdr}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "22px", fontWeight: 700, color: arc, flexShrink: 0 }}>
                     {p.logo_url
                       ? <img src={`/api/image-proxy?url=${encodeURIComponent(p.logo_url)}`} alt={p.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={e => (e.currentTarget.style.display = "none")} />
                       : p.name[0]}
@@ -586,7 +586,7 @@ export default function HomePage() {
         )}
 
         {/* ── ARC INTELLIGENCE — no box styling ────────── */}
-        <div style={{ maxWidth: "1200px", margin: "0 auto", padding: "96px 28px 0", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "80px" }} className="hp-intel-grid">
+        <div className="hp-intel-grid" style={{ maxWidth: "1200px", margin: "0 auto", padding: "96px 28px 0", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "80px" }}>
 
           {/* Statement — pure text, no box */}
           <div style={{ display: "flex", flexDirection: "column", justifyContent: "center" }}>
@@ -641,7 +641,7 @@ export default function HomePage() {
         </div>
 
         {/* ── CLOSING — pure typography, no box ─────────── */}
-        <div style={{ textAlign: "center", padding: "120px 28px 100px" }}>
+        <div className="hp-closing" style={{ textAlign: "center", padding: "120px 28px 100px" }}>
           <div style={{ fontSize: "10px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: "20px" }}>Get Started</div>
           <h2 style={{ fontSize: "clamp(32px,4vw,52px)", fontWeight: 800, letterSpacing: "-0.05em", color: "#e8ecff", margin: "0 0 40px", lineHeight: 1.05 }}>
             Your home for<br />everything Arc.
@@ -666,15 +666,49 @@ export default function HomePage() {
         @keyframes hfloat  { 0%,100%{transform:translateX(-50%) translateY(0)} 50%{transform:translateX(-50%) translateY(-6px)} }
         @keyframes reelScroll { 0%{transform:translateX(0)} 100%{transform:translateX(-50%)} }
 
-        /* Mobile */
-        @media(max-width:900px){
-          .hp-globe  { display:none !important; }
-          .hp-text   { flex:unset !important; width:100% !important; padding:80px 24px 60px !important; }
-          .hp-stats-grid { grid-template-columns:repeat(2,1fr) !important; }
-          .hp-stat-cell:nth-child(2) { border-right:none !important; }
-          .hp-intel-grid { grid-template-columns:1fr !important; gap:48px !important; }
+        /* Tablet / small desktop */
+        @media(max-width:1100px){
+          .hp-globe { width:52% !important; right:-2% !important; }
+          .hp-text  { flex:0 0 48% !important; padding:80px 0 80px 32px !important; }
         }
+
+        /* Mobile — stack globe above text */
+        @media(max-width:768px){
+          .hp-hero  {
+            flex-direction:column !important;
+            align-items:stretch !important;
+            min-height:unset !important;
+            overflow:visible !important;
+            padding-top:0 !important;
+          }
+          .hp-globe {
+            position:relative !important;
+            display:block !important;
+            right:unset !important;
+            top:unset !important;
+            width:100% !important;
+            height:260px !important;
+            order:-1;
+          }
+          .hp-text {
+            flex:unset !important;
+            width:100% !important;
+            padding:20px 20px 48px !important;
+            position:relative !important;
+            z-index:2 !important;
+          }
+          .hp-stats-grid { grid-template-columns:repeat(2,1fr) !important; }
+          .hp-stat-cell  { padding:24px 16px !important; }
+          .hp-stat-cell:nth-child(2) { border-right:none !important; }
+          .hp-intel-grid { grid-template-columns:1fr !important; gap:40px !important; padding:48px 20px 0 !important; }
+          .hp-featured   { padding:56px 20px 0 !important; }
+          .hp-featured-row { grid-template-columns:48px 1fr !important; gap:16px !important; }
+          .hp-featured-row > *:last-child { display:none !important; }
+          .hp-closing    { padding:64px 20px 60px !important; }
+        }
+
         @media(max-width:480px){
+          .hp-globe  { height:220px !important; }
           .hp-stats-grid { grid-template-columns:1fr !important; }
           .hp-stat-cell  { border-right:none !important; border-bottom:1px solid rgba(255,255,255,0.06) !important; }
         }
