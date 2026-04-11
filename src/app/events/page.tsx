@@ -22,7 +22,12 @@ interface Event {
   featured: boolean
 }
 
-const EVENT_TYPES = ["All", "Hackathon", "Conference", "Workshop", "AMA", "Meetup", "Webinar", "Launch", "Other"]
+function imgSrc(url: string | null): string | null {
+  if (!url) return null
+  return `/api/image-proxy?url=${encodeURIComponent(url)}`
+}
+
+const EVENT_TYPES = ["All", "Hackathon", "Conference", "Workshop", "Office Hours", "AMA", "Demo Day", "Community Call", "Twitter Space", "Grant Round", "Governance Vote", "Meetup", "Webinar", "Launch", "Ecosystem Sprint", "Other"]
 const TAGS = ["DeFi", "NFT", "Dev", "Community", "Gaming", "AI", "Payments", "Identity", "Infrastructure"]
 
 function formatDate(d: string) {
@@ -49,14 +54,21 @@ function daysUntil(d: string) {
 }
 
 const TYPE_COLOR: Record<string, string> = {
-  Hackathon:  "#1a56ff",
-  Conference: "#8b5cf6",
-  Workshop:   "#00b87a",
-  AMA:        "#e08810",
-  Meetup:     "#ec4899",
-  Webinar:    "#00b87a",
-  Launch:     "#e03348",
-  Other:      "#6b7da8",
+  Hackathon:       "#1a56ff",
+  Conference:      "#8b5cf6",
+  Workshop:        "#00b87a",
+  "Office Hours":  "#00b87a",
+  AMA:             "#e08810",
+  "Demo Day":      "#f59e0b",
+  "Community Call":"#6b7da8",
+  "Twitter Space": "#1d9bf0",
+  "Grant Round":   "#00d990",
+  "Governance Vote":"#8b5cf6",
+  Meetup:          "#ec4899",
+  Webinar:         "#06b6d4",
+  Launch:          "#e03348",
+  "Ecosystem Sprint":"#1a56ff",
+  Other:           "#6b7da8",
 }
 
 export default function EventsPage() {
@@ -64,6 +76,7 @@ export default function EventsPage() {
   const [events, setEvents]         = useState<Event[]>([])
   const [loading, setLoading]       = useState(true)
   const [filter, setFilter]         = useState("All")
+  const [badgeFilter, setBadgeFilter] = useState<"all"|"official"|"community">("all")
   const [search, setSearch]         = useState("")
   const [showPast, setShowPast]     = useState(false)
   const [showForm, setShowForm]     = useState(false)
@@ -162,8 +175,12 @@ export default function EventsPage() {
 
   const filtered = (showPast ? past : upcoming).filter(e => {
     const matchType   = filter === "All" || e.type === filter
+    const matchBadge  = badgeFilter === "all" ? true
+      : badgeFilter === "official"  ? e.badge === "official"
+      : badgeFilter === "community" ? (e.badge === "community" || !e.badge)
+      : true
     const matchSearch = !search || e.name.toLowerCase().includes(search.toLowerCase()) || e.organizer?.toLowerCase().includes(search.toLowerCase())
-    return matchType && matchSearch
+    return matchType && matchBadge && matchSearch
   })
 
   const featured = upcoming.filter(e => e.featured)
@@ -190,7 +207,7 @@ export default function EventsPage() {
           {/* Logo */}
           <div style={{ width: "44px", height: "44px", borderRadius: "10px", flexShrink: 0, overflow: "hidden", background: color + "18", border: "1px solid " + color + "28", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "18px", fontWeight: 700, fontFamily: mono, color }}>
             {e.logo_url
-              ? <img src={`/api/image-proxy?url=${encodeURIComponent(e.logo_url)}`} alt={e.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={ev => (ev.currentTarget.style.display = "none")} />
+              ? <img src={imgSrc(e.logo_url)!} alt={e.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={ev => (ev.currentTarget.style.display = "none")} />
               : e.name[0]
             }
           </div>
@@ -340,7 +357,7 @@ export default function EventsPage() {
                   <div>
                     <label style={{ display: "block", fontSize: "9.5px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "5px" }}>Event Type *</label>
                     <select style={inputStyle} value={form.type} onChange={e => setForm(p => ({ ...p, type: e.target.value }))}>
-                      {["Hackathon","Conference","Workshop","AMA","Meetup","Webinar","Launch","Other"].map(t => <option key={t} value={t}>{t}</option>)}
+                      {["Hackathon","Conference","Workshop","Office Hours","AMA","Demo Day","Community Call","Twitter Space","Grant Round","Governance Vote","Meetup","Webinar","Launch","Ecosystem Sprint","Other"].map(t => <option key={t} value={t}>{t}</option>)}
                     </select>
                   </div>
 
@@ -431,22 +448,47 @@ export default function EventsPage() {
         )}
 
         {/* FILTERS */}
-        <div style={{ display: "flex", gap: "8px", marginBottom: "20px", flexWrap: "wrap", alignItems: "center" }}>
-          <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", flex: 1 }}>
+        <div style={{ marginBottom: "20px" }}>
+          {/* Badge / source filter */}
+          <div style={{ display: "flex", gap: "6px", marginBottom: "10px", alignItems: "center", flexWrap: "wrap" }}>
+            {([
+              { key: "all",       label: "All Events" },
+              { key: "official",  label: "🔵 Official" },
+              { key: "community", label: "Community" },
+            ] as const).map(b => (
+              <button key={b.key} onClick={() => setBadgeFilter(b.key)}
+                style={{ height: "28px", padding: "0 14px", background: badgeFilter === b.key ? "rgba(26,86,255,0.12)" : "transparent", color: badgeFilter === b.key ? "#8aaeff" : t2, fontSize: "11px", fontFamily: mono, border: "1px solid " + (badgeFilter === b.key ? "rgba(26,86,255,0.35)" : border), borderRadius: "6px", cursor: "pointer", transition: "all .12s", fontWeight: badgeFilter === b.key ? 600 : 400 }}>
+                {b.label}
+              </button>
+            ))}
+            <div style={{ flex: 1 }} />
+            <button onClick={() => setShowPast(!showPast)}
+              style={{ height: "28px", padding: "0 14px", background: showPast ? "rgba(26,86,255,0.1)" : "transparent", color: showPast ? "#8aaeff" : t2, fontSize: "11px", fontFamily: mono, border: "1px solid " + (showPast ? "rgba(26,86,255,0.25)" : border), borderRadius: "6px", cursor: "pointer", whiteSpace: "nowrap" }}>
+              {showPast ? "Upcoming" : "Past Events"}
+            </button>
+          </div>
+
+          {/* Type pills — horizontal scroll */}
+          <div style={{ display: "flex", gap: "6px", overflowX: "auto", paddingBottom: "8px", WebkitOverflowScrolling: "touch" as any }}>
             {EVENT_TYPES.map(type => (
               <button key={type} onClick={() => setFilter(type)}
-                style={{ height: "30px", padding: "0 14px", background: filter === type ? arc : "transparent", color: filter === type ? "#fff" : t2, fontSize: "11px", fontFamily: mono, border: "1px solid " + (filter === type ? arc : border), borderRadius: "99px", cursor: "pointer", transition: "all .12s" }}>
+                style={{ height: "30px", padding: "0 14px", background: filter === type ? arc : "transparent", color: filter === type ? "#fff" : t2, fontSize: "11px", fontFamily: mono, border: "1px solid " + (filter === type ? arc : border), borderRadius: "99px", cursor: "pointer", transition: "all .12s", whiteSpace: "nowrap", flexShrink: 0 }}>
                 {type}
               </button>
             ))}
           </div>
-          <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-            <input style={{ height: "32px", background: surf, border: "1px solid " + border, borderRadius: "7px", padding: "0 12px", fontSize: "12px", fontFamily: mono, color: t1, outline: "none", width: "180px" }}
-              value={search} onChange={e => setSearch(e.target.value)} placeholder="Search events..." />
-            <button onClick={() => setShowPast(!showPast)}
-              style={{ height: "32px", padding: "0 14px", background: showPast ? "rgba(26,86,255,0.1)" : "transparent", color: showPast ? "#8aaeff" : t2, fontSize: "11px", fontFamily: mono, border: "1px solid " + (showPast ? "rgba(26,86,255,0.25)" : border), borderRadius: "7px", cursor: "pointer", whiteSpace: "nowrap" }}>
-              {showPast ? "Upcoming" : "Past Events"}
-            </button>
+
+          {/* Search */}
+          <div style={{ position: "relative", marginTop: "8px" }}>
+            <span style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", fontSize: "13px", color: t3, pointerEvents: "none" }}>⌕</span>
+            <input style={{ width: "100%", height: "36px", background: surf, border: "1px solid " + border, borderRadius: "8px", padding: "0 36px 0 32px", fontSize: "12px", fontFamily: mono, color: t1, outline: "none", boxSizing: "border-box" } as React.CSSProperties}
+              value={search} onChange={e => setSearch(e.target.value)} placeholder="Search events by name or organizer..." />
+            {search && (
+              <button onClick={() => setSearch("")}
+                style={{ position: "absolute", right: "10px", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: t3, cursor: "pointer", fontSize: "14px", padding: "2px 4px" }}>
+                ×
+              </button>
+            )}
           </div>
         </div>
 

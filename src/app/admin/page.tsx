@@ -129,8 +129,8 @@ export default function AdminPage() {
     setMsg(null)
   }
 
-  async function geocodeProject(id: number) {
-    const inp = locInputs[id] || { city: "", country: "", status: "", result: "" }
+  async function geocodeProject(id: number, fallback?: { city: string; country: string }) {
+    const inp = locInputs[id] || { city: fallback?.city || "", country: fallback?.country || "", status: "", result: "" }
     if (!inp.city.trim()) return
     setLocInputs(p => ({ ...p, [id]: { ...inp, status: "loading", result: "" } }))
     try {
@@ -635,7 +635,7 @@ export default function AdminPage() {
                             <input
                               value={inp.city}
                               onChange={e => setLocInputs(prev => ({ ...prev, [p.id]: { ...inp, city: e.target.value } }))}
-                              onKeyDown={e => e.key === "Enter" && geocodeProject(p.id)}
+                              onKeyDown={e => e.key === "Enter" && geocodeProject(p.id, { city: p.city || "", country: p.country || "" })}
                               placeholder="City (e.g. Lagos)"
                               style={{ flex:1, minWidth:"120px", height:"34px", background:surf2, border:"1px solid "+bdr, borderRadius:"7px", padding:"0 10px", fontSize:"12px", fontFamily:mono, color:t1, outline:"none" }}
                             />
@@ -643,13 +643,13 @@ export default function AdminPage() {
                             <input
                               value={inp.country}
                               onChange={e => setLocInputs(prev => ({ ...prev, [p.id]: { ...inp, country: e.target.value } }))}
-                              onKeyDown={e => e.key === "Enter" && geocodeProject(p.id)}
+                              onKeyDown={e => e.key === "Enter" && geocodeProject(p.id, { city: p.city || "", country: p.country || "" })}
                               placeholder="Country (optional)"
                               style={{ flex:1, minWidth:"120px", height:"34px", background:surf2, border:"1px solid "+bdr, borderRadius:"7px", padding:"0 10px", fontSize:"12px", fontFamily:mono, color:t1, outline:"none" }}
                             />
                             {/* Geocode button */}
                             <button
-                              onClick={() => geocodeProject(p.id)}
+                              onClick={() => geocodeProject(p.id, { city: p.city || "", country: p.country || "" })}
                               disabled={isBusy || !inp.city.trim()}
                               style={{ height:"34px", padding:"0 16px", background:isDone?"rgba(0,184,122,0.1)":"rgba(26,86,255,0.1)", color:isDone?"#00d990":"#8aaeff", fontSize:"12px", fontFamily:mono, border:"1px solid "+(isDone?"rgba(0,184,122,0.2)":"rgba(26,86,255,0.2)"), borderRadius:"7px", cursor:"pointer", flexShrink:0, whiteSpace:"nowrap" }}>
                               {isBusy ? "..." : isDone ? "✓ Mapped" : "Geocode →"}

@@ -180,8 +180,11 @@ export default function DevPage() {
 
         {/* TABS */}
         <div style={{ display:"flex", gap:"8px", marginBottom:"20px" }}>
-          {[{id:"console",label:"Dev Console"},{id:"faucet",label:"🚰 Faucet"}].map((t: any) => (
-            <button key={t.id} onClick={() => setDevTab(t.id as "console"|"faucet")}
+          {([
+            { id:"console", label:"Dev Console" },
+            { id:"faucet",  label:"Faucet" },
+          ] as const).map(t => (
+            <button key={t.id} onClick={() => setDevTab(t.id)}
               style={{ height:"34px", padding:"0 18px", background:devTab===t.id?"#1a56ff":"transparent", color:devTab===t.id?"#fff":t2, fontSize:"12px", fontWeight:devTab===t.id?600:400, border:"1px solid "+(devTab===t.id?"#1a56ff":bdr), borderRadius:"7px", cursor:"pointer", fontFamily:"'Geist',sans-serif", transition:"all .12s" }}>
               {t.label}
             </button>
@@ -393,6 +396,7 @@ export default function DevPage() {
             </div>
           </>
         )}
+
       </div>
     </ArcLayout>
   )
