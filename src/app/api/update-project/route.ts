@@ -3,7 +3,7 @@ import { Pool } from "pg"
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL })
 
-const ALLOWED = ["tagline", "description", "website", "twitter", "github", "discord", "contract", "color"]
+const ALLOWED = ["tagline", "description", "website", "twitter", "github", "discord", "contract", "color", "city", "country"]
 
 export async function POST(req: NextRequest) {
   try {
@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
 
     // Get current project values
     const current = await pool.query(
-      `SELECT tagline, description, website, twitter, github, discord, contract, color FROM projects WHERE id = $1`,
+      `SELECT tagline, description, website, twitter, github, discord, contract, color, city, country FROM projects WHERE id = $1`,
       [projectId]
     )
     projectRow = current.rows[0]

@@ -43,7 +43,7 @@ export default function EcosystemPage() {
   const [filter, setFilter]           = useState("All")
   const [search, setSearch]           = useState("")
   const [showForm, setShowForm]       = useState(false)
-  const [form, setForm]               = useState({ name: "", tagline: "", description: "", category: "DeFi", website: "", twitter: "", github: "", discord: "", contract: "", email: "" })
+  const [form, setForm]               = useState({ name: "", tagline: "", description: "", category: "DeFi", website: "", twitter: "", github: "", discord: "", contract: "", email: "", city: "", country: "" })
   const [logoUrl, setLogoUrl]         = useState<string | null>(null)
   const [logoPreview, setLogoPreview] = useState<string | null>(null)
   const [uploading, setUploading]     = useState(false)
@@ -296,6 +296,8 @@ export default function EcosystemPage() {
                     { k: "discord",  l: "Discord",          p: "https://discord.gg/..." },
                     { k: "contract", l: "Contract Address", p: "0x... on Arc" },
                     { k: "email",    l: "Contact Email",    p: "you@email.com" },
+                    { k: "city",     l: "City",             p: "e.g. Lagos" },
+                    { k: "country",  l: "Country",          p: "e.g. Nigeria" },
                   ].map((f: any) => (
                     <div key={f.k}>
                       <label style={{ display: "block", fontSize: "9.5px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "5px" }}>{f.l}</label>

@@ -36,7 +36,7 @@ export default function DashboardPage() {
   const [walletSaved, setWalletSaved]         = useState(false)
 
   // Edit form
-  const [editForm, setEditForm]   = useState({ tagline: "", description: "", website: "", twitter: "", github: "", discord: "", contract: "", color: "" })
+  const [editForm, setEditForm]   = useState({ tagline: "", description: "", website: "", twitter: "", github: "", discord: "", contract: "", color: "", city: "", country: "" })
   const [saving, setSaving]       = useState(false)
   const [saveSuccess, setSaveSuccess] = useState(false)
   const [saveError, setSaveError] = useState("")
@@ -93,6 +93,8 @@ export default function DashboardPage() {
           discord:     data.project.discord || "",
           contract:    data.project.contract || "",
           color:       data.project.color || "",
+          city:        data.project.city || "",
+          country:     data.project.country || "",
         })
       } catch { setError("Failed to load dashboard") }
       finally { setLoading(false) }
@@ -350,6 +352,8 @@ export default function DashboardPage() {
                 { key: "github",      label: "GitHub",           ph: "https://github.com/..." },
                 { key: "discord",     label: "Discord",          ph: "https://discord.gg/..." },
                 { key: "contract",    label: "Contract Address", ph: "0x..." },
+                { key: "city",        label: "City",             ph: "e.g. Lagos, Singapore, New York" },
+                { key: "country",     label: "Country",          ph: "e.g. Nigeria, Singapore, USA" },
               ].map(f => (
                 <div key={f.key}>
                   <label style={{ display: "block", fontSize: "9.5px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "6px" }}>{f.label}</label>
@@ -371,8 +375,12 @@ export default function DashboardPage() {
                 />
               </div>
 
+              <div style={{ padding: "10px 14px", background: "rgba(26,86,255,0.05)", border: "1px solid rgba(26,86,255,0.15)", borderRadius: "7px", fontSize: "11px", fontFamily: mono, color: t3, lineHeight: 1.6 }}>
+                Changes go through admin review before going live. Location updates are used to place your project on the globe.
+              </div>
+
               {saveError && <div style={{ fontSize: "12px", color: "#e03348", fontFamily: mono }}>{saveError}</div>}
-              {saveSuccess && <div style={{ fontSize: "12px", color: usdc, fontFamily: mono }}>✓ Listing updated successfully</div>}
+              {saveSuccess && <div style={{ fontSize: "12px", color: usdc, fontFamily: mono }}>✓ Changes submitted — pending admin approval</div>}
 
               <button onClick={saveEdit} disabled={saving}
                 style={{ height: "42px", background: "#1a56ff", color: "#fff", fontSize: "13px", fontWeight: 600, border: "none", borderRadius: "8px", cursor: saving ? "not-allowed" : "pointer", fontFamily: mono, opacity: saving ? 0.7 : 1 }}>

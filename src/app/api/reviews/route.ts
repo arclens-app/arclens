@@ -47,7 +47,9 @@ export async function GET(req: NextRequest) {
        LIMIT 50`,
       [projectId]
     )
-    return NextResponse.json({ reviews: result.rows })
+    return NextResponse.json({ reviews: result.rows }, {
+      headers: { "Cache-Control": "public, s-maxage=30, stale-while-revalidate=60" },
+    })
   } catch {
     return NextResponse.json({ reviews: [] })
   }

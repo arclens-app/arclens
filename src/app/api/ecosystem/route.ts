@@ -9,6 +9,7 @@ export async function GET() {
       `SELECT id, name, tagline, description, category, logo_url,
               website, twitter, github, discord, contract,
               featured, color, launched_at, slug, badge,
+              city, country, lat, lng,
               COALESCE(view_count, 0) as view_count
        FROM projects
        WHERE approved = true AND live = true
@@ -22,7 +23,9 @@ export async function GET() {
       .slice(0, 5)
       .map(p => ({ ...p, tx_count: 0 }))
 
-    return NextResponse.json({ projects: result.rows, trending })
+    return NextResponse.json({ projects: result.rows, trending }, {
+      headers: { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=120" },
+    })
   } catch {
     return NextResponse.json({ projects: [], trending: [] })
   }

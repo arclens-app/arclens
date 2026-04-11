@@ -51,14 +51,14 @@ export async function GET(req: NextRequest) {
     let projectRow: any = null
     if (wallet) {
       const result = await pool.query(
-        `SELECT id, name, slug, tagline, description, category, logo_url, website, twitter, github, discord, contract, featured, badge, color, email, claimed_at, view_count, owner_wallet FROM projects WHERE (slug = $1 OR id::text = $1) AND owner_wallet = $2 AND approved = true AND live = true`,
+        `SELECT id, name, slug, tagline, description, category, logo_url, website, twitter, github, discord, contract, featured, badge, color, email, claimed_at, view_count, owner_wallet, city, country FROM projects WHERE (slug = $1 OR id::text = $1) AND owner_wallet = $2 AND approved = true AND live = true`,
         [slug, wallet.toLowerCase()]
       )
       if (result.rows.length === 0) return NextResponse.json({ error: "Wallet not authorized for this project" }, { status: 403 })
       projectRow = result.rows[0]
     } else if (token) {
       const result = await pool.query(
-        `SELECT id, name, slug, tagline, description, category, logo_url, website, twitter, github, discord, contract, featured, badge, color, email, claimed_at, view_count, owner_wallet, claim_token_expires FROM projects WHERE (slug = $1 OR id::text = $1) AND claim_token = $2`,
+        `SELECT id, name, slug, tagline, description, category, logo_url, website, twitter, github, discord, contract, featured, badge, color, email, claimed_at, view_count, owner_wallet, city, country, claim_token_expires FROM projects WHERE (slug = $1 OR id::text = $1) AND claim_token = $2`,
         [slug, token]
       )
       if (result.rows.length === 0) return NextResponse.json({ error: "Invalid or expired token" }, { status: 403 })

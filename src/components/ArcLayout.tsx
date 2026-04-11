@@ -3,7 +3,8 @@ import { useEffect, useState, useRef } from "react"
 
 const NAV = [
   { section: "EXPLORER", items: [
-    { id: "overview",     label: "Overview",          icon: "◈", href: "/" },
+    { id: "home", label: "Home", icon: "⬡", href: "/" },
+    { id: "overview",     label: "Overview",          icon: "◈", href: "/overview" },
     { id: "transactions", label: "Transactions",      icon: "⇄", href: "/transactions" },
   ]},
   { section: "ANALYTICS", items: [
@@ -14,6 +15,7 @@ const NAV = [
   ]},
   { section: "DISCOVER", items: [
     { id: "ecosystem",    label: "Arc Ecosystem",     icon: "◎", href: "/ecosystem" },
+    { id: "events",    label: "Events",        icon: "◆", href: "/events" },
   ]},
   { section: "DEVELOPERS", items: [
     { id: "registry",     label: "Contract Registry", icon: "✦", href: "/registry" },
