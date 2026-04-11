@@ -390,7 +390,11 @@ export default function HomePage() {
 
   useEffect(() => {
     setMounted(true)
-    const check = () => setIsMobile(window.innerWidth < 768)
+    const check = () => {
+      // Use the smaller of screen.width and innerWidth so desktop mode
+      // on a phone (which inflates innerWidth) still triggers mobile layout
+      setIsMobile(Math.min(window.screen.width, window.innerWidth) < 768)
+    }
     check()
     window.addEventListener("resize", check)
     return () => window.removeEventListener("resize", check)
