@@ -31,15 +31,21 @@ export async function GET(req: NextRequest) {
         )
         pendingUpdates = pu.rows
       } catch { }
+      let events: unknown[] = []
+      try {
+        const ev = await pool.query("SELECT * FROM events ORDER BY created_at DESC")
+        events = ev.rows
+      } catch { }
       return NextResponse.json({
         submissions: pending.rows,
         projects: approved.rows,
         contracts: contracts.rows,
         pendingUpdates,
+        events,
       })
     } catch (e) {
       console.error("[Admin] list error:", e)
-      return NextResponse.json({ error: String(e), submissions: [], projects: [], contracts: [], pendingUpdates: [] })
+      return NextResponse.json({ error: String(e), submissions: [], projects: [], contracts: [], pendingUpdates: [], events: [] })
     }
   }
   return NextResponse.json({ error: "Unknown action" }, { status: 400 })
@@ -53,15 +59,15 @@ export async function POST(req: NextRequest) {
   try {
     if (action === "approve") {
       if (table === "contracts") {
-        // contracts table uses address as PK — id passed from page is c.address
         await pool.query("UPDATE contracts SET verified = true WHERE address = $1", [id])
-        // sync names cache so name appears in tx feeds immediately
         await pool.query(
           `INSERT INTO contract_names_cache (address, name, verified, flagged)
            SELECT address, name, verified, flagged FROM contracts WHERE address = $1
            ON CONFLICT (address) DO UPDATE SET verified = true, updated_at = NOW()`,
           [id]
         )
+      } else if (table === "events") {
+        await pool.query("UPDATE events SET approved = true WHERE id = $1", [id])
       } else {
         await pool.query("UPDATE projects SET approved = true, live = true WHERE id = $1", [id])
       }
@@ -69,9 +75,10 @@ export async function POST(req: NextRequest) {
     }
     if (action === "reject" || action === "delete") {
       if (table === "contracts") {
-        // contracts table uses address as PK
         await pool.query("DELETE FROM contracts WHERE address = $1", [id])
         await pool.query("DELETE FROM contract_names_cache WHERE address = $1", [id])
+      } else if (table === "events") {
+        await pool.query("DELETE FROM events WHERE id = $1", [id])
       } else {
         await pool.query("DELETE FROM projects WHERE id = $1", [id])
       }
@@ -82,13 +89,20 @@ export async function POST(req: NextRequest) {
         `UPDATE projects SET
           name=$1, tagline=$2, description=$3, category=$4,
           logo_url=$5, website=$6, twitter=$7, github=$8,
-          badge=$9, featured=$10, live=$11, approved=$12
-         WHERE id=$13`,
+          badge=$9, featured=$10, live=$11, approved=true,
+          city=$12, country=$13,
+          lat=CASE WHEN $14::text ~ '^-?[0-9]+(\.[0-9]+)?$' THEN $14::numeric ELSE lat END,
+          lng=CASE WHEN $15::text ~ '^-?[0-9]+(\.[0-9]+)?$' THEN $15::numeric ELSE lng END
+         WHERE id=$16`,
         [
           data.name || null, data.tagline || null, data.description || null,
           data.category || null, data.logo_url || null, data.website || null,
           data.twitter || null, data.github || null, data.badge || null,
-          data.featured ? true : false, data.live !== false, true, id
+          data.featured ? true : false, data.live !== false,
+          data.city?.trim() || null, data.country?.trim() || null,
+          data.lat !== undefined && data.lat !== null && data.lat !== "" ? String(data.lat) : null,
+          data.lng !== undefined && data.lng !== null && data.lng !== "" ? String(data.lng) : null,
+          id
         ]
       )
       return NextResponse.json({ success: true })
@@ -105,6 +119,34 @@ export async function POST(req: NextRequest) {
     if (action === "reject-update") {
       await pool.query(`UPDATE pending_updates SET status = 'rejected' WHERE id = $1`, [id])
       return NextResponse.json({ success: true })
+    }
+    if (action === "feature-event") {
+      await pool.query("UPDATE events SET featured = NOT featured WHERE id = $1", [id])
+      return NextResponse.json({ success: true })
+    }
+    if (action === "badge-event") {
+      await pool.query("UPDATE events SET badge = $1 WHERE id = $2", [data?.badge || "community", id])
+      return NextResponse.json({ success: true })
+    }
+    if (action === "geocode" && data?.city) {
+      const q = encodeURIComponent(`${data.city.trim()}${data.country ? ", " + data.country.trim() : ""}`)
+      try {
+        const geoRes = await fetch(
+          `https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=1`,
+          { headers: { "User-Agent": "ArcLens/1.0 (arclens.xyz)" } }
+        )
+        const geoData = await geoRes.json()
+        if (!geoData?.[0]) return NextResponse.json({ error: "Location not found — try a more specific city name" }, { status: 404 })
+        const lat = parseFloat(geoData[0].lat)
+        const lng = parseFloat(geoData[0].lon)
+        await pool.query(
+          "UPDATE projects SET lat = $1, lng = $2, city = $3, country = $4 WHERE id = $5",
+          [lat, lng, data.city.trim(), data.country?.trim() || null, id]
+        )
+        return NextResponse.json({ success: true, lat, lng })
+      } catch {
+        return NextResponse.json({ error: "Geocoding failed" }, { status: 500 })
+      }
     }
     return NextResponse.json({ error: "Unknown action" }, { status: 400 })
   } catch (e) {
