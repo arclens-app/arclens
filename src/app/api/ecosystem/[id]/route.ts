@@ -5,9 +5,9 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL })
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = params
+  const { id } = await params
   try {
     // Find by slug first, then by numeric id
     const result = await pool.query(
@@ -24,6 +24,7 @@ export async function GET(
     )
 
     if (result.rows.length === 0) {
+      // Debug: check without approved/live filter
       return NextResponse.json({ error: "Not found" }, { status: 404 })
     }
 
@@ -65,9 +66,9 @@ export async function GET(
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = params
+  const { id } = await params
   try {
     const body = await req.json()
     const { deviceId } = body
