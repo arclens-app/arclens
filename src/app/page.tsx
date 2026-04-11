@@ -381,13 +381,20 @@ function BuilderReel({ projects }: { projects: Project[] }) {
 /* ─── HOMEPAGE ───────────────────────────────────────────────── */
 export default function HomePage() {
   const [mounted, setMounted]           = useState(false)
+  const [isMobile, setIsMobile]         = useState(false)
   const [projects, setProjects]         = useState<Project[]>([])
   const [blockNum, setBlockNum]         = useState("...")
   const [tps, setTps]                   = useState("...")
   const [gasCost, setGasCost]           = useState("$0.011")
   const [recentBlocks, setRecentBlocks] = useState<any[]>([])
 
-  useEffect(() => { setMounted(true) }, [])
+  useEffect(() => {
+    setMounted(true)
+    const check = () => setIsMobile(window.innerWidth < 768)
+    check()
+    window.addEventListener("resize", check)
+    return () => window.removeEventListener("resize", check)
+  }, [])
 
   useEffect(() => {
     if (!mounted) return
@@ -447,12 +454,33 @@ export default function HomePage() {
       <div style={{ fontFamily: "'Geist',system-ui,sans-serif", background: "#060812", color: "#e8ecff", minHeight: "100vh" }}>
 
         {/* ── HERO ─────────────────────────────────────── */}
-        <div className="hp-hero" style={{ position: "relative", minHeight: "100vh", display: "flex", alignItems: "center", overflow: "hidden" }}>
+        <div style={{
+          position: "relative",
+          minHeight: isMobile ? "auto" : "100vh",
+          display: "flex",
+          flexDirection: isMobile ? "column" : "row",
+          alignItems: isMobile ? "stretch" : "center",
+          overflow: isMobile ? "visible" : "hidden",
+        }}>
           <div style={{ position: "absolute", top: "-10%", right: "-5%", width: "65%", height: "120%", background: "radial-gradient(ellipse at center, rgba(26,86,255,0.07) 0%, transparent 60%)", pointerEvents: "none" }} />
           <div style={{ position: "absolute", bottom: "5%", left: "2%", width: "35%", height: "60%", background: "radial-gradient(ellipse, rgba(0,184,122,0.04) 0%, transparent 65%)", pointerEvents: "none" }} />
 
+          {/* Globe — first in DOM so it stacks on top in mobile column layout */}
+          <div style={isMobile ? {
+            width: "100%", height: "260px", zIndex: 1, flexShrink: 0,
+          } : {
+            position: "absolute", right: "-3%", top: "3%", width: "58%", height: "94vh", zIndex: 1,
+          }}>
+            <Globe3D projects={projects} />
+          </div>
+
           {/* Text */}
-          <div className="hp-text" style={{ position: "relative", zIndex: 2, flex: "0 0 44%", padding: "80px 0 80px 52px" }}>
+          <div style={{
+            position: "relative", zIndex: 2,
+            flex: isMobile ? "none" : "0 0 44%",
+            padding: isMobile ? "24px 20px 48px" : "80px 0 80px 52px",
+            width: isMobile ? "100%" : undefined,
+          }}>
             <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "5px 12px", background: "rgba(26,86,255,0.1)", border: "1px solid rgba(26,86,255,0.2)", borderRadius: "99px", marginBottom: "28px" }}>
               <div style={{ width: "5px", height: "5px", borderRadius: "50%", background: usdc, animation: "hpulse 2s infinite" }} />
               <span style={{ fontSize: "10px", fontFamily: mono, color: link, letterSpacing: "0.08em" }}>Arc Testnet · Chain 2588 · Live</span>
@@ -489,11 +517,6 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* Globe */}
-          <div className="hp-globe" style={{ position: "absolute", right: "-3%", top: "3%", width: "58%", height: "94vh", zIndex: 1 }}>
-            <Globe3D projects={projects} />
-          </div>
-
           {/* Scroll hint */}
           <div style={{ position: "absolute", bottom: "28px", left: "50%", transform: "translateX(-50%)", display: "flex", flexDirection: "column", alignItems: "center", gap: "6px", opacity: 0.28, animation: "hfloat 2s ease-in-out infinite", zIndex: 3, pointerEvents: "none" }}>
             <div style={{ fontSize: "9px", fontFamily: mono, color: t2, letterSpacing: "0.12em" }}>SCROLL</div>
@@ -505,7 +528,7 @@ export default function HomePage() {
 
         {/* ── STATS — big numbers, no boxes ────────────── */}
         <div style={{ borderTop: `1px solid ${bdr}`, borderBottom: `1px solid ${bdr}` }}>
-          <div style={{ maxWidth: "1200px", margin: "0 auto", display: "grid", gridTemplateColumns: "repeat(4,1fr)" }} className="hp-stats-grid">
+          <div style={{ maxWidth: "1200px", margin: "0 auto", display: "grid", gridTemplateColumns: isMobile ? "repeat(2,1fr)" : "repeat(4,1fr)" }}>
             {[
               { label: "Cost to send any USDC",  value: gasCost,         color: usdc,  sub: "Flat. In dollars. Always."  },
               { label: "Average finality",        value: finality,        color: link,  sub: "Faster than a card swipe."  },
@@ -534,7 +557,7 @@ export default function HomePage() {
 
         {/* ── FEATURED BUILDERS — editorial, no card boxes ─ */}
         {featured.length > 0 && (
-          <div className="hp-featured" style={{ maxWidth: "1200px", margin: "0 auto", padding: "96px 28px 0" }}>
+          <div style={{ maxWidth: "1200px", margin: "0 auto", padding: isMobile ? "48px 20px 0" : "96px 28px 0" }}>
             <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: "52px" }}>
               <div>
                 <div style={{ fontSize: "10px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: "10px" }}>Featured Builders</div>
@@ -553,7 +576,7 @@ export default function HomePage() {
               const tw = p.twitter ? (p.twitter.startsWith("http") ? p.twitter : "https://x.com/" + p.twitter.replace("@", "")) : null
               return (
                 <div key={p.id}
-                  style={{ display: "grid", gridTemplateColumns: "72px 1fr auto", gap: "28px", alignItems: "center", padding: "32px 0", borderBottom: `1px solid ${bdr}`, cursor: "pointer" }} className="hp-featured-row"
+                  style={{ display: "grid", gridTemplateColumns: isMobile ? "44px 1fr" : "72px 1fr auto", gap: isMobile ? "14px" : "28px", alignItems: "center", padding: "28px 0", borderBottom: `1px solid ${bdr}`, cursor: "pointer" }}
                   onClick={() => p.website && window.open(p.website, "_blank")}
                   onMouseEnter={e => (e.currentTarget.style.opacity = "0.85")}
                   onMouseLeave={e => (e.currentTarget.style.opacity = "1")}>
@@ -586,7 +609,7 @@ export default function HomePage() {
         )}
 
         {/* ── ARC INTELLIGENCE — no box styling ────────── */}
-        <div className="hp-intel-grid" style={{ maxWidth: "1200px", margin: "0 auto", padding: "96px 28px 0", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "80px" }}>
+        <div style={{ maxWidth: "1200px", margin: "0 auto", padding: isMobile ? "48px 20px 0" : "96px 28px 0", display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: isMobile ? "40px" : "80px" }}>
 
           {/* Statement — pure text, no box */}
           <div style={{ display: "flex", flexDirection: "column", justifyContent: "center" }}>
@@ -641,7 +664,7 @@ export default function HomePage() {
         </div>
 
         {/* ── CLOSING — pure typography, no box ─────────── */}
-        <div className="hp-closing" style={{ textAlign: "center", padding: "120px 28px 100px" }}>
+        <div style={{ textAlign: "center", padding: isMobile ? "64px 20px 60px" : "120px 28px 100px" }}>
           <div style={{ fontSize: "10px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: "20px" }}>Get Started</div>
           <h2 style={{ fontSize: "clamp(32px,4vw,52px)", fontWeight: 800, letterSpacing: "-0.05em", color: "#e8ecff", margin: "0 0 40px", lineHeight: 1.05 }}>
             Your home for<br />everything Arc.
@@ -665,53 +688,6 @@ export default function HomePage() {
         @keyframes hpulse  { 0%,100%{opacity:1} 50%{opacity:.3} }
         @keyframes hfloat  { 0%,100%{transform:translateX(-50%) translateY(0)} 50%{transform:translateX(-50%) translateY(-6px)} }
         @keyframes reelScroll { 0%{transform:translateX(0)} 100%{transform:translateX(-50%)} }
-
-        /* Tablet / small desktop */
-        @media(max-width:1100px){
-          .hp-globe { width:52% !important; right:-2% !important; }
-          .hp-text  { flex:0 0 48% !important; padding:80px 0 80px 32px !important; }
-        }
-
-        /* Mobile — stack globe above text */
-        @media(max-width:768px){
-          .hp-hero  {
-            flex-direction:column !important;
-            align-items:stretch !important;
-            min-height:unset !important;
-            overflow:visible !important;
-            padding-top:0 !important;
-          }
-          .hp-globe {
-            position:relative !important;
-            display:block !important;
-            right:unset !important;
-            top:unset !important;
-            width:100% !important;
-            height:260px !important;
-            order:-1;
-          }
-          .hp-text {
-            flex:unset !important;
-            width:100% !important;
-            padding:20px 20px 48px !important;
-            position:relative !important;
-            z-index:2 !important;
-          }
-          .hp-stats-grid { grid-template-columns:repeat(2,1fr) !important; }
-          .hp-stat-cell  { padding:24px 16px !important; }
-          .hp-stat-cell:nth-child(2) { border-right:none !important; }
-          .hp-intel-grid { grid-template-columns:1fr !important; gap:40px !important; padding:48px 20px 0 !important; }
-          .hp-featured   { padding:56px 20px 0 !important; }
-          .hp-featured-row { grid-template-columns:48px 1fr !important; gap:16px !important; }
-          .hp-featured-row > *:last-child { display:none !important; }
-          .hp-closing    { padding:64px 20px 60px !important; }
-        }
-
-        @media(max-width:480px){
-          .hp-globe  { height:220px !important; }
-          .hp-stats-grid { grid-template-columns:1fr !important; }
-          .hp-stat-cell  { border-right:none !important; border-bottom:1px solid rgba(255,255,255,0.06) !important; }
-        }
       `}</style>
     </ArcLayout>
   )
