@@ -31,10 +31,15 @@ function llToV3(THREE: any, lat: number, lng: number, r = 1.015) {
 
 /* ─── 3D GLOBE ───────────────────────────────────────────────── */
 function Globe3D({ projects }: { projects: Project[] }) {
-  const mountRef   = useRef<HTMLDivElement>(null)
-  const refreshRef = useRef<((p: Project[]) => void) | null>(null)
+  const mountRef    = useRef<HTMLDivElement>(null)
+  const refreshRef  = useRef<((p: Project[]) => void) | null>(null)
+  const projectsRef = useRef<Project[]>(projects)
 
-  useEffect(() => { refreshRef.current?.(projects) }, [projects])
+  // Keep projectsRef in sync so init() can read latest value after CDN loads
+  useEffect(() => {
+    projectsRef.current = projects
+    refreshRef.current?.(projects)
+  }, [projects])
 
   useEffect(() => {
     if (typeof window === "undefined" || !mountRef.current) return
@@ -219,12 +224,13 @@ function Globe3D({ projects }: { projects: Project[] }) {
         return dg
       }
 
-      globe.add(buildDots([]))
       refreshRef.current = (proj: Project[]) => {
         const old = globe.getObjectByName("dotGroup")
         if (old) globe.remove(old)
         globe.add(buildDots(proj))
       }
+      // Immediately render whatever projects arrived while CDN was loading
+      refreshRef.current(projectsRef.current)
 
       const el = renderer.domElement; el.style.cursor = "grab"
       let isDragging = false, prevX = 0, prevY = 0
