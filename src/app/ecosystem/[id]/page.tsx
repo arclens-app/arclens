@@ -94,6 +94,7 @@ export default function ProjectPage() {
   const [notFound, setNotFound]   = useState(false)
   const [copied, setCopied]       = useState(false)
   const [mounted, setMounted]     = useState(false)
+  const [showBanner, setShowBanner] = useState(false)
   const [reviews, setReviews]     = useState<Review[]>([])
   const [showReviewForm, setShowReviewForm] = useState(false)
   const [reviewForm, setReviewForm] = useState({ category: "Product Experience", rating: 5, text: "", isPublic: true, contact: "" })
@@ -102,7 +103,11 @@ export default function ProjectPage() {
   const [reviewSuccess, setReviewSuccess] = useState(false)
   const [connectedWallet, setConnectedWallet] = useState<string | null>(null)
 
-  useEffect(() => { setMounted(true) }, [])
+  useEffect(() => {
+    setMounted(true)
+    const dismissed = localStorage.getItem("arclens-arc101-dismissed")
+    if (!dismissed) setShowBanner(true)
+  }, [])
 
   useEffect(() => {
     if (!mounted || !id) return
@@ -233,6 +238,25 @@ export default function ProjectPage() {
   return (
     <ArcLayout active="ecosystem">
       <div style={{ padding: "24px 20px 60px", maxWidth: "860px", margin: "0 auto" }}>
+
+        {/* NEW TO ARC BANNER */}
+        {showBanner && (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", padding: "10px 16px", background: "rgba(26,86,255,0.07)", border: "1px solid rgba(26,86,255,0.2)", borderRadius: "10px", marginBottom: "20px", flexWrap: "wrap" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#00b87a", flexShrink: 0 }} />
+              <span style={{ fontSize: "12px", color: "var(--t2,#6b7da8)" }}>New to Arc? Learn what it is, how to get started, and where to go.</span>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
+              <a href="/start" style={{ fontSize: "12px", fontFamily: "'DM Mono',monospace", color: "#8aaeff", textDecoration: "none", padding: "4px 12px", border: "1px solid rgba(26,86,255,0.3)", borderRadius: "6px" }}>
+                Arc 101 →
+              </a>
+              <button onClick={() => { setShowBanner(false); localStorage.setItem("arclens-arc101-dismissed", "1") }}
+                style={{ background: "none", border: "none", color: "var(--t3,#2e3a5c)", cursor: "pointer", fontSize: "16px", lineHeight: 1, padding: "2px 4px" }}>
+                ×
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* BACK */}
         <button onClick={() => window.location.href = "/ecosystem"}

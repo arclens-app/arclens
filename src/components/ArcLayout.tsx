@@ -14,8 +14,9 @@ const NAV = [
     { id: "approvals",    label: "Approval Manager",  icon: "⚠", href: "/approvals", tag: "SAFETY" },
   ]},
   { section: "DISCOVER", items: [
+    { id: "start",        label: "Arc 101 — Start Here", icon: "◈", href: "/start", tag: "NEW" },
     { id: "ecosystem",    label: "Arc Ecosystem",     icon: "◎", href: "/ecosystem" },
-    { id: "events",    label: "Events",        icon: "◆", href: "/events" },
+    { id: "events",       label: "Events",            icon: "◆", href: "/events" },
   ]},
   { section: "DEVELOPERS", items: [
     { id: "registry",     label: "Contract Registry", icon: "✦", href: "/registry" },
