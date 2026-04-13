@@ -1,6 +1,7 @@
 "use client"
 import { useState, useEffect } from "react"
 import ArcLayout from "@/components/ArcLayout"
+import { NodeGuideSection, useColors } from "@/app/node-guide/page"
 
 const CHAIN = {
   chainId: "0x4cef52", chainName: "Arc Testnet",
@@ -210,6 +211,7 @@ export default function StartPage() {
   const [done, setDone]             = useState<Set<string>>(new Set())
   const [celebrated, setCelebrated] = useState(false)
   const [showLocal, setShowLocal]   = useState(false)
+  const nodeColors                  = useColors()
 
   // Load progress from localStorage, then scroll to first incomplete landmark
   useEffect(() => {
@@ -802,6 +804,11 @@ export default function StartPage() {
 
           </div>
         )}
+
+        {/* ── NODE GUIDE ────────────────────────────────────── */}
+        <div style={{ marginTop: "64px", paddingTop: "40px", borderTop: "1px solid " + bdr }}>
+          <NodeGuideSection c={nodeColors} />
+        </div>
 
         {/* ── COMMUNITY ─────────────────────────────────────── */}
         <div style={{ marginTop: "64px", paddingTop: "40px", borderTop: "1px solid " + bdr }}>
