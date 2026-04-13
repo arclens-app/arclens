@@ -53,8 +53,10 @@ export default function AdminPage() {
     name: "", tagline: "", type: "Hackathon", description: "",
     date: "", end_date: "", timezone: "UTC",
     location: "", is_online: false,
-    link: "", organizer: "", organizer_twitter: "", email: "",
+    link: "", organizer: "", organizer_twitter: "", email: "", logo_url: "",
   })
+  const [eventLogoPreview, setEventLogoPreview] = useState<string|null>(null)
+  const [eventLogoUploading, setEventLogoUploading] = useState(false)
 
   const mono  = "'DM Mono', monospace"
   const surf  = "var(--surf, #0a0e1a)"
@@ -151,6 +153,24 @@ export default function AdminPage() {
     }
   }
 
+  async function uploadEventLogo(file: File) {
+    setEventLogoUploading(true)
+    try {
+      const fd = new FormData()
+      fd.append("image", file)
+      const res  = await fetch("/api/upload", { method: "POST", body: fd })
+      const data = await res.json()
+      if (data.url) {
+        setEventForm(p => ({ ...p, logo_url: data.url }))
+        setEventLogoPreview(data.url)
+      } else {
+        setMsg({ ok: false, text: "Logo upload failed" })
+      }
+    } finally {
+      setEventLogoUploading(false)
+    }
+  }
+
   async function createOfficialEvent() {
     if (!eventForm.name.trim()) { setMsg({ ok: false, text: "Event name required" }); return }
     if (!eventForm.date)        { setMsg({ ok: false, text: "Event date required" }); return }
@@ -174,7 +194,8 @@ export default function AdminPage() {
         }
         setMsg({ ok: true, text: "✓ Official event created and live" })
         setShowEventForm(false)
-        setEventForm({ name: "", tagline: "", type: "Hackathon", description: "", date: "", end_date: "", timezone: "UTC", location: "", is_online: false, link: "", organizer: "", organizer_twitter: "", email: "" })
+        setEventLogoPreview(null)
+        setEventForm({ name: "", tagline: "", type: "Hackathon", description: "", date: "", end_date: "", timezone: "UTC", location: "", is_online: false, link: "", organizer: "", organizer_twitter: "", email: "", logo_url: "" })
         loadAll()
       } else {
         setMsg({ ok: false, text: data.error || "Failed to create event" })
@@ -482,6 +503,23 @@ export default function AdminPage() {
                       <span style={{ fontSize:"11px", color:t2 }}>— auto-approved and marked official</span>
                     </div>
                     <div style={{ padding:"20px", display:"grid", gridTemplateColumns:"1fr 1fr", gap:"12px" }}>
+                      {/* Logo upload */}
+                      <div style={{ gridColumn:"1 / -1", display:"flex", alignItems:"center", gap:"16px" }}>
+                        <label style={{ cursor:"pointer" }}>
+                          <div style={{ width:"72px", height:"72px", borderRadius:"10px", border:"2px dashed rgba(26,86,255,0.3)", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", overflow:"hidden", background: eventLogoPreview ? "transparent" : "rgba(26,86,255,0.04)", flexShrink:0 }}>
+                            {eventLogoPreview
+                              ? <img src={eventLogoPreview} alt="logo" style={{ width:"100%", height:"100%", objectFit:"cover" }} />
+                              : <><div style={{ fontSize:"20px", color:t3 }}>+</div><div style={{ fontSize:"8px", fontFamily:mono, color:t3 }}>{eventLogoUploading ? "..." : "Logo"}</div></>
+                            }
+                          </div>
+                          <input type="file" accept="image/*" style={{ display:"none" }} onChange={e => { const f = e.target.files?.[0]; if (f) uploadEventLogo(f) }} />
+                        </label>
+                        <div>
+                          <div style={{ fontSize:"11px", color:t2, marginBottom:"4px" }}>Event Logo</div>
+                          <div style={{ fontSize:"10px", fontFamily:mono, color:t3, lineHeight:1.6 }}>Click to upload · PNG, JPG, SVG<br/>Displayed on the events page</div>
+                          {eventForm.logo_url && <div style={{ fontSize:"10px", fontFamily:mono, color:"#00b87a", marginTop:"4px" }}>✓ Uploaded</div>}
+                        </div>
+                      </div>
                       {[
                         { k:"name",              l:"Event Name *",          p:"Arc Hackathon 2025" },
                         { k:"tagline",           l:"Tagline",               p:"One-line description" },
@@ -492,7 +530,7 @@ export default function AdminPage() {
                       ].map((f: any) => (
                         <div key={f.k}>
                           <label style={{ display:"block", fontSize:"9.5px", fontFamily:mono, color:t3, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:"5px" }}>{f.l}</label>
-                          <input value={(eventForm as Record<string,string>)[f.k]} onChange={e => setEventForm(p => ({ ...p, [f.k]: e.target.value }))} placeholder={f.p}
+                          <input value={(eventForm as unknown as Record<string,string>)[f.k]} onChange={e => setEventForm(p => ({ ...p, [f.k]: e.target.value }))} placeholder={f.p}
                             style={{ width:"100%", height:"36px", background:surf2, border:"1px solid "+bdr, borderRadius:"7px", padding:"0 12px", fontSize:"12px", fontFamily:mono, color:t1, outline:"none", boxSizing:"border-box" as const }} />
                         </div>
                       ))}
