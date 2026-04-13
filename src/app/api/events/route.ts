@@ -34,12 +34,13 @@ export async function POST(req: NextRequest) {
   if (!email?.trim()) return NextResponse.json({ error: "Contact email required" }, { status: 400 })
 
   try {
-    await pool.query(
+    const result = await pool.query(
       `INSERT INTO events
         (name, tagline, type, description, date, end_date, timezone,
          location, is_online, link, logo_url, organizer, organizer_twitter,
          email, tags, badge, approved, created_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,'community',false,NOW())`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,'community',false,NOW())
+       RETURNING id`,
       [
         name.trim(),
         tagline?.trim() || null,
@@ -58,7 +59,7 @@ export async function POST(req: NextRequest) {
         tags || [],
       ]
     )
-    return NextResponse.json({ success: true })
+    return NextResponse.json({ success: true, id: result.rows[0].id })
   } catch (e) {
     console.error("[Events POST]", e)
     return NextResponse.json({ error: "Server error" }, { status: 500 })
