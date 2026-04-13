@@ -183,15 +183,12 @@ export default function AdminPage() {
         body: JSON.stringify({ ...eventForm, email: eventForm.email || "admin@arclens.app" }),
       })
       const data = await res.json()
-      if (data.success) {
-        // Auto-approve and set as official
-        const listRes  = await fetch(`/api/admin?action=list&password=${password}`)
-        const listData = await listRes.json()
-        const newEvent = (listData.events || []).find((e: any) => e.name === eventForm.name && !e.approved)
-        if (newEvent) {
-          await fetch("/api/admin", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: newEvent.id, action: "approve", password, table: "events" }) })
-          await fetch("/api/admin", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: newEvent.id, action: "badge-event", password, table: "events", data: { badge: "official" } }) })
-        }
+      if (data.success && data.id) {
+        // Auto-approve and badge as official using the returned ID directly
+        await Promise.all([
+          fetch("/api/admin", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: data.id, action: "approve",      password, table: "events" }) }),
+          fetch("/api/admin", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: data.id, action: "badge-event", password, table: "events", data: { badge: "official" } }) }),
+        ])
         setMsg({ ok: true, text: "✓ Official event created and live" })
         setShowEventForm(false)
         setEventLogoPreview(null)
@@ -538,7 +535,7 @@ export default function AdminPage() {
                         <label style={{ display:"block", fontSize:"9.5px", fontFamily:mono, color:t3, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:"5px" }}>Event Type</label>
                         <select value={eventForm.type} onChange={e => setEventForm(p => ({ ...p, type: e.target.value }))}
                           style={{ width:"100%", height:"36px", background:surf2, border:"1px solid "+bdr, borderRadius:"7px", padding:"0 10px", fontSize:"12px", fontFamily:mono, color:t1, outline:"none" }}>
-                          {["Hackathon","Conference","Workshop","AMA","Meetup","Webinar","Launch","Other"].map(t => <option key={t} value={t}>{t}</option>)}
+                          {["Hackathon","Conference","Workshop","Office Hours","AMA","Demo Day","Community Call","Twitter Space","Grant Round","Governance Vote","Meetup","Webinar","Launch","Ecosystem Sprint","Other"].map(t => <option key={t} value={t}>{t}</option>)}
                         </select>
                       </div>
                       <div>
