@@ -40,6 +40,46 @@ function formatTime(d: string) {
   return date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", timeZoneName: "short" })
 }
 
+function formatDateRange(start: string, end: string | null) {
+  const s = new Date(start)
+  const e = end ? new Date(end) : null
+  const opts: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" }
+  if (!e) return s.toLocaleDateString("en-US", { ...opts, year: "numeric" })
+  // Same month: "Apr 19–21, 2025"
+  if (s.getMonth() === e.getMonth() && s.getFullYear() === e.getFullYear()) {
+    return `${s.toLocaleDateString("en-US", opts)}–${e.getDate()}, ${s.getFullYear()}`
+  }
+  // Different month: "Apr 30 – May 2, 2025"
+  return `${s.toLocaleDateString("en-US", opts)} – ${e.toLocaleDateString("en-US", { ...opts, year: "numeric" })}`
+}
+
+function buildIcsUrl(e: Event) {
+  function pad(n: number) { return String(n).padStart(2, "0") }
+  function toIcsDate(d: string) {
+    const dt = new Date(d)
+    return `${dt.getUTCFullYear()}${pad(dt.getUTCMonth() + 1)}${pad(dt.getUTCDate())}T${pad(dt.getUTCHours())}${pad(dt.getUTCMinutes())}00Z`
+  }
+  const start = toIcsDate(e.date)
+  const end   = e.end_date ? toIcsDate(e.end_date) : toIcsDate(new Date(new Date(e.date).getTime() + 3_600_000).toISOString())
+  const loc   = e.is_online ? "Online" : (e.location || "")
+  const desc  = (e.description || "").replace(/\n/g, "\\n").replace(/,/g, "\\,")
+  const ics = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//ArcLens//Events//EN",
+    "BEGIN:VEVENT",
+    `DTSTART:${start}`,
+    `DTEND:${end}`,
+    `SUMMARY:${e.name.replace(/,/g, "\\,")}`,
+    `DESCRIPTION:${desc}`,
+    `LOCATION:${loc}`,
+    e.link ? `URL:${e.link}` : "",
+    "END:VEVENT",
+    "END:VCALENDAR",
+  ].filter(Boolean).join("\r\n")
+  return "data:text/calendar;charset=utf8," + encodeURIComponent(ics)
+}
+
 function isUpcoming(d: string) {
   return new Date(d) >= new Date()
 }
@@ -108,6 +148,7 @@ export default function EventsPage() {
   }, [mounted])
 
   async function handleLogoUpload(file: File) {
+    if (file.size > 5 * 1024 * 1024) { setSubmitError("Image must be under 5MB"); return }
     setUploading(true)
     const reader = new FileReader()
     reader.onload = e => setLogoPreview(e.target?.result as string)
@@ -118,8 +159,8 @@ export default function EventsPage() {
       const res  = await fetch("/api/upload", { method: "POST", body: fd })
       const data = await res.json()
       if (data.url) setLogoUrl(data.url)
-      else { alert("Upload failed"); setLogoPreview(null) }
-    } catch { alert("Upload failed"); setLogoPreview(null) }
+      else { setSubmitError("Image upload failed — try a smaller file"); setLogoPreview(null) }
+    } catch { setSubmitError("Image upload failed"); setLogoPreview(null) }
     finally { setUploading(false) }
   }
 
@@ -186,73 +227,100 @@ export default function EventsPage() {
   const featured = upcoming.filter(e => e.featured)
 
   function EventCard({ e }: { e: Event }) {
-    const color     = TYPE_COLOR[e.type || ""] || "#6b7da8"
-    const countdown = daysUntil(e.date)
-    const past      = countdown === "Past"
+    const color      = TYPE_COLOR[e.type || ""] || "#6b7da8"
+    const countdown  = daysUntil(e.date)
+    const isPast     = countdown === "Past"
+    const isUrgent   = countdown === "Today" || countdown === "Tomorrow"
     const twitterUrl = e.organizer_twitter
       ? e.organizer_twitter.startsWith("http") ? e.organizer_twitter : "https://x.com/" + e.organizer_twitter.replace("@", "")
       : null
+    const icsUrl = buildIcsUrl(e)
 
     return (
       <div
-        onMouseEnter={ev => { ev.currentTarget.style.borderColor = color + "50"; ev.currentTarget.style.transform = "translateY(-2px)"; ev.currentTarget.style.boxShadow = "0 8px 24px rgba(0,0,0,0.12)" }}
+        onMouseEnter={ev => { ev.currentTarget.style.borderColor = color + "50"; ev.currentTarget.style.transform = "translateY(-2px)"; ev.currentTarget.style.boxShadow = `0 8px 28px rgba(0,0,0,0.18)` }}
         onMouseLeave={ev => { ev.currentTarget.style.borderColor = border; ev.currentTarget.style.transform = "none"; ev.currentTarget.style.boxShadow = "none" }}
-        style={{ background: surf, border: "1px solid " + border, borderRadius: "14px", overflow: "hidden", transition: "all .15s", display: "flex", flexDirection: "column", opacity: past ? 0.6 : 1 }}>
+        style={{ background: surf, border: "1px solid " + border, borderRadius: "14px", overflow: "hidden", transition: "all .15s", display: "flex", flexDirection: "column", opacity: isPast ? 0.55 : 1 }}>
 
         {/* TOP BAR */}
-        <div style={{ height: "3px", background: `linear-gradient(90deg, ${color}, ${color}80, transparent)` }} />
+        <div style={{ height: "3px", background: `linear-gradient(90deg, ${color}, ${color}60, transparent)` }} />
 
         {/* HEADER */}
         <div style={{ padding: "16px 18px 12px", display: "flex", alignItems: "flex-start", gap: "12px" }}>
           {/* Logo */}
-          <div style={{ width: "44px", height: "44px", borderRadius: "10px", flexShrink: 0, overflow: "hidden", background: color + "18", border: "1px solid " + color + "28", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "18px", fontWeight: 700, fontFamily: mono, color }}>
+          <div style={{ width: "44px", height: "44px", borderRadius: "10px", flexShrink: 0, overflow: "hidden", background: color + "18", border: "1px solid " + color + "28", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "16px", fontWeight: 700, fontFamily: mono, color }}>
             {e.logo_url
               ? <img src={imgSrc(e.logo_url)!} alt={e.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={ev => (ev.currentTarget.style.display = "none")} />
               : e.name[0]
             }
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "5px", marginBottom: "4px", flexWrap: "wrap" }}>
-              <div style={{ fontSize: "14px", fontWeight: 700, letterSpacing: "-0.025em", color: t1 }}>{e.name}</div>
+            <div style={{ display: "flex", alignItems: "flex-start", gap: "6px", marginBottom: "5px", flexWrap: "wrap" }}>
+              <div style={{ fontSize: "14px", fontWeight: 700, letterSpacing: "-0.025em", color: t1, lineHeight: 1.3 }}>{e.name}</div>
               {e.badge === "official" && <span style={{ fontSize: "7px", fontFamily: mono, padding: "1px 5px", borderRadius: "3px", background: "rgba(26,86,255,0.12)", color: "#8aaeff", border: "1px solid rgba(26,86,255,0.25)", flexShrink: 0 }}>🔵 OFFICIAL</span>}
               {e.featured && <span style={{ fontSize: "7px", fontFamily: mono, padding: "1px 5px", borderRadius: "3px", background: "rgba(192,136,40,0.1)", color: "#c08828", border: "1px solid rgba(192,136,40,0.25)", flexShrink: 0 }}>FEATURED</span>}
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
-              {e.type && <span style={{ fontSize: "8.5px", fontFamily: mono, padding: "2px 7px", borderRadius: "99px", background: color + "14", color, border: "1px solid " + color + "28" }}>{e.type}</span>}
-              {!past && <span style={{ fontSize: "8.5px", fontFamily: mono, padding: "2px 7px", borderRadius: "99px", background: countdown === "Today" || countdown === "Tomorrow" ? "rgba(224,51,72,0.1)" : "rgba(0,184,122,0.08)", color: countdown === "Today" || countdown === "Tomorrow" ? "#e03348" : usdc, border: "1px solid " + (countdown === "Today" || countdown === "Tomorrow" ? "rgba(224,51,72,0.2)" : "rgba(0,184,122,0.2)") }}>{countdown}</span>}
+              {e.type && <span style={{ fontSize: "8.5px", fontFamily: mono, padding: "2px 8px", borderRadius: "99px", background: color + "14", color, border: "1px solid " + color + "28" }}>{e.type}</span>}
+              {!isPast && (
+                <span style={{ fontSize: "8.5px", fontFamily: mono, padding: "2px 8px", borderRadius: "99px",
+                  background: isUrgent ? "rgba(224,51,72,0.1)" : "rgba(0,184,122,0.08)",
+                  color: isUrgent ? "#e03348" : usdc,
+                  border: "1px solid " + (isUrgent ? "rgba(224,51,72,0.2)" : "rgba(0,184,122,0.2)"),
+                  fontWeight: isUrgent ? 700 : 400,
+                }}>
+                  {countdown}
+                </span>
+              )}
             </div>
           </div>
         </div>
 
         {/* TAGLINE */}
         {e.tagline && (
-          <div style={{ padding: "0 18px 8px", fontSize: "12.5px", color: t1, fontWeight: 500, lineHeight: 1.5 }}>{e.tagline}</div>
+          <div style={{ padding: "0 18px 8px", fontSize: "13px", color: t1, fontWeight: 500, lineHeight: 1.5 }}>{e.tagline}</div>
         )}
 
         {/* DESCRIPTION */}
         {e.description && (
-          <div style={{ padding: "0 18px 12px", fontSize: "11.5px", color: t2, lineHeight: 1.65, fontWeight: 300, flex: 1 }}>
-            {e.description.slice(0, 120)}{e.description.length > 120 ? "…" : ""}
+          <div style={{ padding: "0 18px 12px", fontSize: "12px", color: t2, lineHeight: 1.7, flex: 1 }}>
+            {e.description.slice(0, 200)}{e.description.length > 200 ? "…" : ""}
           </div>
         )}
 
         {/* DATE + LOCATION */}
-        <div style={{ padding: "10px 18px", borderTop: "1px solid " + border, display: "flex", flexDirection: "column", gap: "5px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-            <span style={{ fontSize: "10px", fontFamily: mono, color: t3 }}>📅</span>
-            <span style={{ fontSize: "11px", fontFamily: mono, color: t2 }}>{formatDate(e.date)}</span>
-            <span style={{ fontSize: "10px", fontFamily: mono, color: t3 }}>{formatTime(e.date)}</span>
+        <div style={{ padding: "10px 18px", borderTop: "1px solid " + border, display: "flex", flexDirection: "column", gap: "6px" }}>
+          {/* Date range */}
+          <div style={{ display: "flex", alignItems: "center", gap: "7px" }}>
+            <svg width="11" height="11" viewBox="0 0 12 12" fill="none" style={{ flexShrink: 0, opacity: 0.4 }}>
+              <rect x="1" y="2" width="10" height="9" rx="2" stroke="currentColor" strokeWidth="1.2" fill="none"/>
+              <path d="M4 1v2M8 1v2M1 5h10" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+            </svg>
+            <span style={{ fontSize: "11px", fontFamily: mono, color: t2 }}>{formatDateRange(e.date, e.end_date)}</span>
+            {!e.end_date && <span style={{ fontSize: "10px", fontFamily: mono, color: t3 }}>{formatTime(e.date)}</span>}
           </div>
+          {/* Location */}
           {(e.location || e.is_online) && (
-            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-              <span style={{ fontSize: "10px", fontFamily: mono, color: t3 }}>{e.is_online ? "🌐" : "📍"}</span>
-              <span style={{ fontSize: "11px", fontFamily: mono, color: t2 }}>{e.is_online ? "Online" : e.location}</span>
-              {e.is_online && e.location && <span style={{ fontSize: "10px", fontFamily: mono, color: t3 }}>· {e.location}</span>}
+            <div style={{ display: "flex", alignItems: "center", gap: "7px" }}>
+              <svg width="11" height="11" viewBox="0 0 12 12" fill="none" style={{ flexShrink: 0, opacity: 0.4 }}>
+                {e.is_online
+                  ? <><circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.2" fill="none"/><path d="M1.5 6h9M6 1.5a5 5 0 0 1 0 9M6 1.5a5 5 0 0 0 0 9" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></>
+                  : <><path d="M6 1C4.067 1 2.5 2.567 2.5 4.5c0 2.786 3.5 6.5 3.5 6.5s3.5-3.714 3.5-6.5C9.5 2.567 7.933 1 6 1Z" stroke="currentColor" strokeWidth="1.2" fill="none"/><circle cx="6" cy="4.5" r="1" fill="currentColor"/></>
+                }
+              </svg>
+              <span style={{ fontSize: "11px", fontFamily: mono, color: t2 }}>
+                {e.is_online ? "Online" : e.location}
+                {e.is_online && e.location ? ` · ${e.location}` : ""}
+              </span>
             </div>
           )}
+          {/* Organizer */}
           {e.organizer && (
-            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-              <span style={{ fontSize: "10px", fontFamily: mono, color: t3 }}>👤</span>
+            <div style={{ display: "flex", alignItems: "center", gap: "7px" }}>
+              <svg width="11" height="11" viewBox="0 0 12 12" fill="none" style={{ flexShrink: 0, opacity: 0.4 }}>
+                <circle cx="6" cy="4" r="2.5" stroke="currentColor" strokeWidth="1.2" fill="none"/>
+                <path d="M1.5 10.5c0-2.21 2.015-4 4.5-4s4.5 1.79 4.5 4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" fill="none"/>
+              </svg>
               {twitterUrl
                 ? <a href={twitterUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: "11px", fontFamily: mono, color: "#8aaeff", textDecoration: "none" }} onMouseEnter={ev => (ev.currentTarget.style.textDecoration = "underline")} onMouseLeave={ev => (ev.currentTarget.style.textDecoration = "none")}>{e.organizer}</a>
                 : <span style={{ fontSize: "11px", fontFamily: mono, color: t2 }}>{e.organizer}</span>
@@ -265,18 +333,29 @@ export default function EventsPage() {
         {e.tags?.length > 0 && (
           <div style={{ padding: "0 18px 12px", display: "flex", gap: "5px", flexWrap: "wrap" }}>
             {e.tags.map(tag => (
-              <span key={tag} style={{ fontSize: "8.5px", fontFamily: mono, padding: "2px 7px", borderRadius: "99px", background: "rgba(138,174,255,0.06)", color: "#8aaeff", border: "1px solid rgba(138,174,255,0.15)" }}>{tag}</span>
+              <span key={tag} style={{ fontSize: "8.5px", fontFamily: mono, padding: "2px 8px", borderRadius: "99px", background: "rgba(138,174,255,0.06)", color: "#8aaeff", border: "1px solid rgba(138,174,255,0.12)" }}>{tag}</span>
             ))}
           </div>
         )}
 
-        {/* LINK */}
-        {e.link && (
-          <div style={{ padding: "10px 18px", borderTop: "1px solid " + border }}>
-            <a href={e.link} target="_blank" rel="noopener noreferrer"
-              style={{ display: "inline-flex", alignItems: "center", gap: "5px", height: "30px", padding: "0 14px", background: arc, color: "#fff", fontSize: "11px", fontWeight: 600, borderRadius: "6px", textDecoration: "none", fontFamily: "'Geist', sans-serif" }}>
-              {past ? "View Event" : "Register / Learn More"} →
-            </a>
+        {/* ACTIONS */}
+        {(e.link || !isPast) && (
+          <div style={{ padding: "10px 18px", borderTop: "1px solid " + border, display: "flex", alignItems: "center", gap: "8px" }}>
+            {e.link && (
+              <a href={e.link} target="_blank" rel="noopener noreferrer"
+                style={{ display: "inline-flex", alignItems: "center", gap: "5px", height: "30px", padding: "0 14px", background: arc, color: "#fff", fontSize: "11px", fontWeight: 600, borderRadius: "6px", textDecoration: "none", fontFamily: "'Geist', sans-serif", flexShrink: 0 }}>
+                {isPast ? "View Event" : "Register"} →
+              </a>
+            )}
+            {!isPast && (
+              <a href={icsUrl} download={`${e.name.replace(/\s+/g, "_")}.ics`}
+                style={{ display: "inline-flex", alignItems: "center", gap: "5px", height: "30px", padding: "0 12px", background: "transparent", color: t3, fontSize: "10px", fontFamily: mono, border: "1px solid " + border, borderRadius: "6px", textDecoration: "none", whiteSpace: "nowrap", flexShrink: 0 }}
+                onMouseEnter={ev => { (ev.currentTarget as HTMLAnchorElement).style.color = t2; (ev.currentTarget as HTMLAnchorElement).style.borderColor = "rgba(255,255,255,0.12)" }}
+                onMouseLeave={ev => { (ev.currentTarget as HTMLAnchorElement).style.color = t3; (ev.currentTarget as HTMLAnchorElement).style.borderColor = border }}
+              >
+                + Add to Calendar
+              </a>
+            )}
           </div>
         )}
       </div>

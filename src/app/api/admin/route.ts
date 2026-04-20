@@ -1,8 +1,80 @@
 ﻿import { NextRequest, NextResponse } from "next/server"
 import { Pool } from "pg"
-const pool = new Pool({ connectionString: process.env.DATABASE_URL })
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "arclens2588"
-function checkAuth(pw: string) { return pw === ADMIN_PASSWORD }
+import { Resend } from "resend"
+const pool   = new Pool({ connectionString: process.env.DATABASE_URL })
+const resend = new Resend(process.env.RESEND_API_KEY || "")
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || ""
+function checkAuth(pw: string) { return !!ADMIN_PASSWORD && pw === ADMIN_PASSWORD }
+
+async function sendCampaignEmail(campaignId: number, status: "approved" | "rejected", reason?: string) {
+  try {
+    // Get campaign + project email
+    const res = await pool.query(
+      `SELECT c.title, c.type, c.creator_wallet, c.slug AS campaign_slug, p.email, p.name AS project_name, p.slug AS project_slug
+       FROM campaigns c
+       LEFT JOIN projects p ON p.owner_wallet = c.creator_wallet AND p.approved = true
+       WHERE c.id = $1
+       ORDER BY p.created_at DESC LIMIT 1`,
+      [campaignId]
+    )
+    const row = res.rows[0]
+    if (!row?.email) return  // no email on file — silently skip
+
+    const base_url      = process.env.NEXT_PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_APP_URL || "https://arclenz.xyz"
+    const campaignUrl   = `${base_url}/forge/${row.campaign_slug || campaignId}`
+    const dashboardUrl  = `${base_url}/dashboard/${row.project_slug || row.project_name?.toLowerCase().replace(/\s+/g, "-") || ""}`
+    const forgeUrl      = `${base_url}/forge`
+    const base = `font-family:Arial,sans-serif;max-width:560px;margin:0 auto;padding:40px 24px;background:#060c20;color:#e8ecff;`
+    const label = `font-size:11px;font-family:monospace;text-transform:uppercase;letter-spacing:0.1em;`
+
+    if (status === "approved") {
+      await resend.emails.send({
+        from:     "ArcLens <noreply@arclenz.xyz>",
+        reply_to: process.env.TEAM_EMAIL,
+        to:       row.email,
+        subject:  `Your campaign is live — ${row.title}`,
+        html: `<div style="${base}">
+          <div style="margin-bottom:28px;"><span style="font-size:22px;font-weight:700;color:#e8ecff;">Arc</span><span style="font-size:22px;font-weight:700;color:#1a56ff;">Lens</span></div>
+          <div style="${label}color:#00b87a;">Campaign Approved</div>
+          <h1 style="font-size:22px;font-weight:700;margin:10px 0 8px;color:#e8ecff;">${row.title}</h1>
+          <p style="font-size:14px;color:#6b7da8;line-height:1.8;margin:0 0 28px;">
+            Your campaign is now live on Arc Trials. Testers can discover and complete it right now.
+          </p>
+          <a href="${campaignUrl}" style="display:inline-block;padding:13px 28px;background:#1a56ff;color:#fff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;margin-bottom:16px;">View Live Campaign →</a>
+          <br>
+          <a href="${dashboardUrl}" style="display:inline-block;padding:13px 28px;background:transparent;color:#8aaeff;text-decoration:none;border-radius:8px;font-size:14px;border:1px solid rgba(26,86,255,0.3);">Open Dashboard</a>
+          <hr style="border:none;border-top:1px solid rgba(255,255,255,0.06);margin:32px 0;">
+          <p style="font-size:12px;color:#2e3a5c;">You're receiving this because your project submitted a campaign on ArcLens.</p>
+        </div>`,
+      })
+    } else {
+      await resend.emails.send({
+        from:     "ArcLens <noreply@arclenz.xyz>",
+        reply_to: process.env.TEAM_EMAIL,
+        to:       row.email,
+        subject:  `Campaign update — ${row.title}`,
+        html: `<div style="${base}">
+          <div style="margin-bottom:28px;"><span style="font-size:22px;font-weight:700;color:#e8ecff;">Arc</span><span style="font-size:22px;font-weight:700;color:#1a56ff;">Lens</span></div>
+          <div style="${label}color:#e03348;">Campaign Not Approved</div>
+          <h1 style="font-size:22px;font-weight:700;margin:10px 0 8px;color:#e8ecff;">${row.title}</h1>
+          <p style="font-size:14px;color:#6b7da8;line-height:1.8;margin:0 0 16px;">
+            Your campaign was not approved at this time.
+          </p>
+          ${reason ? `<div style="padding:14px 18px;background:rgba(224,51,72,0.08);border:1px solid rgba(224,51,72,0.2);border-radius:8px;font-size:13px;color:#e8ecff;margin-bottom:24px;line-height:1.7;">${reason}</div>` : ""}
+          <p style="font-size:14px;color:#6b7da8;line-height:1.8;margin:0 0 28px;">
+            You can resubmit a revised campaign from the Arc Trials page. If you have questions, reply to this email.
+          </p>
+          <a href="${forgeUrl}" style="display:inline-block;padding:13px 28px;background:#1a56ff;color:#fff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;">Go to Arc Trials</a>
+          <hr style="border:none;border-top:1px solid rgba(255,255,255,0.06);margin:32px 0;">
+          <p style="font-size:12px;color:#2e3a5c;">You're receiving this because your project submitted a campaign on ArcLens.</p>
+        </div>`,
+      })
+    }
+  } catch (err) {
+    console.error("[Admin] Campaign email failed:", err)
+    // Non-fatal — don't block the approval/rejection
+  }
+}
 
 export async function GET(req: NextRequest) {
   const action   = req.nextUrl.searchParams.get("action")
@@ -36,12 +108,23 @@ export async function GET(req: NextRequest) {
         const ev = await pool.query("SELECT * FROM events ORDER BY created_at DESC")
         events = ev.rows
       } catch { }
+      let pendingCampaigns: unknown[] = []
+      try {
+        const pc = await pool.query(
+          `SELECT c.id, c.title, c.type, c.reward_type, c.reward_description, c.reward_usdc_amount,
+                  c.creator_wallet, c.project_name, c.total_slots, c.status, c.created_at, c.deposit_tx_hash,
+                  (SELECT COUNT(*) FROM campaign_completions WHERE campaign_id = c.id) AS completion_count
+           FROM campaigns c WHERE c.status = 'pending_approval' ORDER BY c.created_at DESC`
+        )
+        pendingCampaigns = pc.rows
+      } catch { }
       return NextResponse.json({
         submissions: pending.rows,
         projects: approved.rows,
         contracts: contracts.rows,
         pendingUpdates,
         events,
+        pendingCampaigns,
       })
     } catch (e) {
       console.error("[Admin] list error:", e)
@@ -57,6 +140,48 @@ export async function POST(req: NextRequest) {
   if (!checkAuth(password)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   if (!id || !action) return NextResponse.json({ error: "Missing fields" }, { status: 400 })
   try {
+    if (table === "campaigns") {
+      if (action === "approve") {
+        // Deposit already paid at creation — approve goes straight to active
+        await pool.query("UPDATE campaigns SET status = 'active' WHERE id = $1", [id])
+        await sendCampaignEmail(id, "approved")
+      } else if (action === "reject") {
+        // Refund USDC to founder if campaign was pre-funded
+        const camp = await pool.query(
+          "SELECT reward_type, deposit_tx_hash, creator_wallet, reward_usdc_amount, total_slots FROM campaigns WHERE id = $1",
+          [id]
+        )
+        const c = camp.rows[0]
+        if (c?.reward_type === "usdc" && c?.deposit_tx_hash && c?.creator_wallet) {
+          try {
+            const payoutKey = process.env.PAYOUT_WALLET_PRIVATE_KEY
+            if (payoutKey) {
+              const { createAdapterFromPrivateKey } = await import("@circle-fin/adapter-viem-v2")
+              const { AppKit }                      = await import("@circle-fin/app-kit")
+              const adapter = await createAdapterFromPrivateKey({ privateKey: payoutKey as `0x${string}` } as any)
+              const kit     = new AppKit()
+              const total   = ((Number(c.reward_usdc_amount) || 0) * (Number(c.total_slots) || 10)).toFixed(2)
+              await kit.send({
+                from:   { adapter, chain: "Arc_Testnet" },
+                to:     c.creator_wallet,
+                amount: total,
+                token:  "USDC",
+              })
+            }
+          } catch (refundErr) {
+            console.error("[Admin] USDC refund failed:", refundErr)
+            // Still reject — log refund failure for manual follow-up
+          }
+        }
+        const reason = data?.reason?.trim() || null
+        await pool.query(
+          "UPDATE campaigns SET status = 'rejected', rejection_reason = $2 WHERE id = $1",
+          [id, reason]
+        )
+        await sendCampaignEmail(id, "rejected", reason || undefined)
+      }
+      return NextResponse.json({ success: true })
+    }
     if (action === "approve") {
       if (table === "contracts") {
         await pool.query("UPDATE contracts SET verified = true WHERE address = $1", [id])
@@ -133,7 +258,7 @@ export async function POST(req: NextRequest) {
       try {
         const geoRes = await fetch(
           `https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=1`,
-          { headers: { "User-Agent": "ArcLens/1.0 (arclens.xyz)" } }
+          { headers: { "User-Agent": "ArcLens/1.0 (arclenz.xyz)" } }
         )
         const geoData = await geoRes.json()
         if (!geoData?.[0]) return NextResponse.json({ error: "Location not found — try a more specific city name" }, { status: 404 })

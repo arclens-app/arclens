@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { Pool } from "pg"
+import { rateLimit, getIp } from "@/lib/ratelimit"
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL })
 
@@ -22,6 +23,15 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  // Rate limit: 5 event submissions per hour per IP
+  const rl = rateLimit(`events:${getIp(req)}`, 5, 3_600_000)
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "Too many submissions. Try again later." },
+      { status: 429, headers: { "Retry-After": String(Math.ceil(rl.resetIn / 1000)) } }
+    )
+  }
+
   const body = await req.json()
   const {
     name, tagline, type, description, date, end_date, timezone,

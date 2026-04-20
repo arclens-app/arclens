@@ -114,3 +114,116 @@ VALUES
   ('0x3600000000000000000000000000000000000000', 'USDC', 'ERC-20', 'Official USD Coin — Arc native gas token, issued by Circle.', true, 0),
   ('0x0000000000000000000000000000000000000000', 'Zero Address', 'System', 'The zero address — used for contract creation transactions.', true, 0)
 ON CONFLICT (address) DO NOTHING;
+
+-- ─── ARC FORGE ────────────────────────────────────────────────────────────────
+-- Campaign platform: founders create campaigns, testers complete & earn reputation
+
+CREATE TABLE IF NOT EXISTS campaigns (
+  id               SERIAL PRIMARY KEY,
+  title            VARCHAR(120)  NOT NULL,
+  tagline          VARCHAR(200),
+  description      TEXT          NOT NULL,
+
+  -- Linked ecosystem project (optional)
+  project_id       INTEGER       REFERENCES projects(id) ON DELETE SET NULL,
+  project_name     VARCHAR(120),
+  project_logo     TEXT,
+  campaign_logo    TEXT,           -- optional custom image uploaded at campaign creation
+
+  -- Creator wallet
+  creator_wallet   TEXT          NOT NULL,
+
+  -- type: beta_test | stress_test | edge_case | feedback | builder_audit
+  type             VARCHAR(50)   NOT NULL DEFAULT 'beta_test',
+
+  -- tasks: [{ id, title, description, requires_tx, tx_hint }]
+  tasks            JSONB         NOT NULL DEFAULT '[]',
+
+  -- review_questions: [{ id, label, placeholder, min_words, required }]
+  review_questions JSONB         NOT NULL DEFAULT '[]',
+
+  -- reward_type: whitelist | early_access | discord_role | credit | token_allocation | other
+  reward_type      VARCHAR(50)   NOT NULL DEFAULT 'other',
+  reward_description TEXT,
+
+  -- slots
+  total_slots      INTEGER,                          -- NULL = unlimited
+  filled_slots     INTEGER       NOT NULL DEFAULT 0,
+  is_fcfs          BOOLEAN       NOT NULL DEFAULT true,
+
+  -- min rank required: 0=any 1=builder 2=verified 3=trusted 4=arc_proven
+  min_rank         INTEGER       NOT NULL DEFAULT 0,
+
+  -- status: active | paused | completed | expired
+  status           VARCHAR(20)   NOT NULL DEFAULT 'active',
+
+  created_at       TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+  expires_at       TIMESTAMPTZ,
+  updated_at       TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_campaigns_status         ON campaigns (status);
+CREATE INDEX IF NOT EXISTS idx_campaigns_creator        ON campaigns (creator_wallet);
+CREATE INDEX IF NOT EXISTS idx_campaigns_project        ON campaigns (project_id);
+CREATE INDEX IF NOT EXISTS idx_campaigns_created        ON campaigns (created_at DESC);
+
+-- ─── CAMPAIGN COMPLETIONS ─────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS campaign_completions (
+  id               SERIAL PRIMARY KEY,
+  campaign_id      INTEGER       NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  tester_wallet    TEXT          NOT NULL,
+
+  -- on-chain proof: array of tx hashes tester submitted
+  tx_hashes        TEXT[]        NOT NULL DEFAULT '{}',
+
+  -- review answers: { "q1": "answer text", "q2": "..." }
+  review_answers   JSONB         NOT NULL DEFAULT '{}',
+
+  -- scoring
+  auto_score         INTEGER       NOT NULL DEFAULT 0,   -- 0-100 automatic (unique-word based)
+  provisional_score  NUMERIC(4,2),                        -- 0-5 added to reputation at submit time
+  builder_rating     INTEGER,                             -- 1-5 from founder
+  quality_score      NUMERIC(4,2),                        -- final 0.00-5.00 (60% auto + 40% builder)
+
+  -- status: pending | reviewed | flagged
+  status           VARCHAR(20)   NOT NULL DEFAULT 'pending',
+
+  reward_delivered BOOLEAN       NOT NULL DEFAULT false,
+
+  created_at       TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+  reviewed_at      TIMESTAMPTZ,
+
+  UNIQUE (campaign_id, tester_wallet)
+);
+
+CREATE INDEX IF NOT EXISTS idx_completions_campaign     ON campaign_completions (campaign_id);
+CREATE INDEX IF NOT EXISTS idx_completions_tester       ON campaign_completions (tester_wallet);
+CREATE INDEX IF NOT EXISTS idx_completions_status       ON campaign_completions (status);
+
+-- ─── TESTER REPUTATION ────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS tester_reputation (
+  wallet              TEXT PRIMARY KEY,
+
+  campaigns_completed INTEGER       NOT NULL DEFAULT 0,
+  total_score         NUMERIC       NOT NULL DEFAULT 0,
+  avg_score           NUMERIC(4,2)  NOT NULL DEFAULT 0,
+
+  -- 0=Scout 1=Builder 2=Verified 3=Trusted 4=Arc Proven (admin-set)
+  rank                INTEGER       NOT NULL DEFAULT 0,
+  rank_points         INTEGER       NOT NULL DEFAULT 0,
+
+  -- times a builder publicly credited this tester's feedback
+  impact_count        INTEGER       NOT NULL DEFAULT 0,
+
+  -- custom profile picture URL (uploaded to imgbb)
+  pfp_url             TEXT,
+
+  created_at          TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+  updated_at          TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+);
+
+-- Migration: add pfp_url if not present
+ALTER TABLE tester_reputation ADD COLUMN IF NOT EXISTS pfp_url TEXT;
+ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS campaign_logo TEXT;
