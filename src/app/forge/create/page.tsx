@@ -624,6 +624,11 @@ export default function CreateCampaignPage() {
                   </select>
                 </div>
               </div>
+              {minRank > 0 && (
+                <div style={{ padding: "10px 14px", background: "rgba(192,136,40,0.05)", border: "1px solid rgba(192,136,40,0.2)", borderRadius: 8, fontSize: 11, color: "#c08828", fontFamily: mono, lineHeight: 1.6 }}>
+                  Testers must reach <strong>{["","Builder","Verified","Trusted","Arc Proven"][minRank]}</strong> rank before they can participate. Your campaign will be visible but locked to lower-ranked testers until they earn it.
+                </div>
+              )}
             </div>
           </Card>
 
