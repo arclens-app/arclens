@@ -30,7 +30,7 @@ async function sendCampaignEmail(campaignId: number, status: "approved" | "rejec
     if (status === "approved") {
       await resend.emails.send({
         from:     "ArcLens <noreply@arclenz.xyz>",
-        reply_to: process.env.TEAM_EMAIL,
+        reply_to: process.env.TEAM_EMAIL || "arclensdev@gmail.com",
         to:       row.email,
         subject:  `Your campaign is live — ${row.title}`,
         html: `<div style="${base}">
@@ -50,7 +50,7 @@ async function sendCampaignEmail(campaignId: number, status: "approved" | "rejec
     } else {
       await resend.emails.send({
         from:     "ArcLens <noreply@arclenz.xyz>",
-        reply_to: process.env.TEAM_EMAIL,
+        reply_to: process.env.TEAM_EMAIL || "arclensdev@gmail.com",
         to:       row.email,
         subject:  `Campaign update — ${row.title}`,
         html: `<div style="${base}">
@@ -93,7 +93,7 @@ async function sendProjectEmail(projectId: number, status: "approved" | "rejecte
     if (status === "approved") {
       await resend.emails.send({
         from:     "ArcLens <noreply@arclenz.xyz>",
-        reply_to: process.env.TEAM_EMAIL,
+        reply_to: process.env.TEAM_EMAIL || "arclensdev@gmail.com",
         to:       row.email,
         subject:  `Your ArcLens listing is live — ${row.name}`,
         html: `<div style="${base}">
@@ -122,7 +122,7 @@ async function sendProjectEmail(projectId: number, status: "approved" | "rejecte
 
       await resend.emails.send({
         from:     "ArcLens <noreply@arclenz.xyz>",
-        reply_to: process.env.TEAM_EMAIL,
+        reply_to: process.env.TEAM_EMAIL || "arclensdev@gmail.com",
         to:       row.email,
         subject:  `Your ArcLens listing submission — ${row.name}`,
         html: `<div style="${base}">
@@ -290,6 +290,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true })
     }
     if (action === "update" && data) {
+      // Check previous approval state before updating
+      const before = await pool.query(`SELECT approved, live FROM projects WHERE id = $1`, [id])
+      const wasApproved = before.rows[0]?.approved === true
+      const wasLive     = before.rows[0]?.live === true
+
       await pool.query(
         `UPDATE projects SET
           name=$1, tagline=$2, description=$3, category=$4,
@@ -310,6 +315,13 @@ export async function POST(req: NextRequest) {
           id
         ]
       )
+
+      // Send approval email only if project is being made live for the first time
+      const goingLive = data.live !== false
+      if (goingLive && (!wasApproved || !wasLive)) {
+        await sendProjectEmail(Number(id), "approved")
+      }
+
       return NextResponse.json({ success: true })
     }
     if (action === "approve-update") {
