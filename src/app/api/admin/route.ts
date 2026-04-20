@@ -72,7 +72,81 @@ async function sendCampaignEmail(campaignId: number, status: "approved" | "rejec
     }
   } catch (err) {
     console.error("[Admin] Campaign email failed:", err)
-    // Non-fatal — don't block the approval/rejection
+  }
+}
+
+async function sendProjectEmail(projectId: number, status: "approved" | "rejected", reason?: string) {
+  try {
+    const res = await pool.query(
+      `SELECT name, email, slug FROM projects WHERE id = $1`,
+      [projectId]
+    )
+    const row = res.rows[0]
+    if (!row?.email) return
+
+    const base_url     = process.env.NEXT_PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_APP_URL || "https://arclenz.xyz"
+    const ecosystemUrl = `${base_url}/ecosystem`
+    const dashboardUrl = `${base_url}/dashboard/${row.slug || row.name?.toLowerCase().replace(/\s+/g, "-") || ""}`
+    const base  = `font-family:Arial,sans-serif;max-width:560px;margin:0 auto;padding:40px 24px;background:#060c20;color:#e8ecff;`
+    const label = `font-size:11px;font-family:monospace;text-transform:uppercase;letter-spacing:0.1em;`
+
+    if (status === "approved") {
+      await resend.emails.send({
+        from:     "ArcLens <noreply@arclenz.xyz>",
+        reply_to: process.env.TEAM_EMAIL,
+        to:       row.email,
+        subject:  `Your ArcLens listing is live — ${row.name}`,
+        html: `<div style="${base}">
+          <div style="margin-bottom:28px;"><span style="font-size:22px;font-weight:700;color:#e8ecff;">Arc</span><span style="font-size:22px;font-weight:700;color:#1a56ff;">Lens</span></div>
+          <div style="${label}color:#00b87a;">Listing Approved</div>
+          <h1 style="font-size:22px;font-weight:700;margin:10px 0 8px;color:#e8ecff;">${row.name} is now live on ArcLens</h1>
+          <p style="font-size:14px;color:#6b7da8;line-height:1.8;margin:0 0 20px;">
+            Your project has been reviewed and approved. It is now publicly listed on the ArcLens Ecosystem Directory and visible to everyone building and exploring on Arc Testnet.
+          </p>
+          <p style="font-size:14px;color:#6b7da8;line-height:1.8;margin:0 0 28px;">
+            To manage your listing — edit your description, update your logo, links, and project details — you will need to claim your project dashboard first. Click the button below, enter this email address, and we will send you a magic link to access and control your listing directly. Once your wallet is connected from the dashboard, you will not need the magic link again and can sign in directly going forward.
+          </p>
+          <a href="${dashboardUrl}" style="display:inline-block;padding:13px 28px;background:#1a56ff;color:#fff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;margin-bottom:16px;">Claim your dashboard →</a>
+          <br>
+          <a href="${ecosystemUrl}" style="display:inline-block;padding:13px 28px;background:transparent;color:#8aaeff;text-decoration:none;border-radius:8px;font-size:14px;border:1px solid rgba(26,86,255,0.3);margin-top:8px;">View on Ecosystem</a>
+          <hr style="border:none;border-top:1px solid rgba(255,255,255,0.06);margin:32px 0;">
+          <p style="font-size:12px;color:#2e3a5c;margin:0 0 6px;">— ArcLens Team</p>
+          <p style="font-size:12px;color:#2e3a5c;margin:0 0 6px;">arclenz.xyz · @arclens_app</p>
+          <p style="font-size:11px;color:#1e2a40;margin:16px 0 0;">⚠ We will never DM you first or ask for funds. Always verify you are communicating through official ArcLens channels.</p>
+        </div>`,
+      })
+    } else {
+      const reasonHtml = reason
+        ? `<div style="padding:14px 18px;background:rgba(224,51,72,0.08);border:1px solid rgba(224,51,72,0.2);border-radius:8px;font-size:13px;color:#e8ecff;margin-bottom:24px;line-height:1.7;">${reason}</div>`
+        : `<div style="padding:14px 18px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:8px;font-size:13px;color:#6b7da8;margin-bottom:24px;line-height:1.7;">No specific reason was provided. Reply to this email if you would like more context.</div>`
+
+      await resend.emails.send({
+        from:     "ArcLens <noreply@arclenz.xyz>",
+        reply_to: process.env.TEAM_EMAIL,
+        to:       row.email,
+        subject:  `Your ArcLens listing submission — ${row.name}`,
+        html: `<div style="${base}">
+          <div style="margin-bottom:28px;"><span style="font-size:22px;font-weight:700;color:#e8ecff;">Arc</span><span style="font-size:22px;font-weight:700;color:#1a56ff;">Lens</span></div>
+          <div style="${label}color:#e03348;">Listing Not Approved</div>
+          <h1 style="font-size:22px;font-weight:700;margin:10px 0 8px;color:#e8ecff;">Thank you for submitting ${row.name}</h1>
+          <p style="font-size:14px;color:#6b7da8;line-height:1.8;margin:0 0 16px;">
+            After review, we are unable to approve your listing at this time. The reason is noted below.
+          </p>
+          ${reasonHtml}
+          <p style="font-size:14px;color:#6b7da8;line-height:1.8;margin:0 0 28px;">
+            If this is something you can address, you are welcome to resubmit once those changes have been made. Use the same project name and email when resubmitting so we can track the update. If you believe this decision was made in error, simply reply to this email and we will take another look.
+          </p>
+          <a href="${ecosystemUrl}" style="display:inline-block;padding:13px 28px;background:#1a56ff;color:#fff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;">View Ecosystem Directory</a>
+          <hr style="border:none;border-top:1px solid rgba(255,255,255,0.06);margin:32px 0;">
+          <p style="font-size:12px;color:#2e3a5c;margin:0 0 6px;">We appreciate you building on Arc and hope to see your project listed in the future.</p>
+          <p style="font-size:12px;color:#2e3a5c;margin:0 0 6px;">— ArcLens Team</p>
+          <p style="font-size:12px;color:#2e3a5c;margin:0 0 6px;">arclenz.xyz · @arclens_app</p>
+          <p style="font-size:11px;color:#1e2a40;margin:16px 0 0;">⚠ We will never DM you first or ask for funds. Always verify you are communicating through official ArcLens channels.</p>
+        </div>`,
+      })
+    }
+  } catch (err) {
+    console.error("[Admin] Project email failed:", err)
   }
 }
 
@@ -198,6 +272,7 @@ export async function POST(req: NextRequest) {
         await pool.query("UPDATE events SET approved = true WHERE id = $1", [id])
       } else {
         await pool.query("UPDATE projects SET approved = true, live = true WHERE id = $1", [id])
+        await sendProjectEmail(Number(id), "approved")
       }
       return NextResponse.json({ success: true })
     }
@@ -208,6 +283,8 @@ export async function POST(req: NextRequest) {
       } else if (table === "events") {
         await pool.query("DELETE FROM events WHERE id = $1", [id])
       } else {
+        const reason = data?.reason?.trim() || null
+        await sendProjectEmail(Number(id), "rejected", reason || undefined)
         await pool.query("DELETE FROM projects WHERE id = $1", [id])
       }
       return NextResponse.json({ success: true })
