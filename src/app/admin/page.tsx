@@ -29,10 +29,13 @@ interface Event {
   link: string|null; created_at: string
 }
 interface AdminCampaign {
-  id: number; title: string; type: string; reward_type: string
-  reward_description: string|null; reward_usdc_amount: number|null
-  creator_wallet: string; project_name: string|null
-  total_slots: number|null; status: string; created_at: string
+  id: number; title: string; tagline: string|null; type: string
+  description: string; tasks: {id:string;title:string;description:string}[]
+  review_questions: {id:string;label:string;min_words:number;required:boolean}[]
+  reward_type: string; reward_description: string|null; reward_usdc_amount: number|null
+  contract_address: string|null; app_url: string|null; min_rank: number; is_fcfs: boolean
+  creator_wallet: string; project_name: string|null; project_logo: string|null; campaign_logo: string|null
+  total_slots: number|null; expires_at: string|null; status: string; created_at: string
   completion_count: number
 }
 
@@ -734,29 +737,90 @@ export default function AdminPage() {
                       {pendingCampaigns.map((c: AdminCampaign) => (
                         <div key={c.id} style={{ background:surf, border:"1px solid "+bdr, borderRadius:"12px", overflow:"hidden" }}>
                           <div style={{ padding:"18px 22px" }}>
-                            <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:"12px", marginBottom:"12px" }}>
+                            {/* Header row */}
+                            <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:"12px", marginBottom:"14px" }}>
                               <div style={{ flex:1, minWidth:0 }}>
-                                <div style={{ fontSize:"15px", fontWeight:600, color:t1, marginBottom:"4px" }}>{c.title}</div>
+                                <div style={{ display:"flex", alignItems:"center", gap:"10px", marginBottom:"6px" }}>
+                                  {(c.campaign_logo||c.project_logo) && (
+                                    <img src={`/api/image-proxy?url=${encodeURIComponent((c.campaign_logo||c.project_logo)!)}`} alt="" style={{ width:32,height:32,borderRadius:7,objectFit:"cover",flexShrink:0 }} />
+                                  )}
+                                  <div>
+                                    <div style={{ fontSize:"15px", fontWeight:600, color:t1 }}>{c.title}</div>
+                                    {c.tagline && <div style={{ fontSize:"12px", color:t2, marginTop:2 }}>{c.tagline}</div>}
+                                  </div>
+                                </div>
                                 <div style={{ display:"flex", gap:"6px", flexWrap:"wrap", marginBottom:"8px" }}>
                                   <span style={pill("#8aaeff","rgba(26,86,255,0.2)")}>{CAMPAIGN_TYPE_LABELS[c.type]||c.type}</span>
                                   <span style={pill(c.reward_type==="usdc"?"#00d990":t2, c.reward_type==="usdc"?"rgba(0,184,122,0.2)":bdr)}>
                                     {REWARD_TYPE_LABELS[c.reward_type]||c.reward_type}{c.reward_usdc_amount?` · $${c.reward_usdc_amount} USDC`:""}
                                   </span>
                                   {c.total_slots && <span style={pill(t3,bdr)}>{c.total_slots} slots</span>}
+                                  {c.min_rank > 0 && <span style={pill("#c08828","rgba(192,136,40,0.2)")}>Min rank: {["Scout","Builder","Verified","Trusted","Arc Proven"][c.min_rank]}</span>}
+                                  {c.contract_address && <span style={pill("#00d990","rgba(0,184,122,0.15)")}>✓ on-chain</span>}
+                                  {c.app_url && <span style={pill("#6366f1","rgba(99,102,241,0.15)")}>has app URL</span>}
                                 </div>
-                                <div style={{ fontSize:"12px", color:t2, marginBottom:"3px" }}>
+                                <div style={{ fontSize:"12px", color:t2 }}>
                                   {c.project_name && <><span style={{ color:t1, fontWeight:500 }}>{c.project_name}</span> · </>}
                                   <span style={{ fontFamily:mono }}>{c.creator_wallet.slice(0,10)}...{c.creator_wallet.slice(-6)}</span>
+                                  <span style={{ marginLeft:10, fontSize:"10px", fontFamily:mono, color:t3 }}>Submitted {new Date(c.created_at).toLocaleDateString()}</span>
                                 </div>
-                                <div style={{ fontSize:"10px", fontFamily:mono, color:t3 }}>Submitted {new Date(c.created_at).toLocaleDateString()}</div>
                               </div>
                               <div style={{ display:"flex", gap:"8px", flexShrink:0 }}>
                                 <ActionBtn onClick={() => act(c.id, "approve", "campaigns")} disabled={acting} color="green">Approve</ActionBtn>
                                 <ActionBtn onClick={() => { setRejectingCampaignId(c.id); setRejectReason("") }} disabled={acting} color="red">Reject</ActionBtn>
                               </div>
                             </div>
+
+                            {/* Description */}
+                            <div style={{ padding:"10px 14px", background:surf2, border:"1px solid "+bdr, borderRadius:"8px", fontSize:"12px", color:t2, lineHeight:1.6, marginBottom:"10px" }}>
+                              {c.description}
+                            </div>
+
+                            {/* Tasks */}
+                            {c.tasks?.length > 0 && (
+                              <div style={{ marginBottom:"10px" }}>
+                                <div style={{ fontSize:"10px", fontFamily:mono, color:t3, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:"6px" }}>Tasks ({c.tasks.length})</div>
+                                <div style={{ display:"flex", flexDirection:"column", gap:"4px" }}>
+                                  {c.tasks.map((t,i) => (
+                                    <div key={t.id} style={{ display:"flex", gap:"8px", fontSize:"12px", color:t2 }}>
+                                      <span style={{ fontFamily:mono, color:t3, flexShrink:0 }}>{String(i+1).padStart(2,"0")}</span>
+                                      <span><span style={{ color:t1, fontWeight:500 }}>{t.title}</span>{t.description ? ` — ${t.description}` : ""}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Review questions */}
+                            {c.review_questions?.length > 0 && (
+                              <div style={{ marginBottom:"10px" }}>
+                                <div style={{ fontSize:"10px", fontFamily:mono, color:t3, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:"6px" }}>Review questions ({c.review_questions.length})</div>
+                                <div style={{ display:"flex", flexDirection:"column", gap:"4px" }}>
+                                  {c.review_questions.map((q,i) => (
+                                    <div key={q.id} style={{ fontSize:"12px", color:t2 }}>
+                                      <span style={{ fontFamily:mono, color:t3 }}>Q{i+1} </span>
+                                      {q.label}
+                                      <span style={{ fontFamily:mono, color:t3, marginLeft:6 }}>min {q.min_words}w{q.required?" · required":""}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* App URL + contract */}
+                            {(c.app_url || c.contract_address) && (
+                              <div style={{ display:"flex", gap:"10px", flexWrap:"wrap" }}>
+                                {c.app_url && (
+                                  <a href={c.app_url} target="_blank" rel="noopener noreferrer" style={{ fontSize:"11px", fontFamily:mono, color:"#6366f1", textDecoration:"none" }}>↗ {c.app_url}</a>
+                                )}
+                                {c.contract_address && (
+                                  <span style={{ fontSize:"11px", fontFamily:mono, color:"#00d990" }}>{c.contract_address}</span>
+                                )}
+                              </div>
+                            )}
+
                             {c.reward_description && (
-                              <div style={{ padding:"10px 14px", background:surf2, border:"1px solid "+bdr, borderRadius:"7px", fontSize:"12px", color:t2, fontStyle:"italic" }}>
+                              <div style={{ marginTop:"10px", padding:"8px 12px", background:surf2, border:"1px solid "+bdr, borderRadius:"7px", fontSize:"12px", color:t2, fontStyle:"italic" }}>
                                 "{c.reward_description}"
                               </div>
                             )}

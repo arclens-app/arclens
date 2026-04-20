@@ -111,8 +111,11 @@ export async function GET(req: NextRequest) {
       let pendingCampaigns: unknown[] = []
       try {
         const pc = await pool.query(
-          `SELECT c.id, c.title, c.type, c.reward_type, c.reward_description, c.reward_usdc_amount,
-                  c.creator_wallet, c.project_name, c.total_slots, c.status, c.created_at, c.deposit_tx_hash,
+          `SELECT c.id, c.title, c.tagline, c.type, c.description, c.tasks, c.review_questions,
+                  c.reward_type, c.reward_description, c.reward_usdc_amount,
+                  c.contract_address, c.app_url, c.min_rank, c.is_fcfs,
+                  c.creator_wallet, c.project_name, c.project_logo, c.campaign_logo,
+                  c.total_slots, c.expires_at, c.status, c.created_at, c.deposit_tx_hash,
                   (SELECT COUNT(*) FROM campaign_completions WHERE campaign_id = c.id) AS completion_count
            FROM campaigns c WHERE c.status = 'pending_approval' ORDER BY c.created_at DESC`
         )
