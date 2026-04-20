@@ -381,7 +381,8 @@ export default function AdminPage() {
                   ) : (
                     <div style={{ display:"flex", flexDirection:"column", gap:"10px" }}>
                       {submissions.map((s: any) => (
-                        <div key={s.id} style={{ background:surf, border:"1px solid "+bdr, borderRadius:"12px", padding:"18px 22px", display:"flex", alignItems:"center", gap:"16px" }}>
+                        <div key={s.id}>
+                        <div style={{ background:surf, border:"1px solid "+bdr, borderRadius:"12px", padding:"18px 22px", display:"flex", alignItems:"center", gap:"16px" }}>
                           <div style={{ width:"44px", height:"44px", borderRadius:"10px", background:"rgba(26,86,255,0.08)", border:"1px solid rgba(26,86,255,0.15)", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", overflow:"hidden" }}>
                             {s.logo_url
                               ? <img src={`/api/image-proxy?url=${encodeURIComponent(s.logo_url)}`} alt={s.name} style={{ width:"100%", height:"100%", objectFit:"cover" }} onError={e=>(e.currentTarget.style.display="none")} />
@@ -439,6 +440,7 @@ export default function AdminPage() {
                             </div>
                           </div>
                         )}
+                        </div>
                       ))}
                     </div>
                   )}
