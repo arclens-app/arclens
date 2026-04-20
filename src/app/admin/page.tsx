@@ -382,7 +382,7 @@ export default function AdminPage() {
                         <div key={s.id} style={{ background:surf, border:"1px solid "+bdr, borderRadius:"12px", padding:"18px 22px", display:"flex", alignItems:"center", gap:"16px" }}>
                           <div style={{ width:"44px", height:"44px", borderRadius:"10px", background:"rgba(26,86,255,0.08)", border:"1px solid rgba(26,86,255,0.15)", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", overflow:"hidden" }}>
                             {s.logo_url
-                              ? <img src={s.logo_url} alt={s.name} style={{ width:"100%", height:"100%", objectFit:"cover" }} onError={e=>(e.currentTarget.style.display="none")} />
+                              ? <img src={`/api/image-proxy?url=${encodeURIComponent(s.logo_url)}`} alt={s.name} style={{ width:"100%", height:"100%", objectFit:"cover" }} onError={e=>(e.currentTarget.style.display="none")} />
                               : <span style={{ fontSize:"16px", fontWeight:700, color:"#8aaeff" }}>{s.name?.[0]}</span>
                             }
                           </div>
@@ -458,7 +458,7 @@ export default function AdminPage() {
                     <div key={p.id} style={{ background:surf, border:"1px solid "+bdr, borderRadius:"10px", padding:"14px 18px", display:"flex", alignItems:"center", gap:"14px" }}>
                       <div style={{ width:"38px", height:"38px", borderRadius:"8px", background:"rgba(26,86,255,0.06)", border:"1px solid "+bdr, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", overflow:"hidden" }}>
                         {p.logo_url
-                          ? <img src={p.logo_url} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }} onError={e=>(e.currentTarget.style.display="none")} />
+                          ? <img src={`/api/image-proxy?url=${encodeURIComponent(p.logo_url!)}`} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }} onError={e=>(e.currentTarget.style.display="none")} />
                           : <span style={{ fontSize:"13px", fontWeight:700, color:t3 }}>{p.name?.[0]}</span>
                         }
                       </div>
@@ -687,7 +687,7 @@ export default function AdminPage() {
                           return (
                             <div key={p.id} style={{ background:surf, border:"1px solid "+bdr, borderRadius:"10px", padding:"12px 16px", display:"flex", alignItems:"center", gap:"12px", flexWrap:"wrap" }}>
                               <div style={{ width:"34px", height:"34px", borderRadius:"8px", overflow:"hidden", background:"rgba(26,86,255,0.06)", border:"1px solid "+bdr, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                                {p.logo_url?<img src={p.logo_url} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }} onError={e=>(e.currentTarget.style.display="none")} />:<span style={{ fontSize:"13px", fontWeight:700, color:t3 }}>{p.name?.[0]}</span>}
+                                {p.logo_url?<img src={`/api/image-proxy?url=${encodeURIComponent(p.logo_url)}`} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }} onError={e=>(e.currentTarget.style.display="none")} />:<span style={{ fontSize:"13px", fontWeight:700, color:t3 }}>{p.name?.[0]}</span>}
                               </div>
                               <div style={{ minWidth:"120px", flex:"0 0 auto" }}>
                                 <div style={{ fontSize:"12px", fontWeight:600, color:t1 }}>{p.name}</div>
