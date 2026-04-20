@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
       const resend = new Resend(process.env.RESEND_API_KEY || "")
       await resend.emails.send({
         from:     "ArcLens <noreply@arclenz.xyz>",
-        reply_to: process.env.TEAM_EMAIL,
+        reply_to: process.env.TEAM_EMAIL || "arclensdev@gmail.com",
         to:       email.trim(),
         subject: `Your ArcLens dashboard for ${project.name}`,
         html: `<div style="font-family:monospace;max-width:520px;margin:0 auto;padding:40px 20px;background:#060c20;color:#e8ecff;"><div style="margin-bottom:32px;"><span style="font-size:20px;font-weight:700;color:#e8ecff;">Arc</span><span style="font-size:20px;font-weight:700;color:#1a56ff;">Lens</span></div><h1 style="font-size:22px;font-weight:700;margin:0 0 12px;color:#e8ecff;">Your founder dashboard</h1><p style="font-size:14px;color:#6b7da8;line-height:1.7;margin:0 0 28px;">Click below to access your dashboard for <strong style="color:#e8ecff;">${project.name}</strong>. Expires in 30 minutes.</p><a href="${dashboardUrl}" style="display:inline-block;padding:14px 28px;background:#1a56ff;color:#fff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;margin-bottom:28px;">Open my dashboard</a><p style="font-size:12px;color:#2e3a5c;">If you did not request this, ignore this email.</p></div>`,
