@@ -14,9 +14,10 @@ const NAV = [
     { id: "approvals",    label: "Approval Manager",  icon: "⚠", href: "/approvals", tag: "SAFETY" },
   ]},
   { section: "DISCOVER", items: [
-    { id: "start",        label: "Arc Beginners",         icon: "◈", href: "/start", tag: "NEW" },
     { id: "ecosystem",    label: "Arc Ecosystem",     icon: "◎", href: "/ecosystem" },
+    { id: "forge",        label: "Arc Trials",        icon: "✦", href: "/forge", tag: "NEW" },
     { id: "events",       label: "Events",            icon: "◆", href: "/events" },
+    { id: "start",        label: "Arc Beginners",     icon: "◈", href: "/start" },
   ]},
   { section: "DEVELOPERS", items: [
     { id: "registry",     label: "Contract Registry", icon: "✦", href: "/registry" },
