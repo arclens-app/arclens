@@ -56,6 +56,8 @@ export default function AdminPage() {
   const [locInputs, setLocInputs]     = useState<Record<number,{city:string;country:string;status:string;result:string}>>({})
   const [toast, setToast]             = useState<{ok:boolean;text:string}|null>(null)
   const [rejectingCampaignId, setRejectingCampaignId] = useState<number|null>(null)
+  const [rejectingProjectId, setRejectingProjectId]   = useState<number|null>(null)
+  const [rejectProjectReason, setRejectProjectReason] = useState("")
   const [rejectReason, setRejectReason] = useState("")
   const [editing, setEditing]         = useState<Project|null>(null)
   const [editForm, setEditForm]       = useState<Partial<Project>>({})
@@ -398,9 +400,45 @@ export default function AdminPage() {
                           <div style={{ display:"flex", gap:"8px", flexShrink:0 }}>
                             <ActionBtn onClick={() => act(s.id, "approve")} disabled={acting} color="green">Approve</ActionBtn>
                             <ActionBtn onClick={() => startEdit(s)} color="blue">Edit</ActionBtn>
-                            <ActionBtn onClick={() => confirmDelete(s.id, "projects")} disabled={acting} color="red">Reject</ActionBtn>
+                            <ActionBtn onClick={() => { setRejectingProjectId(s.id); setRejectProjectReason("") }} disabled={acting} color="red">Reject</ActionBtn>
                           </div>
                         </div>
+                        {rejectingProjectId === s.id && (
+                          <div style={{ borderTop:"1px solid rgba(224,51,72,0.15)", padding:"14px 22px 18px", background:"rgba(224,51,72,0.03)" }}>
+                            <div style={{ fontSize:"10px", fontFamily:mono, color:"#e03348", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:"8px" }}>Rejection reason (sent to builder)</div>
+                            <select
+                              value={rejectProjectReason}
+                              onChange={e => setRejectProjectReason(e.target.value)}
+                              style={{ width:"100%", background:surf2, border:"1px solid rgba(224,51,72,0.2)", borderRadius:"7px", padding:"8px 12px", fontSize:"12px", fontFamily:mono, color:rejectProjectReason ? t1 : t3, outline:"none", marginBottom:"8px", boxSizing:"border-box" as const }}
+                            >
+                              <option value="">Select a reason or type below...</option>
+                              <option value="Project does not appear to be deployed or active on Arc Testnet.">Not deployed or active on Arc Testnet</option>
+                              <option value="Insufficient project information — missing website, description, or verifiable links.">Insufficient information</option>
+                              <option value="Logo or branding does not meet listing standards.">Logo or branding quality</option>
+                              <option value="Project category or description appears misleading.">Misleading category or description</option>
+                              <option value="A duplicate or near-identical listing already exists.">Duplicate listing</option>
+                            </select>
+                            <textarea
+                              value={rejectProjectReason}
+                              onChange={e => setRejectProjectReason(e.target.value)}
+                              placeholder="Or write a custom reason..."
+                              rows={2}
+                              style={{ width:"100%", background:surf2, border:"1px solid rgba(224,51,72,0.2)", borderRadius:"7px", padding:"8px 12px", fontSize:"12px", fontFamily:mono, color:t1, outline:"none", resize:"vertical", lineHeight:1.6, boxSizing:"border-box" as const, marginBottom:"10px" }}
+                            />
+                            <div style={{ display:"flex", gap:"8px" }}>
+                              <button
+                                onClick={() => { act(s.id, "reject", "projects", { reason: rejectProjectReason }); setRejectingProjectId(null) }}
+                                disabled={acting}
+                                style={{ height:"30px", padding:"0 16px", background:"rgba(224,51,72,0.12)", color:"#e03348", fontSize:"11px", border:"1px solid rgba(224,51,72,0.3)", borderRadius:"5px", cursor:"pointer", fontWeight:600, opacity:acting?.6:1 }}>
+                                Confirm Reject
+                              </button>
+                              <button onClick={() => setRejectingProjectId(null)}
+                                style={{ height:"30px", padding:"0 14px", background:"transparent", color:t2, fontSize:"11px", border:"1px solid "+bdr, borderRadius:"5px", cursor:"pointer" }}>
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       ))}
                     </div>
                   )}
