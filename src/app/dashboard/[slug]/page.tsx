@@ -387,6 +387,8 @@ export default function DashboardPage() {
               ...(connectedWallet ? [
                 { key: "private", label: `Private (${privateReviews.length})` },
                 { key: "forge",   label: `Campaigns (${forgeCampaigns.length})` },
+              ] : []),
+              ...((connectedWallet || token) ? [
                 { key: "edit",    label: "Edit Listing" },
               ] : []),
             ] as const).map(tab => (

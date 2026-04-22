@@ -72,6 +72,7 @@ export default function AdminPage() {
   })
   const [eventLogoPreview, setEventLogoPreview] = useState<string|null>(null)
   const [eventLogoUploading, setEventLogoUploading] = useState(false)
+  const [search, setSearch] = useState("")
 
   const mono  = "'DM Mono', monospace"
   const surf  = "var(--surf, #0a0e1a)"
@@ -296,7 +297,7 @@ export default function AdminPage() {
           <div style={{ padding:"16px 10px 8px" }}>
             <div style={{ fontSize:"9px", fontFamily:mono, color:t3, textTransform:"uppercase", letterSpacing:"0.1em", padding:"0 6px 8px" }}>Review Queue</div>
             {queueTabs.map(t => (
-              <button key={t.id} onClick={() => setTab(t.id)} style={sidebarBtnStyle(tab === t.id)}>
+              <button key={t.id} onClick={() => { setTab(t.id); setSearch("") }} style={sidebarBtnStyle(tab === t.id)}>
                 <span>{t.label}</span>
                 {t.count > 0 && (
                   <span style={{ fontSize:"10px", fontFamily:mono, padding:"1px 6px", borderRadius:"10px",
@@ -314,7 +315,7 @@ export default function AdminPage() {
           <div style={{ padding:"8px 10px" }}>
             <div style={{ fontSize:"9px", fontFamily:mono, color:t3, textTransform:"uppercase", letterSpacing:"0.1em", padding:"0 6px 8px", marginTop:"8px" }}>Manage</div>
             {manageTabs.map(t => (
-              <button key={t.id} onClick={() => setTab(t.id)} style={sidebarBtnStyle(tab === t.id)}>
+              <button key={t.id} onClick={() => { setTab(t.id); setSearch("") }} style={sidebarBtnStyle(tab === t.id)}>
                 <span>{t.label}</span>
                 <span style={{ fontSize:"10px", fontFamily:mono, color: t.urgent ? "#e08810" : t3 }}>{t.count}</span>
               </button>
@@ -380,7 +381,12 @@ export default function AdminPage() {
                     <EmptyState icon="✓" title="All caught up" sub="No pending project submissions" />
                   ) : (
                     <div style={{ display:"flex", flexDirection:"column", gap:"10px" }}>
-                      {submissions.map((s: any) => (
+                      <input
+                        value={search} onChange={e => setSearch(e.target.value)}
+                        placeholder="Search by name..."
+                        style={{ height:"36px", background:surf2, border:"1px solid "+bdr, borderRadius:"8px", padding:"0 12px", fontSize:"12px", fontFamily:mono, color:t1, outline:"none", width:"100%", boxSizing:"border-box" as const }}
+                      />
+                      {submissions.filter((s:any) => s.name?.toLowerCase().includes(search.toLowerCase())).map((s: any) => (
                         <div key={s.id}>
                         <div style={{ background:surf, border:"1px solid "+bdr, borderRadius:"12px", padding:"18px 22px", display:"flex", alignItems:"center", gap:"16px" }}>
                           <div style={{ width:"44px", height:"44px", borderRadius:"10px", background:"rgba(26,86,255,0.08)", border:"1px solid rgba(26,86,255,0.15)", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", overflow:"hidden" }}>
@@ -492,9 +498,14 @@ export default function AdminPage() {
               {/* ── ALL PROJECTS ── */}
               {tab === "projects" && (
                 <div style={{ display:"flex", flexDirection:"column", gap:"8px" }}>
+                  <input
+                    value={search} onChange={e => setSearch(e.target.value)}
+                    placeholder="Search by name..."
+                    style={{ height:"36px", background:surf2, border:"1px solid "+bdr, borderRadius:"8px", padding:"0 12px", fontSize:"12px", fontFamily:mono, color:t1, outline:"none", width:"100%", boxSizing:"border-box" as const }}
+                  />
                   {projects.length === 0 ? (
                     <div style={{ padding:"48px", textAlign:"center", fontFamily:mono, fontSize:"11px", color:t3 }}>No approved projects yet</div>
-                  ) : projects.map((p: any) => (
+                  ) : projects.filter((p:any) => p.name?.toLowerCase().includes(search.toLowerCase())).map((p: any) => (
                     <div key={p.id} style={{ background:surf, border:"1px solid "+bdr, borderRadius:"10px", padding:"14px 18px", display:"flex", alignItems:"center", gap:"14px" }}>
                       <div style={{ width:"38px", height:"38px", borderRadius:"8px", background:"rgba(26,86,255,0.06)", border:"1px solid "+bdr, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", overflow:"hidden" }}>
                         {p.logo_url
