@@ -36,7 +36,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     return NextResponse.json({
       campaign:    campaignRes.rows[0],
       completions: completionsRes.rows,
-    })
+    }, { headers: { "Cache-Control": "public, s-maxage=30, stale-while-revalidate=60" } })
   } catch {
     return NextResponse.json({ error: "Server error" }, { status: 500 })
   }

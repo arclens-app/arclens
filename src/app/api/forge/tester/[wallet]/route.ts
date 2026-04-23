@@ -48,7 +48,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ wal
     return NextResponse.json({
       reputation: repRes.rows[0] || null,
       history:    historyRes.rows,
-    })
+    }, { headers: { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=120" } })
   } catch (e) {
     console.error(e)
     return NextResponse.json({ error: "Server error" }, { status: 500 })
