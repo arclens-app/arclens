@@ -25,7 +25,7 @@ export async function GET() {
       .map(p => ({ ...p, tx_count: 0 }))
 
     return NextResponse.json({ projects: result.rows, trending }, {
-      headers: { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=120" },
+      headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600" },
     })
   } catch {
     return NextResponse.json({ projects: [], trending: [] })
