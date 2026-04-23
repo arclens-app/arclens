@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { Pool } from "pg"
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL })
+const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
 
 const PROTECTED_NAMES = ["usdc","circle","arc bridge","arclens","uniswap","aave","compound","metamask"]
 

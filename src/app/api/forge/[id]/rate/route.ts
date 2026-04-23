@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { Pool } from "pg"
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL })
+const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
 
 // POST /api/forge/[id]/rate — founder rates a tester's submission
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {

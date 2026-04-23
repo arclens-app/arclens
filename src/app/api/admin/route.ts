@@ -1,7 +1,7 @@
 ﻿import { NextRequest, NextResponse } from "next/server"
 import { Pool } from "pg"
 import { Resend } from "resend"
-const pool   = new Pool({ connectionString: process.env.DATABASE_URL })
+const pool   = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
 const resend = new Resend(process.env.RESEND_API_KEY || "")
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || ""
 function checkAuth(pw: string) { return !!ADMIN_PASSWORD && pw === ADMIN_PASSWORD }

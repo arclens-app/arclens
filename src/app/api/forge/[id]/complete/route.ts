@@ -3,7 +3,7 @@ import { Pool } from "pg"
 import { getProvider } from "@/lib/arc"
 import { rateLimit, getIp } from "@/lib/ratelimit"
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL })
+const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
 
 // Check if a wallet has interacted with any of the provided contracts via Arc RPC event logs.
 // Checks campaign-level + per-task contract addresses in parallel.
