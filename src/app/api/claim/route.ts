@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Email does not match the submission email for this project" }, { status: 403 })
     }
     const token   = randomBytes(32).toString("hex")
-    const expires = new Date(Date.now() + 30 * 60 * 1000)
+    const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
     await pool.query(
       `UPDATE projects SET claim_token = $1, claim_token_expires = $2, owner_email = $3 WHERE id = $4`,
       [token, expires, email.trim().toLowerCase(), project.id]

@@ -145,6 +145,7 @@ export default function EcosystemPage() {
   async function submitProject() {
     if (!form.name.trim())    { setSubmitError("Project name is required"); return }
     if (!form.tagline.trim()) { setSubmitError("Tagline is required"); return }
+    if (!form.email.trim())   { setSubmitError("Contact email is required"); return }
     if (contractErr)          { setSubmitError(contractErr); return }
     setSubmitting(true)
     setSubmitError("")
@@ -357,7 +358,7 @@ export default function EcosystemPage() {
                     { k: "twitter",  l: "Twitter / X",  p: "@handle" },
                     { k: "github",   l: "GitHub",        p: "https://github.com/..." },
                     { k: "discord",  l: "Discord",       p: "https://discord.gg/..." },
-                    { k: "email",    l: "Contact Email", p: "you@email.com" },
+                    { k: "email",    l: "Contact Email *", p: "you@email.com" },
                     { k: "city",     l: "City",          p: "e.g. Lagos" },
                     { k: "country",  l: "Country",       p: "e.g. Nigeria" },
                   ].map((f: any) => (
