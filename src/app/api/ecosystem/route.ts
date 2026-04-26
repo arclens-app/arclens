@@ -34,7 +34,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   const body = await req.json()
-  const { name, tagline, description, category, website, twitter, github, discord, contract, logo_url, email } = body
+  const { name, tagline, description, category, website, twitter, github, discord, contract, logo_url, email, city, country } = body
 
   if (!name?.trim())    return NextResponse.json({ error: "Project name required" }, { status: 400 })
   if (!tagline?.trim()) return NextResponse.json({ error: "Tagline required" }, { status: 400 })
@@ -84,12 +84,13 @@ export async function POST(req: NextRequest) {
     }
 
     await pool.query(
-      `INSERT INTO projects (name, tagline, description, category, logo_url, website, twitter, github, discord, contract, email, approved, live, slug)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,false,false,$12)`,
+      `INSERT INTO projects (name, tagline, description, category, logo_url, website, twitter, github, discord, contract, email, city, country, approved, live, slug)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,false,false,$14)`,
       [name.trim(), tagline.trim(), description?.trim()||null, category||"DeFi",
        logo_url||null, website?.trim()||null, twitter?.trim()||null,
        github?.trim()||null, discord?.trim()||null,
-       contract?.trim()?.toLowerCase()||null, email.trim(), finalSlug]
+       contract?.trim()?.toLowerCase()||null, email.trim(),
+       city?.trim()||null, country?.trim()||null, finalSlug]
     )
     return NextResponse.json({ success: true, updated: false })
   } catch (err) {
