@@ -52,6 +52,7 @@ export default function DashboardPage() {
 
   // Edit form
   const [editForm, setEditForm]   = useState({ tagline: "", description: "", website: "", twitter: "", github: "", discord: "", contract: "", color: "", city: "", country: "" })
+  const [extraContracts, setExtraContracts] = useState<string[]>([])
   const [saving, setSaving]       = useState(false)
   const [saveSuccess, setSaveSuccess] = useState(false)
   const [saveError, setSaveError] = useState("")
@@ -116,6 +117,7 @@ export default function DashboardPage() {
           contract: data.project.contract || "", color: data.project.color || "",
           city: data.project.city || "", country: data.project.country || "",
         })
+        setExtraContracts(Array.isArray(data.project.contracts) ? data.project.contracts : [])
       } catch { setError("Failed to load dashboard") }
       finally { setLoading(false) }
     }
@@ -244,7 +246,7 @@ export default function DashboardPage() {
       const res  = await fetch("/api/update-project", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token, slug, wallet: connectedWallet, updates: editForm }),
+        body: JSON.stringify({ token, slug, wallet: connectedWallet, updates: { ...editForm, contracts: extraContracts.map(c=>c.trim()).filter(Boolean) } }),
       })
       const data = await res.json()
       if (data.success) {
@@ -770,7 +772,7 @@ export default function DashboardPage() {
                   { key: "twitter",     label: "X / Twitter",      ph: "@handle or https://x.com/..." },
                   { key: "github",      label: "GitHub",           ph: "https://github.com/..." },
                   { key: "discord",     label: "Discord",          ph: "https://discord.gg/..." },
-                  { key: "contract",    label: "Contract Address", ph: "0x..." },
+                  { key: "contract",    label: "Primary Contract Address", ph: "0x..." },
                   { key: "city",        label: "City",             ph: "e.g. Lagos, Singapore, New York" },
                   { key: "country",     label: "Country",          ph: "e.g. Nigeria, Singapore, USA" },
                 ].map(f => (
@@ -784,6 +786,21 @@ export default function DashboardPage() {
                     />
                   </div>
                 ))}
+                {/* Additional contracts */}
+                <div>
+                  <label style={{ display: "block", fontSize: "9.5px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "6px" }}>Additional Contract Addresses</label>
+                  {extraContracts.map((addr, i) => (
+                    <div key={i} style={{ display: "flex", gap: "6px", marginBottom: "6px" }}>
+                      <input value={addr} onChange={e => setExtraContracts(p => p.map((c,j) => j===i ? e.target.value : c))} placeholder={`0x... (contract ${i+2})`} style={{ ...inputStyle, flex: 1 }} />
+                      <button type="button" onClick={() => setExtraContracts(p => p.filter((_,j) => j!==i))}
+                        style={{ height: "38px", padding: "0 12px", background: "rgba(224,51,72,0.08)", color: "#e03348", border: "1px solid rgba(224,51,72,0.2)", borderRadius: "7px", cursor: "pointer", fontSize: "13px", flexShrink: 0 }}>✕</button>
+                    </div>
+                  ))}
+                  <button type="button" onClick={() => setExtraContracts(p => [...p, ""])}
+                    style={{ height: "30px", padding: "0 14px", background: "rgba(26,86,255,0.07)", color: "#8aaeff", border: "1px solid rgba(26,86,255,0.2)", borderRadius: "6px", cursor: "pointer", fontSize: "10px", fontFamily: mono }}>
+                    + Add another contract
+                  </button>
+                </div>
                 <div>
                   <label style={{ display: "block", fontSize: "9.5px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "5px" }}>Description</label>
                   <textarea

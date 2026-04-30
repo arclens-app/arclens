@@ -202,7 +202,7 @@ export async function GET(req: NextRequest) {
         pendingUpdates,
         events,
         pendingCampaigns,
-      })
+      }, { headers: { "Cache-Control": "no-store" } })
     } catch (e) {
       console.error("[Admin] list error:", e)
       return NextResponse.json({ error: String(e), submissions: [], projects: [], contracts: [], pendingUpdates: [], events: [] })
@@ -295,19 +295,25 @@ export async function POST(req: NextRequest) {
       const wasApproved = before.rows[0]?.approved === true
       const wasLive     = before.rows[0]?.live === true
 
+      const contractsArr = Array.isArray(data.contracts)
+        ? data.contracts.map((c: string) => c.trim()).filter(Boolean)
+        : []
       await pool.query(
         `UPDATE projects SET
           name=$1, tagline=$2, description=$3, category=$4,
           logo_url=$5, website=$6, twitter=$7, github=$8,
-          badge=$9, featured=$10, live=$11, approved=true,
-          city=$12, country=$13,
-          lat=CASE WHEN $14::text ~ '^-?[0-9]+(\.[0-9]+)?$' THEN $14::numeric ELSE lat END,
-          lng=CASE WHEN $15::text ~ '^-?[0-9]+(\.[0-9]+)?$' THEN $15::numeric ELSE lng END
-         WHERE id=$16`,
+          discord=$9, contract=$10, contracts=$11, email=$12, badge=$13, featured=$14, live=$15, approved=true,
+          city=$16, country=$17,
+          lat=CASE WHEN $18::text ~ '^-?[0-9]+(\.[0-9]+)?$' THEN $18::numeric ELSE lat END,
+          lng=CASE WHEN $19::text ~ '^-?[0-9]+(\.[0-9]+)?$' THEN $19::numeric ELSE lng END
+         WHERE id=$20`,
         [
           data.name || null, data.tagline || null, data.description || null,
           data.category || null, data.logo_url || null, data.website || null,
-          data.twitter || null, data.github || null, data.badge || null,
+          data.twitter || null, data.github || null,
+          data.discord?.trim() || null, data.contract?.trim() || null, contractsArr,
+          data.email?.trim() || null,
+          data.badge || null,
           data.featured ? true : false, data.live !== false,
           data.city?.trim() || null, data.country?.trim() || null,
           data.lat !== undefined && data.lat !== null && data.lat !== "" ? String(data.lat) : null,
