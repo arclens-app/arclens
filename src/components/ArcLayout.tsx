@@ -424,6 +424,27 @@ export default function ArcLayout({ children, active }: { children: React.ReactN
             + Add Arc
           </button>
 
+          {/* WALLET — compact topbar button */}
+          {connected && walletAddr ? (
+            <div style={{ display: "flex", alignItems: "center", gap: "2px", flexShrink: 0 }}>
+              <button onClick={() => { window.location.href = "/address/" + walletAddr }}
+                style={{ height: "30px", padding: "0 10px", background: "rgba(0,184,122,0.08)", color: usdc, fontSize: "11px", fontFamily: mono, border: "1px solid rgba(0,184,122,0.2)", borderRadius: "6px 0 0 6px", cursor: "pointer", display: "flex", alignItems: "center", gap: "5px" }}>
+                <div style={{ width: "5px", height: "5px", borderRadius: "50%", background: usdc, flexShrink: 0 }} />
+                {walletAddr.slice(0,6)}...{walletAddr.slice(-4)}
+              </button>
+              <button onClick={disconnectWallet}
+                style={{ height: "30px", padding: "0 8px", background: "rgba(0,184,122,0.08)", color: usdc, fontSize: "13px", fontFamily: mono, border: "1px solid rgba(0,184,122,0.2)", borderLeft: "none", borderRadius: "0 6px 6px 0", cursor: "pointer" }}>
+                ×
+              </button>
+            </div>
+          ) : (
+            <button onClick={connectWallet}
+              style={{ height: "30px", padding: "0 10px", background: "rgba(26,86,255,0.08)", color: "#8aaeff", fontSize: "11px", fontFamily: mono, border: "1px solid rgba(26,86,255,0.2)", borderRadius: "6px", cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0, display: "flex", alignItems: "center", gap: "5px" }}>
+              <div style={{ width: "5px", height: "5px", borderRadius: "50%", background: "#8aaeff", flexShrink: 0 }} />
+              Connect
+            </button>
+          )}
+
           {/* THEME */}
           <button onClick={() => { const next = !dark; setDark(next); localStorage.setItem("arclens-theme", next ? "dark" : "light") }}
             style={{ width: "30px", height: "30px", background: "transparent", border: "1px solid " + bdr, borderRadius: "6px", cursor: "pointer", color: t2, fontSize: "14px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>

@@ -52,6 +52,7 @@ export default function EcosystemPage() {
   const [search, setSearch]           = useState("")
   const [showForm, setShowForm]       = useState(false)
   const [form, setForm]               = useState({ name: "", tagline: "", description: "", category: "DeFi", website: "", twitter: "", github: "", discord: "", contract: "", email: "", city: "", country: "" })
+  const [extraContracts, setExtraContracts] = useState<string[]>([])
   const [logoUrl, setLogoUrl]         = useState<string | null>(null)
   const [logoPreview, setLogoPreview] = useState<string | null>(null)
   const [uploading, setUploading]     = useState(false)
@@ -153,7 +154,7 @@ export default function EcosystemPage() {
       const res  = await fetch("/api/ecosystem", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, logo_url: logoUrl }),
+        body: JSON.stringify({ ...form, logo_url: logoUrl, contracts: extraContracts.map(c=>c.trim()).filter(Boolean) }),
       })
       const data = await res.json()
       if (data.success) { setSubmitted(true); setIsUpdate(data.updated || false) }
@@ -368,10 +369,22 @@ export default function EcosystemPage() {
                     </div>
                   ))}
                   {/* Contract — separate so we can show inline duplicate error */}
-                  <div>
+                  <div style={{ gridColumn: "1 / -1" }}>
                     <label style={{ display: "block", fontSize: "9.5px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "5px" }}>Contract Address</label>
-                    <input style={{ ...inputStyle, borderColor: contractErr ? "rgba(224,51,72,0.5)" : undefined }} value={form.contract} onChange={e => { setForm(p => ({ ...p, contract: e.target.value })); checkContract(e.target.value) }} placeholder="0x... on Arc" spellCheck={false} />
+                    <input style={{ ...inputStyle, borderColor: contractErr ? "rgba(224,51,72,0.5)" : undefined }} value={form.contract} onChange={e => { setForm(p => ({ ...p, contract: e.target.value })); checkContract(e.target.value) }} placeholder="0x... (primary contract)" spellCheck={false} />
                     {contractErr && <div style={{ fontSize: "10px", fontFamily: mono, color: "#e03348", marginTop: "4px", lineHeight: 1.5 }}>✗ {contractErr}</div>}
+                    {/* Extra contracts */}
+                    {extraContracts.map((addr, i) => (
+                      <div key={i} style={{ display: "flex", gap: "6px", marginTop: "6px" }}>
+                        <input style={{ ...inputStyle, flex: 1 }} value={addr} onChange={e => setExtraContracts(p => p.map((c, j) => j===i ? e.target.value : c))} placeholder={`0x... (contract ${i+2})`} spellCheck={false} />
+                        <button type="button" onClick={() => setExtraContracts(p => p.filter((_,j) => j!==i))}
+                          style={{ height: "36px", padding: "0 10px", background: "rgba(224,51,72,0.08)", color: "#e03348", border: "1px solid rgba(224,51,72,0.2)", borderRadius: "7px", cursor: "pointer", fontSize: "13px", flexShrink: 0 }}>✕</button>
+                      </div>
+                    ))}
+                    <button type="button" onClick={() => setExtraContracts(p => [...p, ""])}
+                      style={{ marginTop: "8px", height: "28px", padding: "0 12px", background: "rgba(26,86,255,0.07)", color: "#8aaeff", border: "1px solid rgba(26,86,255,0.2)", borderRadius: "6px", cursor: "pointer", fontSize: "10px", fontFamily: mono }}>
+                      + Add another contract
+                    </button>
                   </div>
                   <div>
                     <label style={{ display: "block", fontSize: "9.5px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "5px" }}>Category</label>

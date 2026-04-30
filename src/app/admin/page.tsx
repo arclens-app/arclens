@@ -8,7 +8,7 @@ const BADGES = ["", "official", "verified", "claimed"]
 interface Project {
   id: number; name: string; tagline: string; category: string; description: string
   logo_url: string|null; email: string|null; website: string|null; twitter: string|null
-  github: string|null; discord: string|null; contract: string|null; badge: string|null
+  github: string|null; discord: string|null; contract: string|null; contracts: string[]|null; badge: string|null
   approved: boolean; live: boolean; featured: boolean; created_at: string
   city: string|null; country: string|null; lat: number|null; lng: number|null
 }
@@ -99,7 +99,7 @@ export default function AdminPage() {
   async function loadAll(p = password) {
     setLoading(true)
     try {
-      const res  = await fetch(`/api/admin?action=list&password=${p}`)
+      const res  = await fetch(`/api/admin?action=list&password=${p}&_=${Date.now()}`)
       const data = await res.json()
       setSubmissions(data.submissions || [])
       setProjects(data.projects || [])
@@ -145,7 +145,13 @@ export default function AdminPage() {
         body: JSON.stringify({ id: editing.id, action: "update", password, data: editForm }),
       })
       const data = await res.json()
-      if (data.success) { showToast(true, "Project updated"); setEditing(null); loadAll() }
+      if (data.success) {
+        showToast(true, "Project updated")
+        const merged = { ...editing, ...editForm } as Project
+        setProjects(prev => prev.map(p => String(p.id) === String(editing.id) ? merged : p))
+        setSubmissions(prev => prev.map(p => String(p.id) === String(editing.id) ? merged : p))
+        setEditing(null)
+      }
       else showToast(false, data.error || "Update failed")
     } catch { showToast(false, "Network error") }
     finally { setActing(false) }
@@ -922,7 +928,7 @@ export default function AdminPage() {
             {[
               {k:"name",l:"Name",type:"text"},{k:"tagline",l:"Tagline",type:"text"},{k:"description",l:"Description",type:"textarea"},
               {k:"website",l:"Website",type:"text"},{k:"twitter",l:"Twitter",type:"text"},{k:"github",l:"GitHub",type:"text"},
-              {k:"discord",l:"Discord",type:"text"},{k:"contract",l:"Contract Address",type:"text"},{k:"email",l:"Email",type:"text"},
+              {k:"discord",l:"Discord",type:"text"},{k:"contract",l:"Primary Contract Address",type:"text"},{k:"email",l:"Email",type:"text"},
               {k:"logo_url",l:"Logo URL",type:"text"},{k:"city",l:"City",type:"text"},{k:"country",l:"Country",type:"text"},
               {k:"lat",l:"Latitude",type:"text"},{k:"lng",l:"Longitude",type:"text"},
             ].map((f:any) => (
@@ -936,6 +942,22 @@ export default function AdminPage() {
                 }
               </div>
             ))}
+            {/* Additional contract addresses */}
+            <div style={{ marginBottom:"10px" }}>
+              <label style={{ display:"block", fontSize:"10px", fontFamily:mono, color:t3, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:"6px" }}>Additional Contract Addresses</label>
+              {((editForm as any).contracts || []).map((addr: string, i: number) => (
+                <div key={i} style={{ display:"flex", gap:"6px", marginBottom:"6px" }}>
+                  <input value={addr} onChange={e => setEditForm(p => { const arr = [...((p as any).contracts||[])]; arr[i]=e.target.value; return {...p, contracts: arr} })}
+                    style={{ flex:1, height:"34px", background:"var(--surf2,#0e1224)", border:"1px solid var(--bdr,rgba(255,255,255,0.06))", borderRadius:"7px", padding:"0 10px", fontSize:"11px", fontFamily:mono, color:t1, outline:"none", boxSizing:"border-box" as any }} placeholder="0x..." />
+                  <button onClick={() => setEditForm(p => { const arr = ((p as any).contracts||[]).filter((_:any, j:number)=>j!==i); return {...p, contracts: arr} })}
+                    style={{ height:"34px", padding:"0 10px", background:"rgba(224,51,72,0.08)", color:"#e03348", border:"1px solid rgba(224,51,72,0.2)", borderRadius:"7px", cursor:"pointer", fontSize:"12px" }}>✕</button>
+                </div>
+              ))}
+              <button onClick={() => setEditForm(p => ({...p, contracts: [...((p as any).contracts||[]), ""]}))}
+                style={{ height:"30px", padding:"0 12px", background:"rgba(26,86,255,0.08)", color:"#8aaeff", border:"1px solid rgba(26,86,255,0.2)", borderRadius:"6px", cursor:"pointer", fontSize:"11px", fontFamily:mono }}>
+                + Add Contract
+              </button>
+            </div>
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px", marginBottom:"10px" }}>
               <div>
                 <label style={{ display:"block", fontSize:"10px", fontFamily:mono, color:t3, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:"4px" }}>Category</label>

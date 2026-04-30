@@ -4,6 +4,7 @@ import { Pool } from "pg"
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
 
 const ALLOWED = ["tagline", "description", "website", "twitter", "github", "discord", "contract", "color", "city", "country"]
+const ALLOWED_ARRAY = ["contracts"]
 
 export async function POST(req: NextRequest) {
   try {
@@ -45,7 +46,7 @@ export async function POST(req: NextRequest) {
 
     // Get current project values
     const current = await pool.query(
-      `SELECT tagline, description, website, twitter, github, discord, contract, color, city, country FROM projects WHERE id = $1`,
+      `SELECT tagline, description, website, twitter, github, discord, contract, contracts, color, city, country FROM projects WHERE id = $1`,
       [projectId]
     )
     projectRow = current.rows[0]
@@ -53,6 +54,18 @@ export async function POST(req: NextRequest) {
     // Write each changed field to pending_updates
     let changeCount = 0
     for (const [key, value] of Object.entries(updates)) {
+      // Handle array fields (contracts)
+      if (ALLOWED_ARRAY.includes(key) && Array.isArray(value)) {
+        const newArr = (value as string[]).map(c => c.trim()).filter(Boolean)
+        const oldArr = Array.isArray(projectRow[key]) ? projectRow[key] : []
+        if (JSON.stringify(newArr.sort()) === JSON.stringify([...oldArr].sort())) continue
+        await pool.query(
+          `UPDATE projects SET contracts = $1 WHERE id = $2`,
+          [newArr, projectId]
+        )
+        changeCount++
+        continue
+      }
       if (!ALLOWED.includes(key) || typeof value !== "string") continue
       const newVal = (value as string).trim()
       const oldVal = projectRow[key] || ""
