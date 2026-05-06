@@ -29,7 +29,7 @@ async function sendCampaignEmail(campaignId: number, status: "approved" | "rejec
 
     if (status === "approved") {
       await resend.emails.send({
-        from:     "ArcLens <noreply@arclenz.xyz>",
+        from:     "ArcLens <support@mail.arclenz.xyz>",
         reply_to: process.env.TEAM_EMAIL || "arclensdev@gmail.com",
         to:       row.email,
         subject:  `Your campaign is live — ${row.title}`,
@@ -49,7 +49,7 @@ async function sendCampaignEmail(campaignId: number, status: "approved" | "rejec
       })
     } else {
       await resend.emails.send({
-        from:     "ArcLens <noreply@arclenz.xyz>",
+        from:     "ArcLens <support@mail.arclenz.xyz>",
         reply_to: process.env.TEAM_EMAIL || "arclensdev@gmail.com",
         to:       row.email,
         subject:  `Campaign update — ${row.title}`,
@@ -92,7 +92,7 @@ async function sendProjectEmail(projectId: number, status: "approved" | "rejecte
 
     if (status === "approved") {
       await resend.emails.send({
-        from:     "ArcLens <noreply@arclenz.xyz>",
+        from:     "ArcLens <support@mail.arclenz.xyz>",
         reply_to: process.env.TEAM_EMAIL || "arclensdev@gmail.com",
         to:       row.email,
         subject:  `Your ArcLens listing is live — ${row.name}`,
@@ -121,7 +121,7 @@ async function sendProjectEmail(projectId: number, status: "approved" | "rejecte
         : `<div style="padding:14px 18px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:8px;font-size:13px;color:#6b7da8;margin-bottom:24px;line-height:1.7;">No specific reason was provided. Reply to this email if you would like more context.</div>`
 
       await resend.emails.send({
-        from:     "ArcLens <noreply@arclenz.xyz>",
+        from:     "ArcLens <support@mail.arclenz.xyz>",
         reply_to: process.env.TEAM_EMAIL || "arclensdev@gmail.com",
         to:       row.email,
         subject:  `Your ArcLens listing submission — ${row.name}`,
