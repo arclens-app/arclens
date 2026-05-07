@@ -6,6 +6,37 @@ const resend = new Resend(process.env.RESEND_API_KEY || "")
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || ""
 function checkAuth(pw: string) { return !!ADMIN_PASSWORD && pw === ADMIN_PASSWORD }
 
+const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_APP_URL || "https://arclenz.xyz"
+
+function unsubFooter(email: string) {
+  const link = `${BASE_URL}/api/unsubscribe?email=${encodeURIComponent(email)}`
+  return `<hr style="border:none;border-top:1px solid rgba(255,255,255,0.06);margin:32px 0;">
+    <p style="font-size:11px;color:#1e2a40;text-align:center;line-height:1.8;">
+      You're receiving this because you submitted a project or campaign on ArcLens.<br>
+      <a href="${link}" style="color:#2e3a5c;text-decoration:underline;">Unsubscribe</a>
+    </p>`
+}
+
+function unsubHeaders(email: string) {
+  const url = `${BASE_URL}/api/unsubscribe?email=${encodeURIComponent(email)}`
+  return {
+    "List-Unsubscribe": `<${url}>, <mailto:support@mail.arclenz.xyz?subject=unsubscribe&body=${encodeURIComponent(email)}>`,
+    "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+  }
+}
+
+async function isUnsubscribed(email: string): Promise<boolean> {
+  try {
+    const r = await pool.query(
+      `SELECT 1 FROM email_unsubscribes WHERE email = $1`,
+      [email.toLowerCase().trim()]
+    )
+    return r.rows.length > 0
+  } catch {
+    return false
+  }
+}
+
 async function sendCampaignEmail(campaignId: number, status: "approved" | "rejected", reason?: string) {
   try {
     // Get campaign + project email
@@ -19,11 +50,11 @@ async function sendCampaignEmail(campaignId: number, status: "approved" | "rejec
     )
     const row = res.rows[0]
     if (!row?.email) return  // no email on file — silently skip
+    if (await isUnsubscribed(row.email)) return
 
-    const base_url      = process.env.NEXT_PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_APP_URL || "https://arclenz.xyz"
-    const campaignUrl   = `${base_url}/forge/${row.campaign_slug || campaignId}`
-    const dashboardUrl  = `${base_url}/dashboard/${row.project_slug || row.project_name?.toLowerCase().replace(/\s+/g, "-") || ""}`
-    const forgeUrl      = `${base_url}/forge`
+    const campaignUrl   = `${BASE_URL}/forge/${row.campaign_slug || campaignId}`
+    const dashboardUrl  = `${BASE_URL}/dashboard/${row.project_slug || row.project_name?.toLowerCase().replace(/\s+/g, "-") || ""}`
+    const forgeUrl      = `${BASE_URL}/forge`
     const base = `font-family:Arial,sans-serif;max-width:560px;margin:0 auto;padding:40px 24px;background:#060c20;color:#e8ecff;`
     const label = `font-size:11px;font-family:monospace;text-transform:uppercase;letter-spacing:0.1em;`
 
@@ -33,6 +64,7 @@ async function sendCampaignEmail(campaignId: number, status: "approved" | "rejec
         reply_to: process.env.TEAM_EMAIL || "arclensdev@gmail.com",
         to:       row.email,
         subject:  `Your campaign is live — ${row.title}`,
+        headers:  unsubHeaders(row.email),
         html: `<div style="${base}">
           <div style="margin-bottom:28px;"><span style="font-size:22px;font-weight:700;color:#e8ecff;">Arc</span><span style="font-size:22px;font-weight:700;color:#1a56ff;">Lens</span></div>
           <div style="${label}color:#00b87a;">Campaign Approved</div>
@@ -43,8 +75,7 @@ async function sendCampaignEmail(campaignId: number, status: "approved" | "rejec
           <a href="${campaignUrl}" style="display:inline-block;padding:13px 28px;background:#1a56ff;color:#fff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;margin-bottom:16px;">View Live Campaign →</a>
           <br>
           <a href="${dashboardUrl}" style="display:inline-block;padding:13px 28px;background:transparent;color:#8aaeff;text-decoration:none;border-radius:8px;font-size:14px;border:1px solid rgba(26,86,255,0.3);">Open Dashboard</a>
-          <hr style="border:none;border-top:1px solid rgba(255,255,255,0.06);margin:32px 0;">
-          <p style="font-size:12px;color:#2e3a5c;">You're receiving this because your project submitted a campaign on ArcLens.</p>
+          ${unsubFooter(row.email)}
         </div>`,
       })
     } else {
@@ -53,6 +84,7 @@ async function sendCampaignEmail(campaignId: number, status: "approved" | "rejec
         reply_to: process.env.TEAM_EMAIL || "arclensdev@gmail.com",
         to:       row.email,
         subject:  `Campaign update — ${row.title}`,
+        headers:  unsubHeaders(row.email),
         html: `<div style="${base}">
           <div style="margin-bottom:28px;"><span style="font-size:22px;font-weight:700;color:#e8ecff;">Arc</span><span style="font-size:22px;font-weight:700;color:#1a56ff;">Lens</span></div>
           <div style="${label}color:#e03348;">Campaign Not Approved</div>
@@ -65,8 +97,7 @@ async function sendCampaignEmail(campaignId: number, status: "approved" | "rejec
             You can resubmit a revised campaign from the Arc Trials page. If you have questions, reply to this email.
           </p>
           <a href="${forgeUrl}" style="display:inline-block;padding:13px 28px;background:#1a56ff;color:#fff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;">Go to Arc Trials</a>
-          <hr style="border:none;border-top:1px solid rgba(255,255,255,0.06);margin:32px 0;">
-          <p style="font-size:12px;color:#2e3a5c;">You're receiving this because your project submitted a campaign on ArcLens.</p>
+          ${unsubFooter(row.email)}
         </div>`,
       })
     }
@@ -83,10 +114,10 @@ async function sendProjectEmail(projectId: number, status: "approved" | "rejecte
     )
     const row = res.rows[0]
     if (!row?.email) return
+    if (await isUnsubscribed(row.email)) return
 
-    const base_url     = process.env.NEXT_PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_APP_URL || "https://arclenz.xyz"
-    const ecosystemUrl = `${base_url}/ecosystem`
-    const dashboardUrl = `${base_url}/dashboard/${row.slug || row.name?.toLowerCase().replace(/\s+/g, "-") || ""}`
+    const ecosystemUrl = `${BASE_URL}/ecosystem`
+    const dashboardUrl = `${BASE_URL}/dashboard/${row.slug || row.name?.toLowerCase().replace(/\s+/g, "-") || ""}`
     const base  = `font-family:Arial,sans-serif;max-width:560px;margin:0 auto;padding:40px 24px;background:#060c20;color:#e8ecff;`
     const label = `font-size:11px;font-family:monospace;text-transform:uppercase;letter-spacing:0.1em;`
 
@@ -96,6 +127,7 @@ async function sendProjectEmail(projectId: number, status: "approved" | "rejecte
         reply_to: process.env.TEAM_EMAIL || "arclensdev@gmail.com",
         to:       row.email,
         subject:  `Your ArcLens listing is live — ${row.name}`,
+        headers:  unsubHeaders(row.email),
         html: `<div style="${base}">
           <div style="margin-bottom:28px;"><span style="font-size:22px;font-weight:700;color:#e8ecff;">Arc</span><span style="font-size:22px;font-weight:700;color:#1a56ff;">Lens</span></div>
           <div style="${label}color:#00b87a;">Listing Approved</div>
@@ -109,10 +141,8 @@ async function sendProjectEmail(projectId: number, status: "approved" | "rejecte
           <a href="${dashboardUrl}" style="display:inline-block;padding:13px 28px;background:#1a56ff;color:#fff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;margin-bottom:16px;">Claim your dashboard →</a>
           <br>
           <a href="${ecosystemUrl}" style="display:inline-block;padding:13px 28px;background:transparent;color:#8aaeff;text-decoration:none;border-radius:8px;font-size:14px;border:1px solid rgba(26,86,255,0.3);margin-top:8px;">View on Ecosystem</a>
-          <hr style="border:none;border-top:1px solid rgba(255,255,255,0.06);margin:32px 0;">
-          <p style="font-size:12px;color:#2e3a5c;margin:0 0 6px;">— ArcLens Team</p>
-          <p style="font-size:12px;color:#2e3a5c;margin:0 0 6px;">arclenz.xyz · @arclens_app</p>
-          <p style="font-size:11px;color:#1e2a40;margin:16px 0 0;">⚠ We will never DM you first or ask for funds. Always verify you are communicating through official ArcLens channels.</p>
+          ${unsubFooter(row.email)}
+          <p style="font-size:11px;color:#1e2a40;margin:8px 0 0;text-align:center;">⚠ We will never DM you first or ask for funds. Always verify you are communicating through official ArcLens channels.</p>
         </div>`,
       })
     } else {
@@ -125,6 +155,7 @@ async function sendProjectEmail(projectId: number, status: "approved" | "rejecte
         reply_to: process.env.TEAM_EMAIL || "arclensdev@gmail.com",
         to:       row.email,
         subject:  `Your ArcLens listing submission — ${row.name}`,
+        headers:  unsubHeaders(row.email),
         html: `<div style="${base}">
           <div style="margin-bottom:28px;"><span style="font-size:22px;font-weight:700;color:#e8ecff;">Arc</span><span style="font-size:22px;font-weight:700;color:#1a56ff;">Lens</span></div>
           <div style="${label}color:#e03348;">Listing Not Approved</div>
@@ -137,11 +168,7 @@ async function sendProjectEmail(projectId: number, status: "approved" | "rejecte
             If this is something you can address, you are welcome to resubmit once those changes have been made. Use the same project name and email when resubmitting so we can track the update. If you believe this decision was made in error, simply reply to this email and we will take another look.
           </p>
           <a href="${ecosystemUrl}" style="display:inline-block;padding:13px 28px;background:#1a56ff;color:#fff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;">View Ecosystem Directory</a>
-          <hr style="border:none;border-top:1px solid rgba(255,255,255,0.06);margin:32px 0;">
-          <p style="font-size:12px;color:#2e3a5c;margin:0 0 6px;">We appreciate you building on Arc and hope to see your project listed in the future.</p>
-          <p style="font-size:12px;color:#2e3a5c;margin:0 0 6px;">— ArcLens Team</p>
-          <p style="font-size:12px;color:#2e3a5c;margin:0 0 6px;">arclenz.xyz · @arclens_app</p>
-          <p style="font-size:11px;color:#1e2a40;margin:16px 0 0;">⚠ We will never DM you first or ask for funds. Always verify you are communicating through official ArcLens channels.</p>
+          ${unsubFooter(row.email)}
         </div>`,
       })
     }

@@ -10,11 +10,11 @@ export async function GET(req: NextRequest) {
   // Cache at Vercel edge — blocks/txs change fast so keep short,
   // but even 10s cache cuts invocations dramatically under load
   const isStatic = path.includes("addresses/0x000") || path.includes("tokens")
-  const maxAge   = isStatic ? 60 : 10
+  const maxAge   = isStatic ? 120 : 20
 
   return NextResponse.json(data, {
     headers: {
-      "Cache-Control": `public, s-maxage=${maxAge}, stale-while-revalidate=30`,
+      "Cache-Control": `public, s-maxage=${maxAge}, stale-while-revalidate=60`,
     },
   })
 }

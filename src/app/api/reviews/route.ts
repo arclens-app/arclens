@@ -7,10 +7,10 @@ const CATEGORIES = ["Product Experience", "Performance", "UI/UX", "Customer Supp
 
 async function getWalletBadge(wallet: string, contract: string | null): Promise<string> {
   try {
-    // Check if wallet has transacted with the specific contract
     if (contract) {
       const res = await fetch(
-        `https://testnet.arcscan.app/api/v2/addresses/${wallet}/transactions?filter=to&limit=10`
+        `https://testnet.arcscan.app/api/v2/addresses/${wallet}/transactions?filter=to&limit=10`,
+        { signal: AbortSignal.timeout(4000) }
       )
       const data = await res.json()
       const txs = data?.items || []
@@ -20,9 +20,9 @@ async function getWalletBadge(wallet: string, contract: string | null): Promise<
       if (usedContract) return "verified"
     }
 
-    // Check if wallet has any Arc activity at all
     const res2 = await fetch(
-      `https://testnet.arcscan.app/api/v2/addresses/${wallet}/counters`
+      `https://testnet.arcscan.app/api/v2/addresses/${wallet}/counters`,
+      { signal: AbortSignal.timeout(4000) }
     )
     const data2 = await res2.json()
     const txCount = parseInt(data2?.transactions_count || "0")

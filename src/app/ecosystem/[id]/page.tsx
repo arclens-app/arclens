@@ -53,6 +53,7 @@ const CAT_COLOR: Record<string, string> = {
   Infrastructure: "#1a56ff", DeFi: "#00d990", NFT: "#c08828",
   Payments: "#00d990", Gaming: "#a855f7", Social: "#ec4899",
   AI: "#8aaeff", Bridge: "#e08810",
+  Finance: "#0ea5e9", Trading: "#f59e0b", Custody: "#6366f1",
 }
 
 function hashStr(s: string): string {
