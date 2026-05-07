@@ -119,15 +119,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // mode=update patches existing records with description + twitter
+    // mode=update patches existing records with description, twitter, and logo
     if (mode === "update") {
       let updated = 0
       for (const p of ARC_PROJECTS) {
         await pool.query(
           `UPDATE projects
-           SET description = $1, twitter = $2
-           WHERE LOWER(name) = LOWER($3) AND badge = 'official'`,
-          [p.description || null, p.twitter || null, p.name]
+           SET description = $1, twitter = $2, logo_url = $3
+           WHERE LOWER(name) = LOWER($4) AND badge = 'official'`,
+          [p.description || null, p.twitter || null, `https://icon.horse/icon/${p.logo}`, p.name]
         )
         updated++
       }
