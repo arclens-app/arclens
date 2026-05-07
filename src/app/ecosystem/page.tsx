@@ -38,10 +38,11 @@ function imgSrc(url: string | null): string | null {
   return `/api/image-proxy?url=${encodeURIComponent(url)}`
 }
 
-const CATEGORIES = ["All", "Infrastructure", "DeFi", "AI", "Payments", "NFT", "Gaming", "Social", "Developer Tools", "Bridge", "Identity", "Wallet", "Exchange", "Lending", "Prediction Market", "RWA", "DAO", "Stablecoin", "Derivatives", "Insurance", "Launchpad", "Oracle", "Analytics", "Other"]
+const CATEGORIES = ["All", "Infrastructure", "DeFi", "AI", "Payments", "NFT", "Gaming", "Social", "Developer Tools", "Bridge", "Identity", "Wallet", "Exchange", "Lending", "Prediction Market", "RWA", "DAO", "Stablecoin", "Derivatives", "Insurance", "Launchpad", "Oracle", "Analytics", "Finance", "Trading", "Custody", "Other"]
 const CAT_COLOR: Record<string, string> = {
   Infrastructure: "#1a56ff", DeFi: "#00d990", NFT: "#c08828",
   Payments: "#00d990", Gaming: "#a855f7", Social: "#ec4899",
+  Finance: "#0ea5e9", Trading: "#f59e0b", Custody: "#6366f1",
 }
 
 export default function EcosystemPage() {
@@ -389,7 +390,7 @@ export default function EcosystemPage() {
                   <div>
                     <label style={{ display: "block", fontSize: "9.5px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "5px" }}>Category</label>
                     <select style={{ ...inputStyle }} value={form.category} onChange={e => setForm(p => ({ ...p, category: e.target.value }))}>
-                      {["Infrastructure","DeFi","AI","Payments","NFT","Gaming","Social","Developer Tools","Bridge","Identity","Wallet","Exchange","Lending","Prediction Market","RWA","DAO","Stablecoin","Derivatives","Insurance","Launchpad","Oracle","Analytics","Other"].map(c => <option key={c} value={c}>{c}</option>)}
+                      {["Infrastructure","DeFi","AI","Payments","NFT","Gaming","Social","Developer Tools","Bridge","Identity","Wallet","Exchange","Lending","Prediction Market","RWA","DAO","Stablecoin","Derivatives","Insurance","Launchpad","Oracle","Analytics","Finance","Trading","Custody","Other"].map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
                   </div>
                 </div>
