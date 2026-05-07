@@ -15,6 +15,7 @@ export async function GET(req: NextRequest) {
     "arclens.app",
     "cloudflare-ipfs.com",
     "ipfs.io",
+    "logo.clearbit.com",
   ]
   try {
     const hostname = new URL(url).hostname
