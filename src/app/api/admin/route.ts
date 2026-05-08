@@ -83,7 +83,7 @@ async function sendCampaignEmail(campaignId: number, status: "approved" | "rejec
         from:     "ArcLens <support@mail.arclenz.xyz>",
         reply_to: process.env.TEAM_EMAIL || "arclensdev@gmail.com",
         to:       row.email,
-        subject:  `Campaign update — ${row.title}`,
+        subject:  `Campaign not approved — ${row.title}`,
         headers:  unsubHeaders(row.email),
         html: `<div style="${base}">
           <div style="margin-bottom:28px;"><span style="font-size:22px;font-weight:700;color:#e8ecff;">Arc</span><span style="font-size:22px;font-weight:700;color:#1a56ff;">Lens</span></div>
@@ -103,6 +103,151 @@ async function sendCampaignEmail(campaignId: number, status: "approved" | "rejec
     }
   } catch (err) {
     console.error("[Admin] Campaign email failed:", err)
+  }
+}
+
+async function sendProjectUpdateEmail(
+  projectId: number,
+  status: "approved" | "rejected",
+  reason?: string,
+  changes?: Array<{ field: string; new_value: string }>
+) {
+  try {
+    const res = await pool.query(`SELECT name, email, slug FROM projects WHERE id = $1`, [projectId])
+    const row = res.rows[0]
+    if (!row?.email) return
+    if (await isUnsubscribed(row.email)) return
+
+    const slug         = row.slug || row.name?.toLowerCase().replace(/\s+/g, "-") || ""
+    const listingUrl   = `${BASE_URL}/ecosystem/${slug}`
+    const dashboardUrl = `${BASE_URL}/dashboard/${slug}`
+    const base  = `font-family:Arial,sans-serif;max-width:560px;margin:0 auto;padding:40px 24px;background:#060c20;color:#e8ecff;`
+    const label = `font-size:11px;font-family:monospace;text-transform:uppercase;letter-spacing:0.1em;`
+
+    const FIELD_LABELS: Record<string, string> = {
+      name: "Project name", tagline: "Tagline", description: "Description",
+      logo_url: "Logo", website: "Website", twitter: "X / Twitter",
+      github: "GitHub", discord: "Discord", contract: "Contract address",
+    }
+
+    if (status === "approved") {
+      const changesHtml = changes?.length
+        ? `<div style="padding:14px 16px;background:rgba(0,184,122,0.05);border:1px solid rgba(0,184,122,0.15);border-radius:8px;margin-bottom:24px;">
+            <div style="font-size:9px;font-family:monospace;color:#00b87a;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:10px;">Changes applied</div>
+            ${changes.map(c => `<div style="font-size:12px;color:#e8ecff;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
+              <span style="color:#6b7da8;">${FIELD_LABELS[c.field] || c.field}</span>
+              <span style="color:#2e3a5c;margin:0 6px;">→</span>
+              <span>${String(c.new_value).substring(0, 80)}${String(c.new_value).length > 80 ? "…" : ""}</span>
+            </div>`).join("")}
+          </div>`
+        : ""
+
+      await resend.emails.send({
+        from:     "ArcLens <support@mail.arclenz.xyz>",
+        reply_to: process.env.TEAM_EMAIL || "arclensdev@gmail.com",
+        to:       row.email,
+        subject:  `Listing updates live — ${row.name}`,
+        headers:  unsubHeaders(row.email),
+        html: `<div style="${base}">
+          <div style="margin-bottom:28px;"><span style="font-size:22px;font-weight:700;color:#e8ecff;">Arc</span><span style="font-size:22px;font-weight:700;color:#1a56ff;">Lens</span></div>
+          <div style="${label}color:#00b87a;">Listing Updates Applied</div>
+          <h1 style="font-size:22px;font-weight:700;margin:10px 0 8px;color:#e8ecff;">${row.name}</h1>
+          <p style="font-size:14px;color:#6b7da8;line-height:1.8;margin:0 0 20px;">
+            Your requested changes have been reviewed and are now live on the Arc Ecosystem directory.
+          </p>
+          ${changesHtml}
+          <a href="${listingUrl}" style="display:inline-block;padding:13px 28px;background:#1a56ff;color:#fff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;margin-bottom:12px;">View Live Listing →</a>
+          ${unsubFooter(row.email)}
+        </div>`,
+      })
+    } else {
+      await resend.emails.send({
+        from:     "ArcLens <support@mail.arclenz.xyz>",
+        reply_to: process.env.TEAM_EMAIL || "arclensdev@gmail.com",
+        to:       row.email,
+        subject:  `Listing update not approved — ${row.name}`,
+        headers:  unsubHeaders(row.email),
+        html: `<div style="${base}">
+          <div style="margin-bottom:28px;"><span style="font-size:22px;font-weight:700;color:#e8ecff;">Arc</span><span style="font-size:22px;font-weight:700;color:#1a56ff;">Lens</span></div>
+          <div style="${label}color:#e03348;">Listing Update Not Approved</div>
+          <h1 style="font-size:22px;font-weight:700;margin:10px 0 8px;color:#e8ecff;">${row.name}</h1>
+          <p style="font-size:14px;color:#6b7da8;line-height:1.8;margin:0 0 16px;">
+            Your requested listing changes were not approved at this time.
+          </p>
+          ${reason ? `<div style="padding:14px 18px;background:rgba(224,51,72,0.08);border:1px solid rgba(224,51,72,0.2);border-radius:8px;font-size:13px;color:#e8ecff;margin-bottom:24px;line-height:1.7;">${reason}</div>` : ""}
+          <p style="font-size:14px;color:#6b7da8;line-height:1.8;margin:0 0 28px;">
+            You can submit a revised request from your project dashboard. Reply to this email if you have questions.
+          </p>
+          <a href="${dashboardUrl}" style="display:inline-block;padding:13px 28px;background:#1a56ff;color:#fff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;">Open Dashboard →</a>
+          ${unsubFooter(row.email)}
+        </div>`,
+      })
+    }
+  } catch (err) {
+    console.error("[Admin] Project update email failed:", err)
+  }
+}
+
+async function sendCampaignUpdateEmail(campaignId: number, campaignTitle: string, status: "approved" | "rejected", reason?: string) {
+  try {
+    const res = await pool.query(
+      `SELECT c.slug AS campaign_slug, p.email, p.name AS project_name
+       FROM campaigns c
+       LEFT JOIN projects p ON p.owner_wallet = c.creator_wallet AND p.approved = true
+       WHERE c.id = $1 ORDER BY p.created_at DESC LIMIT 1`,
+      [campaignId]
+    )
+    const row = res.rows[0]
+    if (!row?.email) return
+    if (await isUnsubscribed(row.email)) return
+
+    const campaignUrl = `${BASE_URL}/forge/${row.campaign_slug || campaignId}`
+    const base  = `font-family:Arial,sans-serif;max-width:560px;margin:0 auto;padding:40px 24px;background:#060c20;color:#e8ecff;`
+    const label = `font-size:11px;font-family:monospace;text-transform:uppercase;letter-spacing:0.1em;`
+
+    if (status === "approved") {
+      await resend.emails.send({
+        from:     "ArcLens <support@mail.arclenz.xyz>",
+        reply_to: process.env.TEAM_EMAIL || "arclensdev@gmail.com",
+        to:       row.email,
+        subject:  `Campaign update approved — ${campaignTitle}`,
+        headers:  unsubHeaders(row.email),
+        html: `<div style="${base}">
+          <div style="margin-bottom:28px;"><span style="font-size:22px;font-weight:700;color:#e8ecff;">Arc</span><span style="font-size:22px;font-weight:700;color:#1a56ff;">Lens</span></div>
+          <div style="${label}color:#00b87a;">Campaign Update Approved</div>
+          <h1 style="font-size:22px;font-weight:700;margin:10px 0 8px;color:#e8ecff;">${campaignTitle}</h1>
+          <p style="font-size:14px;color:#6b7da8;line-height:1.8;margin:0 0 28px;">
+            Your requested changes have been reviewed and applied to your campaign. They are now live.
+          </p>
+          <a href="${campaignUrl}" style="display:inline-block;padding:13px 28px;background:#1a56ff;color:#fff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;">View Campaign →</a>
+          ${unsubFooter(row.email)}
+        </div>`,
+      })
+    } else {
+      await resend.emails.send({
+        from:     "ArcLens <support@mail.arclenz.xyz>",
+        reply_to: process.env.TEAM_EMAIL || "arclensdev@gmail.com",
+        to:       row.email,
+        subject:  `Campaign update not approved — ${campaignTitle}`,
+        headers:  unsubHeaders(row.email),
+        html: `<div style="${base}">
+          <div style="margin-bottom:28px;"><span style="font-size:22px;font-weight:700;color:#e8ecff;">Arc</span><span style="font-size:22px;font-weight:700;color:#1a56ff;">Lens</span></div>
+          <div style="${label}color:#e03348;">Campaign Update Not Approved</div>
+          <h1 style="font-size:22px;font-weight:700;margin:10px 0 8px;color:#e8ecff;">${campaignTitle}</h1>
+          <p style="font-size:14px;color:#6b7da8;line-height:1.8;margin:0 0 16px;">
+            Your requested campaign changes were not approved at this time.
+          </p>
+          ${reason ? `<div style="padding:14px 18px;background:rgba(224,51,72,0.08);border:1px solid rgba(224,51,72,0.2);border-radius:8px;font-size:13px;color:#e8ecff;margin-bottom:24px;line-height:1.7;">${reason}</div>` : ""}
+          <p style="font-size:14px;color:#6b7da8;line-height:1.8;margin:0 0 28px;">
+            You can submit a revised request from your campaign page. If you have questions, reply to this email.
+          </p>
+          <a href="${campaignUrl}" style="display:inline-block;padding:13px 28px;background:#1a56ff;color:#fff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;">View Campaign →</a>
+          ${unsubFooter(row.email)}
+        </div>`,
+      })
+    }
+  } catch (err) {
+    console.error("[Admin] Campaign update email failed:", err)
   }
 }
 
@@ -209,6 +354,13 @@ export async function GET(req: NextRequest) {
         const ev = await pool.query("SELECT * FROM events ORDER BY created_at DESC")
         events = ev.rows
       } catch { }
+      let pendingCampaignUpdates: unknown[] = []
+      try {
+        const pcu = await pool.query(
+          `SELECT * FROM pending_campaign_updates WHERE status = 'pending' ORDER BY submitted_at DESC`
+        )
+        pendingCampaignUpdates = pcu.rows
+      } catch { }
       let pendingCampaigns: unknown[] = []
       try {
         const pc = await pool.query(
@@ -229,6 +381,7 @@ export async function GET(req: NextRequest) {
         pendingUpdates,
         events,
         pendingCampaigns,
+        pendingCampaignUpdates,
       }, { headers: { "Cache-Control": "no-store" } })
     } catch (e) {
       console.error("[Admin] list error:", e)
@@ -357,6 +510,25 @@ export async function POST(req: NextRequest) {
 
       return NextResponse.json({ success: true })
     }
+    if (action === "approve-all-updates") {
+      const updates = await pool.query(
+        `SELECT * FROM pending_updates WHERE project_id = $1 AND status = 'pending'`, [id]
+      )
+      const appliedChanges: Array<{ field: string; new_value: string }> = []
+      for (const u of updates.rows as any[]) {
+        await pool.query(`UPDATE projects SET ${u.field} = $1 WHERE id = $2`, [u.new_value, u.project_id])
+        await pool.query(`UPDATE pending_updates SET status = 'approved' WHERE id = $1`, [u.id])
+        appliedChanges.push({ field: u.field, new_value: String(u.new_value) })
+      }
+      await sendProjectUpdateEmail(Number(id), "approved", undefined, appliedChanges)
+      return NextResponse.json({ success: true })
+    }
+    if (action === "reject-all-updates") {
+      const reason = data?.reason?.trim() || null
+      await pool.query(`UPDATE pending_updates SET status = 'rejected' WHERE project_id = $1 AND status = 'pending'`, [id])
+      await sendProjectUpdateEmail(Number(id), "rejected", reason || undefined)
+      return NextResponse.json({ success: true })
+    }
     if (action === "approve-update") {
       const upd = await pool.query(`SELECT * FROM pending_updates WHERE id = $1`, [id])
       if (upd.rows.length > 0) {
@@ -368,6 +540,29 @@ export async function POST(req: NextRequest) {
     }
     if (action === "reject-update") {
       await pool.query(`UPDATE pending_updates SET status = 'rejected' WHERE id = $1`, [id])
+      return NextResponse.json({ success: true })
+    }
+    if (action === "approve-campaign-update") {
+      const upd = await pool.query(`SELECT * FROM pending_campaign_updates WHERE id = $1`, [id])
+      if (upd.rows.length > 0) {
+        const u = upd.rows[0] as any
+        const ch = u.proposed_changes as Record<string, any>
+        const keys = Object.keys(ch)
+        const setClauses = keys.map((k, i) => `${k} = $${i + 2}`).join(", ")
+        await pool.query(`UPDATE campaigns SET ${setClauses} WHERE id = $1`, [u.campaign_id, ...keys.map(k => ch[k])])
+        await pool.query(`UPDATE pending_campaign_updates SET status = 'approved' WHERE id = $1`, [id])
+        await sendCampaignUpdateEmail(u.campaign_id, u.campaign_title, "approved")
+      }
+      return NextResponse.json({ success: true })
+    }
+    if (action === "reject-campaign-update") {
+      const reason = data?.reason?.trim() || null
+      const upd = await pool.query(`SELECT * FROM pending_campaign_updates WHERE id = $1`, [id])
+      await pool.query(`UPDATE pending_campaign_updates SET status = 'rejected', admin_note = $2 WHERE id = $1`, [id, reason])
+      if (upd.rows.length > 0) {
+        const u = upd.rows[0] as any
+        await sendCampaignUpdateEmail(u.campaign_id, u.campaign_title, "rejected", reason || undefined)
+      }
       return NextResponse.json({ success: true })
     }
     if (action === "feature-event") {
