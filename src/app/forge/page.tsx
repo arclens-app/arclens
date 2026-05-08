@@ -320,23 +320,22 @@ export default function ForgePage() {
                     display: "flex", flexDirection: "column", gap: 12,
                   }}
                 >
-                  {/* Top bar: abbr badge + logo/initials + title */}
-                  <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
-                    {/* Type abbr badge */}
-                    <div style={{ width: 32, height: 32, borderRadius: 6, background: `${tm.color}15`, border: `1px solid ${tm.color}30`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                      <span style={{ fontSize: 9, fontWeight: 800, color: tm.color, fontFamily: "monospace" }}>{tm.abbr}</span>
-                    </div>
+                  {/* Top bar: logo + title + type badge */}
+                  <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
                     {/* Logo or initials */}
-                    <div style={{ width: 32, height: 32, borderRadius: 8, background: "#0e1224", border: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", flexShrink: 0 }}>
+                    <div style={{ width: 48, height: 48, borderRadius: 12, background: `${tm.color}12`, border: `1px solid ${tm.color}25`, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", flexShrink: 0 }}>
                       {logoUrl
                         ? <img src={logoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                        : <span style={{ fontSize: 11, fontWeight: 700, color: "#6b7da8" }}>{initials}</span>
+                        : <span style={{ fontSize: 16, fontWeight: 700, color: tm.color }}>{initials}</span>
                       }
                     </div>
                     {/* Title block */}
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 14, fontWeight: 700, color: "#e8ecff", lineHeight: 1.3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.title}</div>
-                      {c.project_name && <div style={{ fontSize: 11, color: "#6b7da8", marginTop: 1 }}>{c.project_name}</div>}
+                    <div style={{ flex: 1, minWidth: 0, paddingTop: 2 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4, flexWrap: "wrap" }}>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: "#e8ecff", lineHeight: 1.3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.title}</div>
+                        <span style={{ fontSize: 9, fontWeight: 800, color: tm.color, fontFamily: "monospace", padding: "1px 6px", borderRadius: 4, background: `${tm.color}15`, border: `1px solid ${tm.color}30`, flexShrink: 0 }}>{tm.abbr}</span>
+                      </div>
+                      {c.project_name && <div style={{ fontSize: 11, color: "#6b7da8" }}>{c.project_name}</div>}
                     </div>
                     {/* Badges top-right */}
                     <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-end", flexShrink: 0 }}>
