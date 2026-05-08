@@ -120,6 +120,14 @@ export default function CampaignDetailPage() {
   const [claimed, setClaimed]           = useState(false)
   const [claimError, setClaimError]     = useState("")
 
+  // Owner edit state
+  const [editOpen, setEditOpen]             = useState(false)
+  const [editForm, setEditForm]             = useState<Record<string, string>>({})
+  const [editSubmitting, setEditSubmitting] = useState(false)
+  const [editSubmitted, setEditSubmitted]   = useState(false)
+  const [editError, setEditError]           = useState("")
+  const [pendingUpdate, setPendingUpdate]   = useState<{ status: string; admin_note?: string; submitted_at: string } | null>(null)
+
   useEffect(() => {
     const w = localStorage.getItem("arclens-wallet")
     if (w) setWallet(w)
@@ -137,11 +145,14 @@ export default function CampaignDetailPage() {
   async function load() {
     setLoading(true)
     try {
-      const res  = await fetch(`/api/forge/${id}`)
+      const w    = localStorage.getItem("arclens-wallet")
+      const qs   = w ? `?wallet=${encodeURIComponent(w)}` : ""
+      const res  = await fetch(`/api/forge/${id}${qs}`)
       const data = await res.json()
       if (data.campaign) {
         setCampaign(data.campaign)
         setCompletions(data.completions || [])
+        if (data.pendingUpdate) setPendingUpdate(data.pendingUpdate)
       }
     } finally {
       setLoading(false)
@@ -229,6 +240,39 @@ export default function CampaignDetailPage() {
     }
   }
 
+  async function connectWallet() {
+    try {
+      if (!(window as any).ethereum) return
+      const accounts = await (window as any).ethereum.request({ method: "eth_requestAccounts" })
+      if (accounts?.[0]) { setWallet(accounts[0]); localStorage.setItem("arclens-wallet", accounts[0]) }
+    } catch { }
+  }
+
+  async function submitCampaignEdit() {
+    if (!wallet || !campaign) return
+    setEditError("")
+    const changes: Record<string, any> = {}
+    if (editForm.expires_at) changes.expires_at = editForm.expires_at
+    if (editForm.total_slots) changes.total_slots = parseInt(editForm.total_slots)
+    if (editForm.tagline?.trim()) changes.tagline = editForm.tagline.trim()
+    if (editForm.description?.trim()) changes.description = editForm.description.trim()
+    if (editForm.app_url?.trim()) changes.app_url = editForm.app_url.trim()
+    if (editForm.reward_description?.trim()) changes.reward_description = editForm.reward_description.trim()
+    if (!Object.keys(changes).length) { setEditError("No changes entered"); return }
+    setEditSubmitting(true)
+    try {
+      const res  = await fetch(`/api/forge/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ creator_wallet: wallet, changes }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setEditError(data.error || "Submission failed"); return }
+      setEditSubmitted(true)
+      setEditOpen(false)
+    } finally { setEditSubmitting(false) }
+  }
+
   if (loading) {
     return (
       <ArcLayout active="forge">
@@ -267,7 +311,7 @@ export default function CampaignDetailPage() {
 
         {/* ── Back ── */}
         <button onClick={() => router.push("/forge")} style={{ fontSize: 12, color: "var(--t2,#6b7da8)", background: "none", border: "none", cursor: "pointer", marginBottom: 20, padding: 0 }}>
-          ← Back to Forge
+          ← Arc Trials
         </button>
 
         {/* ── Status Banners ── */}
@@ -362,8 +406,17 @@ export default function CampaignDetailPage() {
                   </div>
 
                 ) : !wallet ? (
-                  <div style={{ padding: "32px 20px", textAlign: "center", color: "var(--t2,#6b7da8)", fontSize: 13 }}>
-                    Connect your wallet to participate in this campaign
+                  <div style={{ padding: "36px 20px", textAlign: "center" }}>
+                    <div style={{ fontSize: 13, color: "var(--t2,#6b7da8)", marginBottom: 16, lineHeight: 1.6 }}>
+                      Connect your wallet to participate and earn <strong style={{ color: rm.color }}>{rm.label}</strong>
+                    </div>
+                    <button onClick={connectWallet}
+                      style={{ height: 42, padding: "0 28px", background: "#1a56ff", color: "#fff", border: "none", borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+                      Connect Wallet
+                    </button>
+                    <div style={{ fontSize: 10, fontFamily: "var(--font-mono,monospace)", color: "var(--t3,#2e3a5c)", marginTop: 12 }}>
+                      MetaMask, Rabby, or any injected wallet
+                    </div>
                   </div>
 
                 ) : alreadyDone ? (
@@ -431,6 +484,18 @@ export default function CampaignDetailPage() {
                 ) : (
                   /* Active flow — tasks + review */
                   <div>
+                    {/* How this works — shown only before the first step */}
+                    {flowStep === 0 && !isReviewStep && (
+                      <div style={{ padding: "10px 20px", borderBottom: "1px solid var(--bdr,rgba(255,255,255,0.06))", display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+                        {(["Do the steps", "Write feedback", `Earn ${rm.label}`] as string[]).map((s, i, arr) => (
+                          <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+                            <div style={{ width: 16, height: 16, borderRadius: "50%", background: "rgba(26,86,255,0.1)", border: "1px solid rgba(26,86,255,0.25)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 8, fontWeight: 700, color: "#8aaeff", fontFamily: "var(--font-mono,monospace)" }}>{i + 1}</div>
+                            <span style={{ fontSize: 11, color: "var(--t2,#6b7da8)", fontFamily: "var(--font-mono,monospace)" }}>{s}</span>
+                            {i < arr.length - 1 && <span style={{ fontSize: 9, color: "var(--t3,#2e3a5c)" }}>→</span>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                     {/* Progress header */}
                     <div style={{ padding: "14px 20px", borderBottom: "1px solid var(--bdr,rgba(255,255,255,0.06))", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                       <div style={{ fontSize: 11, fontFamily: "var(--font-mono,monospace)", color: "var(--t2,#6b7da8)" }}>
@@ -482,6 +547,15 @@ export default function CampaignDetailPage() {
                                 </div>
                               )}
                             </div>
+                          </div>
+                          {campaign.app_url && (
+                            <a href={campaign.app_url} target="_blank" rel="noopener noreferrer"
+                              style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 32, padding: "0 14px", background: "rgba(26,86,255,0.06)", color: "#8aaeff", border: "1px solid rgba(26,86,255,0.2)", borderRadius: 7, fontSize: 12, textDecoration: "none", marginBottom: 10 }}>
+                              Open app ↗
+                            </a>
+                          )}
+                          <div style={{ fontSize: 11, color: "var(--t3,#2e3a5c)", fontFamily: "var(--font-mono,monospace)", marginBottom: 12, lineHeight: 1.6 }}>
+                            Complete this step in the app, then mark it done below.
                           </div>
                           <button
                             onClick={() => setFlowStep(s => s + 1)}
@@ -611,6 +685,74 @@ export default function CampaignDetailPage() {
                 </div>
               </div>
             )}
+
+            {/* ── Owner: Edit Campaign ── */}
+            {isOwner && (
+              <div style={{ background: "var(--surf,#0a0e1a)", border: "1px solid var(--bdr,rgba(255,255,255,0.06))", borderRadius: 12, overflow: "hidden" }}>
+                <button onClick={() => setEditOpen(o => !o)}
+                  style={{ width: "100%", padding: "15px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", background: "none", border: "none", cursor: "pointer", textAlign: "left" }}>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: "var(--t1,#e8ecff)" }}>Edit Campaign</div>
+                    <div style={{ fontSize: 11, fontFamily: "var(--font-mono,monospace)", color: "var(--t3,#2e3a5c)", marginTop: 2 }}>Changes go to admin for review</div>
+                  </div>
+                  <span style={{ fontSize: 12, color: "var(--t3,#2e3a5c)", transform: editOpen ? "rotate(180deg)" : "none", transition: "transform 0.15s", display: "inline-block" }}>▾</span>
+                </button>
+
+                {editOpen && (
+                  <div style={{ borderTop: "1px solid var(--bdr,rgba(255,255,255,0.06))", padding: "16px 20px 20px" }}>
+                    {/* Pending state — block form while review is in progress */}
+                    {(editSubmitted || pendingUpdate?.status === "pending") ? (
+                      <div style={{ textAlign: "center", padding: "8px 0" }}>
+                        <div style={{ width: 32, height: 32, borderRadius: "50%", background: "rgba(224,136,16,0.1)", border: "1px solid rgba(224,136,16,0.25)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 10px", fontSize: 14, color: "#e08810" }}>⏳</div>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: "#e08810", marginBottom: 4 }}>Edit pending admin review</div>
+                        <div style={{ fontSize: 11, fontFamily: "var(--font-mono,monospace)", color: "var(--t2,#6b7da8)" }}>You'll be notified by email once approved or rejected</div>
+                      </div>
+                    ) : (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                        {pendingUpdate?.status === "rejected" && (
+                          <div style={{ padding: "10px 14px", background: "rgba(224,51,72,0.07)", border: "1px solid rgba(224,51,72,0.2)", borderRadius: 8 }}>
+                            <div style={{ fontSize: 12, fontWeight: 600, color: "#e03348", marginBottom: pendingUpdate.admin_note ? 4 : 0 }}>Last edit request was not approved</div>
+                            {pendingUpdate.admin_note && (
+                              <div style={{ fontSize: 11, color: "#e03348", opacity: 0.85, lineHeight: 1.5 }}>{pendingUpdate.admin_note}</div>
+                            )}
+                            <div style={{ fontSize: 10, fontFamily: "var(--font-mono,monospace)", color: "var(--t3,#2e3a5c)", marginTop: 4 }}>Submit a revised request below</div>
+                          </div>
+                        )}
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                          <EF label="Extend deadline">
+                            <input type="date" value={editForm.expires_at || ""} onChange={e => setEditForm(f => ({ ...f, expires_at: e.target.value }))} style={ei} />
+                          </EF>
+                          <EF label={`Slots${campaign.filled_slots > 0 ? ` (${campaign.filled_slots} filled)` : ""}`}>
+                            <input type="number" min={campaign.filled_slots || 1} value={editForm.total_slots || ""} onChange={e => setEditForm(f => ({ ...f, total_slots: e.target.value }))} placeholder={campaign.total_slots ? String(campaign.total_slots) : "—"} style={ei} />
+                          </EF>
+                        </div>
+                        <EF label="Tagline">
+                          <input type="text" value={editForm.tagline || ""} onChange={e => setEditForm(f => ({ ...f, tagline: e.target.value }))} placeholder={campaign.tagline || "One-line hook"} style={ei} />
+                        </EF>
+                        <EF label="Description">
+                          <textarea value={editForm.description || ""} onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))} rows={3} placeholder="Updated description..." style={{ ...ei, height: "auto", padding: "8px 10px", resize: "vertical", lineHeight: 1.6, fontFamily: "inherit" }} />
+                        </EF>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                          <EF label="App URL">
+                            <input type="url" value={editForm.app_url || ""} onChange={e => setEditForm(f => ({ ...f, app_url: e.target.value }))} placeholder={campaign.app_url || "https://"} style={ei} />
+                          </EF>
+                          <EF label="Reward details">
+                            <input type="text" value={editForm.reward_description || ""} onChange={e => setEditForm(f => ({ ...f, reward_description: e.target.value }))} placeholder={campaign.reward_description || "What testers earn"} style={ei} />
+                          </EF>
+                        </div>
+                        {editError && (
+                          <div style={{ fontSize: 11, color: "#e03348", padding: "7px 10px", background: "rgba(224,51,72,0.08)", borderRadius: 6, fontFamily: "var(--font-mono,monospace)" }}>{editError}</div>
+                        )}
+                        <button onClick={submitCampaignEdit} disabled={editSubmitting}
+                          style={{ height: 38, background: editSubmitting ? "var(--surf2,#0e1224)" : "#1a56ff", color: editSubmitting ? "var(--t2,#6b7da8)" : "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: editSubmitting ? "default" : "pointer" }}>
+                          {editSubmitting ? "Submitting..." : "Submit for Review"}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* ── Right sidebar ── */}
@@ -643,6 +785,7 @@ export default function CampaignDetailPage() {
                 { label: "Selection", value: campaign.is_fcfs ? "First come, first served" : "Builder selects" },
                 { label: "Tasks",     value: `${campaign.tasks.length} step${campaign.tasks.length !== 1 ? "s" : ""}` },
                 { label: "Posted",    value: new Date(campaign.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) },
+                ...(campaign.expires_at ? [{ label: "Closes", value: new Date(campaign.expires_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) }] : []),
               ].map(d => (
                 <div key={d.label} style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
                   <span style={{ fontSize: 12, color: "var(--t2,#6b7da8)" }}>{d.label}</span>
@@ -653,7 +796,7 @@ export default function CampaignDetailPage() {
 
             {/* Builder info */}
             <div style={{ background: "var(--surf,#0a0e1a)", border: "1px solid var(--bdr,rgba(255,255,255,0.06))", borderRadius: 12, padding: "16px 18px" }}>
-              <div style={{ fontSize: 10, fontFamily: "var(--font-mono,monospace)", color: "var(--t2,#6b7da8)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Posted by</div>
+              <div style={{ fontSize: 10, fontFamily: "var(--font-mono,monospace)", color: "var(--t2,#6b7da8)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Hosted by</div>
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
                 {(campaign.project_logo || campaign.campaign_logo) && (
                   <div style={{ width: 44, height: 44, borderRadius: 10, overflow: "hidden", flexShrink: 0, border: "1px solid var(--bdr,rgba(255,255,255,0.06))" }}>
@@ -681,5 +824,21 @@ export default function CampaignDetailPage() {
         </div>
       </div>
     </ArcLayout>
+  )
+}
+
+const ei: React.CSSProperties = {
+  width: "100%", height: 34, background: "var(--surf2,#0e1224)",
+  border: "1px solid var(--bdr,rgba(255,255,255,0.06))", borderRadius: 7,
+  padding: "0 10px", fontSize: 12, color: "var(--t1,#e8ecff)", outline: "none",
+  boxSizing: "border-box", fontFamily: "inherit",
+}
+
+function EF({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div style={{ fontSize: 11, fontWeight: 500, color: "var(--t2,#6b7da8)", marginBottom: 5 }}>{label}</div>
+      {children}
+    </div>
   )
 }

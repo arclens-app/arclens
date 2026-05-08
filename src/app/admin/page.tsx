@@ -45,13 +45,14 @@ export default function AdminPage() {
   const [pw, setPw]                   = useState("")
   const [password, setPassword]       = useState("")
   const [loading, setLoading]         = useState(false)
-  const [tab, setTab]                 = useState<"pending"|"updates"|"projects"|"contracts"|"events"|"locations"|"campaigns">("pending")
+  const [tab, setTab]                 = useState<"pending"|"updates"|"campaign-updates"|"projects"|"contracts"|"events"|"locations"|"campaigns">("pending")
   const [submissions, setSubmissions] = useState<Project[]>([])
   const [projects, setProjects]       = useState<Project[]>([])
   const [contracts, setContracts]     = useState<Contract[]>([])
   const [pendingUpdates, setPendingUpdates] = useState<PendingUpdate[]>([])
   const [events, setEvents]           = useState<Event[]>([])
   const [pendingCampaigns, setPendingCampaigns] = useState<AdminCampaign[]>([])
+  const [pendingCampaignUpdates, setPendingCampaignUpdates] = useState<any[]>([])
   const [acting, setActing]           = useState(false)
   const [locInputs, setLocInputs]     = useState<Record<number,{city:string;country:string;status:string;result:string}>>({})
   const [toast, setToast]             = useState<{ok:boolean;text:string}|null>(null)
@@ -107,6 +108,7 @@ export default function AdminPage() {
       setPendingUpdates(data.pendingUpdates || [])
       setEvents(data.events || [])
       setPendingCampaigns(data.pendingCampaigns || [])
+      setPendingCampaignUpdates(data.pendingCampaignUpdates || [])
     } finally { setLoading(false) }
   }
 
@@ -120,7 +122,7 @@ export default function AdminPage() {
       })
       const data = await res.json()
       if (data.success || data.ok) {
-        showToast(true, action === "approve" ? "Approved successfully" : action === "approve-update" ? "Update applied" : action === "reject-update" ? "Update rejected" : action === "delete" || action === "reject" ? "Removed" : "Done")
+        showToast(true, action === "approve" ? "Approved" : action === "approve-all-updates" ? "All changes applied" : action === "reject-all-updates" ? "Changes rejected" : action === "approve-update" ? "Update applied" : action === "reject-update" ? "Update rejected" : action === "approve-campaign-update" ? "Campaign update applied" : action === "reject-campaign-update" ? "Campaign update rejected" : action === "delete" || action === "reject" ? "Removed" : "Done")
         loadAll()
       } else {
         showToast(false, data.error || "Action failed")
@@ -255,7 +257,7 @@ export default function AdminPage() {
 
   const pendingCount     = submissions.length + contracts.filter(c => !c.verified).length
   const pendingEvents    = events.filter(e => !e.approved).length
-  const totalPending     = pendingCount + pendingUpdates.length + pendingEvents + pendingCampaigns.length
+  const totalPending     = pendingCount + pendingUpdates.length + pendingEvents + pendingCampaigns.length + pendingCampaignUpdates.length
   const missingLoc       = [...submissions,...projects].filter((p:any)=>!p.lat).length
   const CAMPAIGN_TYPE_LABELS: Record<string,string> = { beta_test:"Beta Test", stress_test:"Stress Test", edge_case:"Edge Case Hunt", ux_review:"UX Review", onboarding:"Onboarding Test", integration:"Integration Test", builder_audit:"Builder Audit", payment_flow:"Payment Flow Test" }
   const REWARD_TYPE_LABELS: Record<string,string>   = { whitelist:"Whitelist", early_access:"Early Access", discord_role:"Discord Role", credit:"Public Credit", token_allocation:"Token Alloc.", usdc:"USDC", other:"Other" }
@@ -263,8 +265,9 @@ export default function AdminPage() {
   // ── Sidebar nav config ──
   const queueTabs = [
     { id: "pending"   as const, label: "Submissions",  count: submissions.length,       urgent: submissions.length > 0 },
-    { id: "updates"   as const, label: "Field Updates", count: pendingUpdates.length,   urgent: pendingUpdates.length > 0 },
-    { id: "campaigns" as const, label: "Campaigns",     count: pendingCampaigns.length, urgent: pendingCampaigns.length > 0 },
+    { id: "updates"          as const, label: "Field Updates",    count: pendingUpdates.length,         urgent: pendingUpdates.length > 0 },
+    { id: "campaign-updates" as const, label: "Campaign Edits",   count: pendingCampaignUpdates.length, urgent: pendingCampaignUpdates.length > 0 },
+    { id: "campaigns"        as const, label: "Campaigns",         count: pendingCampaigns.length,       urgent: pendingCampaigns.length > 0 },
     { id: "events"    as const, label: "Events",        count: pendingEvents,            urgent: pendingEvents > 0 },
   ]
   const manageTabs = [
@@ -345,18 +348,20 @@ export default function AdminPage() {
           {/* Tab header */}
           <div style={{ marginBottom:"24px" }}>
             <div style={{ fontSize:"18px", fontWeight:700, letterSpacing:"-0.03em", color:t1 }}>
-              {tab === "pending"   ? "Project Submissions"
-               : tab === "updates"   ? "Founder Field Updates"
-               : tab === "campaigns" ? "Campaign Reviews"
-               : tab === "events"    ? "Events"
-               : tab === "projects"  ? "All Projects"
-               : tab === "contracts" ? "Contract Registry"
+              {tab === "pending"          ? "Project Submissions"
+               : tab === "updates"          ? "Founder Field Updates"
+               : tab === "campaign-updates" ? "Campaign Edit Requests"
+               : tab === "campaigns"        ? "Campaign Reviews"
+               : tab === "events"           ? "Events"
+               : tab === "projects"         ? "All Projects"
+               : tab === "contracts"        ? "Contract Registry"
                : "Location Mapping"}
             </div>
             <div style={{ fontSize:"11px", fontFamily:mono, color:t3, marginTop:"4px" }}>
-              {tab === "pending"   ? `${submissions.length} awaiting approval`
-               : tab === "updates"   ? `${pendingUpdates.length} field changes to review`
-               : tab === "campaigns" ? `${pendingCampaigns.length} campaigns awaiting approval`
+              {tab === "pending"          ? `${submissions.length} awaiting approval`
+               : tab === "updates"          ? `${pendingUpdates.length} field changes to review`
+               : tab === "campaign-updates" ? `${pendingCampaignUpdates.length} campaign edit requests to review`
+               : tab === "campaigns"        ? `${pendingCampaigns.length} campaigns awaiting approval`
                : tab === "events"    ? `${pendingEvents} pending · ${events.length} total`
                : tab === "projects"  ? `${projects.length} approved projects on Arc Ecosystem`
                : tab === "contracts" ? `${contracts.length} total · ${contracts.filter(c=>!c.verified).length} unverified`
@@ -460,42 +465,125 @@ export default function AdminPage() {
               )}
 
               {/* ── PENDING UPDATES ── */}
-              {tab === "updates" && (
+              {tab === "updates" && (() => {
+                // Group all pending field changes by project so admin makes one decision per project
+                const groups: Record<number, { project_id: number; project_name: string; project_slug: string; submitted_at: string; fields: any[] }> = {}
+                for (const u of pendingUpdates as any[]) {
+                  if (!groups[u.project_id]) {
+                    groups[u.project_id] = { project_id: u.project_id, project_name: u.project_name, project_slug: u.project_slug, submitted_at: u.submitted_at, fields: [] }
+                  }
+                  groups[u.project_id].fields.push(u)
+                }
+                const groupList = Object.values(groups)
+                return (
+                  <div>
+                    {groupList.length === 0 ? (
+                      <EmptyState icon="✓" title="No pending updates" sub="Founder listing changes will appear here" />
+                    ) : (
+                      <div style={{ display:"flex", flexDirection:"column", gap:"10px" }}>
+                        {groupList.map(g => (
+                          <div key={g.project_id} style={{ background:surf, border:"1px solid "+bdr, borderRadius:"12px", padding:"18px 22px" }}>
+                            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"14px", flexWrap:"wrap", gap:"8px" }}>
+                              <div style={{ display:"flex", alignItems:"center", gap:"8px" }}>
+                                <span style={{ fontSize:"14px", fontWeight:600, color:t1 }}>{g.project_name}</span>
+                                <span style={{ fontSize:"10px", fontFamily:mono, color:"#8aaeff", padding:"2px 8px", background:"rgba(26,86,255,0.1)", borderRadius:"4px", border:"1px solid rgba(26,86,255,0.2)" }}>
+                                  {g.fields.length} field{g.fields.length !== 1 ? "s" : ""} changed
+                                </span>
+                              </div>
+                              <span style={{ fontSize:"10px", fontFamily:mono, color:t3 }}>{new Date(g.submitted_at).toLocaleDateString()}</span>
+                            </div>
+
+                            {/* All field changes stacked */}
+                            <div style={{ display:"flex", flexDirection:"column", gap:"8px", marginBottom:"14px" }}>
+                              {g.fields.map((u: any) => (
+                                <div key={u.id} style={{ display:"grid", gridTemplateColumns:"90px 1fr 1fr", gap:"8px", alignItems:"start" }}>
+                                  <span style={{ fontSize:"9px", fontFamily:mono, color:"#8aaeff", padding:"4px 0", textAlign:"center", background:"rgba(26,86,255,0.08)", borderRadius:"5px", border:"1px solid rgba(26,86,255,0.18)" }}>
+                                    {u.field}
+                                  </span>
+                                  <div style={{ padding:"7px 10px", background:"rgba(224,51,72,0.04)", border:"1px solid rgba(224,51,72,0.12)", borderRadius:"6px" }}>
+                                    <div style={{ fontSize:"8px", fontFamily:mono, color:"#e03348", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:"3px" }}>Current</div>
+                                    <div style={{ fontSize:"11px", color:t2, wordBreak:"break-all", lineHeight:1.4 }}>{u.old_value || "—"}</div>
+                                  </div>
+                                  <div style={{ padding:"7px 10px", background:"rgba(0,184,122,0.04)", border:"1px solid rgba(0,184,122,0.12)", borderRadius:"6px" }}>
+                                    <div style={{ fontSize:"8px", fontFamily:mono, color:"#00b87a", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:"3px" }}>Proposed</div>
+                                    <div style={{ fontSize:"11px", color:t1, wordBreak:"break-all", lineHeight:1.4 }}>{u.new_value}</div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+
+                            <div style={{ marginBottom:"10px" }}>
+                              <input
+                                id={`pu-reason-${g.project_id}`}
+                                type="text"
+                                placeholder="Rejection reason (optional — sent to founder by email)"
+                                style={{ width:"100%", height:"34px", background:surf2, border:"1px solid "+bdr, borderRadius:"7px", padding:"0 12px", fontSize:"12px", color:t1, outline:"none", boxSizing:"border-box" as const, fontFamily:mono }}
+                              />
+                            </div>
+                            <div style={{ display:"flex", gap:"8px" }}>
+                              <ActionBtn onClick={() => act(g.project_id, "approve-all-updates")} disabled={acting} color="green">Apply All Changes</ActionBtn>
+                              <ActionBtn onClick={() => act(g.project_id, "reject-all-updates", "projects", { reason: (document.getElementById(`pu-reason-${g.project_id}`) as HTMLInputElement)?.value || "" })} disabled={acting} color="red">Reject All</ActionBtn>
+                              <a href={`/ecosystem/${g.project_slug}`} target="_blank" rel="noopener noreferrer"
+                                style={{ height:"32px", padding:"0 14px", display:"flex", alignItems:"center", background:"transparent", color:"#8aaeff", fontSize:"12px", border:"1px solid rgba(26,86,255,0.2)", borderRadius:"6px", textDecoration:"none" }}>
+                                View Project ↗
+                              </a>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
+
+              {/* ── CAMPAIGN EDIT REQUESTS ── */}
+              {tab === "campaign-updates" && (
                 <div>
-                  {pendingUpdates.length === 0 ? (
-                    <EmptyState icon="✓" title="No pending updates" sub="Founder listing changes will appear here" />
+                  {pendingCampaignUpdates.length === 0 ? (
+                    <EmptyState icon="✓" title="No campaign edit requests" sub="Founder campaign change requests will appear here for review" />
                   ) : (
                     <div style={{ display:"flex", flexDirection:"column", gap:"10px" }}>
-                      {pendingUpdates.map((u: any) => (
-                        <div key={u.id} style={{ background:surf, border:"1px solid "+bdr, borderRadius:"12px", padding:"18px 22px" }}>
-                          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"14px", flexWrap:"wrap", gap:"8px" }}>
-                            <div style={{ display:"flex", alignItems:"center", gap:"8px" }}>
-                              <span style={{ fontSize:"14px", fontWeight:600, color:t1 }}>{u.project_name}</span>
-                              <span style={{ fontSize:"10px", fontFamily:mono, color:t3 }}>wants to update</span>
-                              <span style={{ fontSize:"10px", fontFamily:mono, color:"#8aaeff", padding:"2px 8px", background:"rgba(26,86,255,0.1)", borderRadius:"4px", border:"1px solid rgba(26,86,255,0.2)" }}>{u.field}</span>
+                      {pendingCampaignUpdates.map((u: any) => {
+                        const ch = u.proposed_changes as Record<string, any>
+                        return (
+                          <div key={u.id} style={{ background:surf, border:"1px solid "+bdr, borderRadius:"12px", padding:"18px 22px" }}>
+                            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"12px", flexWrap:"wrap", gap:"8px" }}>
+                              <div>
+                                <span style={{ fontSize:"14px", fontWeight:600, color:t1 }}>{u.campaign_title}</span>
+                                <span style={{ fontSize:"10px", fontFamily:mono, color:t3, marginLeft:"8px" }}>Campaign #{u.campaign_id}</span>
+                              </div>
+                              <span style={{ fontSize:"10px", fontFamily:mono, color:t3 }}>{new Date(u.submitted_at).toLocaleDateString()}</span>
                             </div>
-                            <span style={{ fontSize:"10px", fontFamily:mono, color:t3 }}>{new Date(u.submitted_at).toLocaleDateString()}</span>
-                          </div>
-                          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px", marginBottom:"14px" }}>
-                            <div style={{ padding:"10px 14px", background:"rgba(224,51,72,0.04)", border:"1px solid rgba(224,51,72,0.12)", borderRadius:"7px" }}>
-                              <div style={{ fontSize:"9px", fontFamily:mono, color:"#e03348", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:"4px" }}>Current</div>
-                              <div style={{ fontSize:"12px", color:t2, wordBreak:"break-all" }}>{u.old_value || "—"}</div>
+                            <div style={{ display:"flex", flexDirection:"column", gap:"8px", marginBottom:"14px" }}>
+                              {Object.entries(ch).map(([field, value]) => (
+                                <div key={field} style={{ display:"grid", gridTemplateColumns:"120px 1fr", gap:"10px", alignItems:"start" }}>
+                                  <span style={{ fontSize:"10px", fontFamily:mono, color:"#8aaeff", padding:"3px 8px", background:"rgba(26,86,255,0.1)", borderRadius:"4px", border:"1px solid rgba(26,86,255,0.2)", textAlign:"center" }}>{field}</span>
+                                  <span style={{ fontSize:"12px", color:t1, padding:"3px 8px", background:"rgba(0,184,122,0.04)", border:"1px solid rgba(0,184,122,0.12)", borderRadius:"4px", wordBreak:"break-all" }}>{String(value)}</span>
+                                </div>
+                              ))}
                             </div>
-                            <div style={{ padding:"10px 14px", background:"rgba(0,184,122,0.04)", border:"1px solid rgba(0,184,122,0.12)", borderRadius:"7px" }}>
-                              <div style={{ fontSize:"9px", fontFamily:mono, color:"#00b87a", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:"4px" }}>Proposed</div>
-                              <div style={{ fontSize:"12px", color:t1, wordBreak:"break-all" }}>{u.new_value}</div>
+                            <div style={{ fontSize:"10px", fontFamily:mono, color:t3, marginBottom:"12px" }}>
+                              Requested by: {u.requester_wallet?.slice(0,10)}...{u.requester_wallet?.slice(-6)}
+                            </div>
+                            <div style={{ marginBottom:"10px" }}>
+                              <input
+                                id={`cu-reason-${u.id}`}
+                                type="text"
+                                placeholder="Rejection reason (optional — sent to founder by email)"
+                                style={{ width:"100%", height:"34px", background:surf2, border:"1px solid "+bdr, borderRadius:"7px", padding:"0 12px", fontSize:"12px", color:t1, outline:"none", boxSizing:"border-box" as const, fontFamily:mono }}
+                              />
+                            </div>
+                            <div style={{ display:"flex", gap:"8px" }}>
+                              <ActionBtn onClick={() => act(u.id, "approve-campaign-update")} disabled={acting} color="green">Apply Changes</ActionBtn>
+                              <ActionBtn onClick={() => act(u.id, "reject-campaign-update", "projects", { reason: (document.getElementById(`cu-reason-${u.id}`) as HTMLInputElement)?.value || "" })} disabled={acting} color="red">Reject</ActionBtn>
+                              <a href={`/forge/${u.campaign_id}`} target="_blank" rel="noopener noreferrer"
+                                style={{ height:"32px", padding:"0 14px", display:"flex", alignItems:"center", background:"transparent", color:"#8aaeff", fontSize:"12px", border:"1px solid rgba(26,86,255,0.2)", borderRadius:"6px", textDecoration:"none" }}>
+                                View Campaign ↗
+                              </a>
                             </div>
                           </div>
-                          <div style={{ display:"flex", gap:"8px" }}>
-                            <ActionBtn onClick={() => act(u.id, "approve-update")} disabled={acting} color="green">Apply Update</ActionBtn>
-                            <ActionBtn onClick={() => act(u.id, "reject-update")} disabled={acting} color="red">Reject</ActionBtn>
-                            <a href={`/ecosystem/${u.project_slug}`} target="_blank" rel="noopener noreferrer"
-                              style={{ height:"32px", padding:"0 14px", display:"flex", alignItems:"center", background:"transparent", color:"#8aaeff", fontSize:"12px", border:"1px solid rgba(26,86,255,0.2)", borderRadius:"6px", textDecoration:"none" }}>
-                              View Project ↗
-                            </a>
-                          </div>
-                        </div>
-                      ))}
+                        )
+                      })}
                     </div>
                   )}
                 </div>
