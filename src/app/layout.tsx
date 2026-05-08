@@ -1,5 +1,6 @@
 ﻿import type { Metadata, Viewport } from "next"
 import { Geist, Geist_Mono } from "next/font/google"
+import { headers } from "next/headers"
 import "./globals.css"
 
 export const viewport: Viewport = {
@@ -49,7 +50,12 @@ export const metadata: Metadata = {
   },
 }
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // Reading headers() opts this layout into dynamic rendering, which is required for
+  // nonce-based CSP — nonces must be unique per request and cannot be statically cached
+  // Reading headers() opts into dynamic rendering — required so nonces are never statically cached
+  // Next.js uses x-nonce internally to nonce its own hydration scripts
+  void (await headers()).get("x-nonce")
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${geist.variable} ${geistMono.variable}`} style={{ margin: 0, padding: 0 }}>
