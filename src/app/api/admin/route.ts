@@ -6,6 +6,13 @@ const resend = new Resend(process.env.RESEND_API_KEY || "")
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || ""
 function checkAuth(pw: string) { return !!ADMIN_PASSWORD && pw === ADMIN_PASSWORD }
 
+// Read password from Authorization: Bearer <pw> header first; fall back to query/body param
+function resolvePassword(req: NextRequest, fallback?: string): string {
+  const auth = req.headers.get("authorization") || ""
+  if (auth.startsWith("Bearer ")) return auth.slice(7)
+  return fallback || ""
+}
+
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_APP_URL || "https://arclenz.xyz"
 
 function unsubFooter(email: string) {
@@ -324,7 +331,7 @@ async function sendProjectEmail(projectId: number, status: "approved" | "rejecte
 
 export async function GET(req: NextRequest) {
   const action   = req.nextUrl.searchParams.get("action")
-  const password = req.nextUrl.searchParams.get("password") || ""
+  const password = resolvePassword(req, req.nextUrl.searchParams.get("password") || "")
   if (!checkAuth(password)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   if (action === "auth") return NextResponse.json({ ok: true })
   if (action === "list") {
@@ -394,7 +401,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const body = await req.json()
   const { id, action, password, table, data } = body
-  if (!checkAuth(password)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  if (!checkAuth(resolvePassword(req, password))) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   if (!id || !action) return NextResponse.json({ error: "Missing fields" }, { status: 400 })
   try {
     if (table === "campaigns") {
