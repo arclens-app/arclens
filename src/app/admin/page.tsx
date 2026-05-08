@@ -91,7 +91,7 @@ export default function AdminPage() {
   }
 
   async function login() {
-    const res  = await fetch(`/api/admin?action=auth&password=${pw}`)
+    const res  = await fetch(`/api/admin?action=auth`, { headers: { Authorization: `Bearer ${pw}` } })
     const data = await res.json()
     if (data.ok) { setPassword(pw); setAuthed(true); loadAll(pw) }
     else showToast(false, "Wrong password")
@@ -100,7 +100,7 @@ export default function AdminPage() {
   async function loadAll(p = password) {
     setLoading(true)
     try {
-      const res  = await fetch(`/api/admin?action=list&password=${p}&_=${Date.now()}`)
+      const res  = await fetch(`/api/admin?action=list&_=${Date.now()}`, { headers: { Authorization: `Bearer ${p}` } })
       const data = await res.json()
       setSubmissions(data.submissions || [])
       setProjects(data.projects || [])
