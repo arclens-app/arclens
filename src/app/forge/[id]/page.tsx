@@ -656,7 +656,7 @@ export default function CampaignDetailPage() {
               <div style={{ fontSize: 10, fontFamily: "var(--font-mono,monospace)", color: "var(--t2,#6b7da8)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Posted by</div>
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
                 {(campaign.project_logo || campaign.campaign_logo) && (
-                  <div style={{ width: 32, height: 32, borderRadius: 8, overflow: "hidden", flexShrink: 0, border: "1px solid var(--bdr,rgba(255,255,255,0.06))" }}>
+                  <div style={{ width: 44, height: 44, borderRadius: 10, overflow: "hidden", flexShrink: 0, border: "1px solid var(--bdr,rgba(255,255,255,0.06))" }}>
                     <img src={`/api/image-proxy?url=${encodeURIComponent((campaign.project_logo || campaign.campaign_logo)!)}`} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                   </div>
                 )}
