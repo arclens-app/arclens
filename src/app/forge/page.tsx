@@ -45,19 +45,24 @@ interface Reputation {
 }
 
 const TYPE_META: Record<string, { abbr: string; label: string; color: string }> = {
-  beta_test:     { abbr: "BT", label: "Beta Test",     color: "#1a56ff" },
-  stress_test:   { abbr: "ST", label: "Stress Test",   color: "#e08810" },
-  edge_case:     { abbr: "EC", label: "Edge Cases",    color: "#a855f7" },
-  ux_review:     { abbr: "UX", label: "UX Review",     color: "#00b87a" },
-  onboarding:    { abbr: "OB", label: "Onboarding",    color: "#06b6d4" },
-  integration:   { abbr: "IT", label: "Integration",   color: "#6366f1" },
-  builder_audit: { abbr: "BA", label: "Builder Audit", color: "#ec4899" },
-  payment_flow:  { abbr: "PF", label: "Payment Flow",  color: "#00d990" },
+  beta_test:     { abbr: "BT", label: "Beta Test",         color: "#1a56ff" },
+  stress_test:   { abbr: "ST", label: "Stress Test",       color: "#e08810" },
+  edge_case:     { abbr: "EC", label: "Edge Case Hunt",    color: "#a855f7" },
+  ux_review:     { abbr: "UX", label: "UX Review",         color: "#00b87a" },
+  onboarding:    { abbr: "OB", label: "Onboarding Test",   color: "#06b6d4" },
+  integration:   { abbr: "IT", label: "Integration Test",  color: "#6366f1" },
+  builder_audit: { abbr: "BA", label: "Builder Audit",     color: "#ec4899" },
+  payment_flow:  { abbr: "PF", label: "Payment Flow Test", color: "#00d990" },
+}
+// Legacy DB values that map to canonical types — not shown as filter pills
+const TYPE_ALIASES: Record<string, string> = { feedback: "ux_review" }
+function getTypeMeta(type: string) {
+  return TYPE_META[type] || TYPE_META[TYPE_ALIASES[type]] || TYPE_META.beta_test
 }
 
 const REWARD_META: Record<string, { label: string; color: string }> = {
   usdc:             { label: "USDC",          color: "#00d990" },
-  whitelist:        { label: "Whitelist",      color: "#00d990" },
+  whitelist:        { label: "Whitelist",      color: "#8aaeff" },
   early_access:     { label: "Early Access",   color: "#8aaeff" },
   discord_role:     { label: "Discord Role",   color: "#a855f7" },
   credit:           { label: "Public Credit",  color: "#c08828" },
@@ -326,7 +331,7 @@ export default function ForgePage() {
         ) : (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 14 }}>
             {campaigns.map(c => {
-              const tm        = TYPE_META[c.type] || TYPE_META.beta_test
+              const tm        = getTypeMeta(c.type)
               const rm        = REWARD_META[c.reward_type] || REWARD_META.other
               const left      = slotsLeft(c)
               const full      = left !== null && left === 0
