@@ -29,6 +29,17 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     const campaignId = campaignRes.rows[0].id
     const creatorWallet = campaignRes.rows[0].creator_wallet
 
+    // Auto-finalize submissions not rated within 7 days — provisional_score becomes the final quality_score
+    pool.query(
+      `UPDATE campaign_completions
+       SET quality_score = provisional_score, status = 'reviewed', reviewed_at = NOW()
+       WHERE campaign_id = $1
+         AND status = 'submitted'
+         AND created_at < NOW() - INTERVAL '7 days'
+         AND provisional_score IS NOT NULL`,
+      [campaignId]
+    ).catch(() => {})
+
     const completionsRes = await pool.query(
       `SELECT tester_wallet, auto_score, builder_rating, quality_score, status,
               reward_delivered, review_answers, contract_verified, created_at

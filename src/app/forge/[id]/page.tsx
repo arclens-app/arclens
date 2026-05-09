@@ -270,6 +270,7 @@ export default function CampaignDetailPage() {
     if (editForm.description?.trim()) changes.description = editForm.description.trim()
     if (editForm.app_url?.trim()) changes.app_url = editForm.app_url.trim()
     if (editForm.reward_description?.trim()) changes.reward_description = editForm.reward_description.trim()
+    if (editForm.contract_address !== undefined && editForm.contract_address !== "") changes.contract_address = editForm.contract_address.trim()
     if (!Object.keys(changes).length) { setEditError("No changes entered"); return }
     setEditSubmitting(true)
     try {
