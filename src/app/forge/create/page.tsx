@@ -470,7 +470,9 @@ export default function CreateCampaignPage() {
                     ) : (
                       <div style={{ textAlign: "center" }}>
                         <div style={{ fontSize: 26, fontWeight: 900, fontFamily: mono, color: `${selectedType.color}35`, letterSpacing: "-0.04em", lineHeight: 1 }}>{selectedType.abbr}</div>
-                        <div style={{ fontSize: 10, color: t3, marginTop: 8 }}>Click to upload banner image</div>
+                        <div style={{ fontSize: 11, color: t2, marginTop: 10, fontWeight: 500 }}>Click to upload banner</div>
+                        <div style={{ fontSize: 10, fontFamily: mono, color: t3, marginTop: 4 }}>Recommended: 1200 × 400px · min 600 × 200px</div>
+                        <div style={{ fontSize: 10, fontFamily: mono, color: t3, marginTop: 2 }}>PNG, JPG, GIF · max 5MB · renders at full width, 200px tall</div>
                       </div>
                     )}
                   </div>
