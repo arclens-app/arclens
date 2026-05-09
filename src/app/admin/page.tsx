@@ -54,6 +54,8 @@ export default function AdminPage() {
   const [pendingCampaigns, setPendingCampaigns] = useState<AdminCampaign[]>([])
   const [pendingCampaignUpdates, setPendingCampaignUpdates] = useState<any[]>([])
   const [allCampaigns, setAllCampaigns] = useState<any[]>([])
+  const [repairOpen, setRepairOpen]   = useState<number|null>(null)
+  const [repairWallet, setRepairWallet] = useState("")
   const [acting, setActing]           = useState(false)
   const [locInputs, setLocInputs]     = useState<Record<number,{city:string;country:string;status:string;result:string}>>({})
   const [toast, setToast]             = useState<{ok:boolean;text:string}|null>(null)
@@ -1014,26 +1016,68 @@ export default function AdminPage() {
                             rejected: "#e03348", ended: "#6b7da8", completed: "#a855f7",
                           }
                           const sc = statusColor[c.status] || t3
+                          const isOpen = repairOpen === c.id
                           return (
-                            <div key={c.id} style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 14px", background:surf2, border:"1px solid "+bdr, borderRadius:9 }}>
-                              <div style={{ width:7, height:7, borderRadius:"50%", background:sc, flexShrink:0 }} />
-                              <div style={{ flex:1, minWidth:0 }}>
-                                <div style={{ fontSize:13, fontWeight:600, color:t1, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{c.title}</div>
-                                <div style={{ fontSize:10, fontFamily:mono, color:t3, marginTop:2 }}>
-                                  {c.project_name && <>{c.project_name} · </>}
-                                  {c.status} · {c.filled_slots}/{c.total_slots ?? "∞"} slots · {new Date(c.created_at).toLocaleDateString()}
+                            <div key={c.id} style={{ background:surf2, border:"1px solid "+bdr, borderRadius:9, overflow:"hidden" }}>
+                              <div style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 14px" }}>
+                                <div style={{ width:7, height:7, borderRadius:"50%", background:sc, flexShrink:0 }} />
+                                <div style={{ flex:1, minWidth:0 }}>
+                                  <div style={{ fontSize:13, fontWeight:600, color:t1, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{c.title}</div>
+                                  <div style={{ fontSize:10, fontFamily:mono, color:t3, marginTop:2 }}>
+                                    {c.project_name && <>{c.project_name} · </>}
+                                    {c.status} · {c.filled_slots}/{c.total_slots ?? "∞"} slots · {new Date(c.created_at).toLocaleDateString()}
+                                  </div>
                                 </div>
+                                <a href={`/forge/${c.id}`} target="_blank" rel="noopener noreferrer"
+                                  style={{ fontSize:10, fontFamily:mono, color:t3, textDecoration:"none", padding:"3px 8px", border:"1px solid "+bdr, borderRadius:4, flexShrink:0 }}>
+                                  View
+                                </a>
+                                <button
+                                  onClick={() => { setRepairOpen(isOpen ? null : c.id); setRepairWallet("") }}
+                                  style={{ height:28, padding:"0 10px", background: isOpen ? "rgba(26,86,255,0.12)" : "transparent", color: isOpen ? "#8aaeff" : t3, fontSize:11, border:"1px solid "+(isOpen ? "rgba(26,86,255,0.3)" : bdr), borderRadius:5, cursor:"pointer", fontFamily:"'Geist',sans-serif", fontWeight:600, flexShrink:0 }}>
+                                  Repair
+                                </button>
+                                <button
+                                  onClick={() => { if (window.confirm(`Delete "${c.title}"? This removes all completions and cannot be undone.`)) act(c.id, "delete-campaign") }}
+                                  disabled={acting}
+                                  style={{ height:28, padding:"0 10px", background:"rgba(224,51,72,0.08)", color:"#e03348", fontSize:11, border:"1px solid rgba(224,51,72,0.2)", borderRadius:5, cursor:"pointer", fontFamily:"'Geist',sans-serif", fontWeight:600, flexShrink:0 }}>
+                                  Delete
+                                </button>
                               </div>
-                              <a href={`/forge/${c.id}`} target="_blank" rel="noopener noreferrer"
-                                style={{ fontSize:10, fontFamily:mono, color:t3, textDecoration:"none", padding:"3px 8px", border:"1px solid "+bdr, borderRadius:4, flexShrink:0 }}>
-                                View
-                              </a>
-                              <button
-                                onClick={() => { if (window.confirm(`Delete "${c.title}"? This also removes all completions and cannot be undone.`)) act(c.id, "delete-campaign") }}
-                                disabled={acting}
-                                style={{ height:28, padding:"0 12px", background:"rgba(224,51,72,0.08)", color:"#e03348", fontSize:11, border:"1px solid rgba(224,51,72,0.2)", borderRadius:5, cursor:"pointer", fontFamily:"'Geist',sans-serif", fontWeight:600, flexShrink:0 }}>
-                                Delete
-                              </button>
+                              {isOpen && (
+                                <div style={{ borderTop:"1px solid "+bdr, padding:"12px 14px", display:"flex", flexDirection:"column", gap:8 }}>
+                                  <div style={{ fontSize:10, fontFamily:mono, color:t3, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:2 }}>Repair Tools</div>
+                                  <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+                                    <button onClick={() => { if (window.confirm("Reactivate this campaign?")) act(c.id, "reactivate-campaign", "campaigns") }} disabled={acting}
+                                      style={{ height:28, padding:"0 12px", background:"rgba(0,184,122,0.08)", color:"#00b87a", fontSize:11, border:"1px solid rgba(0,184,122,0.2)", borderRadius:5, cursor:"pointer", fontWeight:600 }}>
+                                      Reactivate
+                                    </button>
+                                    <button onClick={() => { if (window.confirm("Sync filled_slots count from actual completions?")) act(c.id, "sync-slots", "campaigns") }} disabled={acting}
+                                      style={{ height:28, padding:"0 12px", background:"rgba(138,174,255,0.08)", color:"#8aaeff", fontSize:11, border:"1px solid rgba(138,174,255,0.2)", borderRadius:5, cursor:"pointer", fontWeight:600 }}>
+                                      Sync Slots
+                                    </button>
+                                    <button onClick={() => { if (window.confirm(`Reset "${c.title}"? Clears ALL completions and resets slots to 0 but keeps the campaign active.`)) act(c.id, "reset-campaign", "campaigns") }} disabled={acting}
+                                      style={{ height:28, padding:"0 12px", background:"rgba(224,136,16,0.08)", color:"#e08810", fontSize:11, border:"1px solid rgba(224,136,16,0.2)", borderRadius:5, cursor:"pointer", fontWeight:600 }}>
+                                      Reset (keep active)
+                                    </button>
+                                  </div>
+                                  <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+                                    <input
+                                      value={repairWallet} onChange={e => setRepairWallet(e.target.value)}
+                                      placeholder="0x... tester wallet to remove"
+                                      style={{ flex:1, height:30, background:"#0a0e1a", border:"1px solid "+bdr, borderRadius:5, color:t1, fontSize:11, fontFamily:mono, padding:"0 10px" }}
+                                    />
+                                    <button onClick={() => {
+                                      if (!repairWallet.trim()) return
+                                      if (window.confirm(`Remove completion for ${repairWallet.trim()} and free their slot?`))
+                                        act(c.id, "remove-completion", "campaigns", { tester_wallet: repairWallet.trim() })
+                                    }} disabled={acting}
+                                      style={{ height:30, padding:"0 12px", background:"rgba(224,51,72,0.08)", color:"#e03348", fontSize:11, border:"1px solid rgba(224,51,72,0.2)", borderRadius:5, cursor:"pointer", fontWeight:600, whiteSpace:"nowrap" }}>
+                                      Remove Tester
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           )
                         })}
