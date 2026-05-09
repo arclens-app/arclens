@@ -565,6 +565,39 @@ export async function POST(req: NextRequest) {
       await pool.query("DELETE FROM campaigns WHERE id = $1", [id])
       return NextResponse.json({ success: true })
     }
+    // ── Campaign repair actions ──────────────────────────────────────────────
+    if (action === "reactivate-campaign") {
+      await pool.query("UPDATE campaigns SET status = 'active' WHERE id = $1", [id])
+      return NextResponse.json({ success: true })
+    }
+    if (action === "sync-slots") {
+      // Recalculate filled_slots from actual completions — fixes count drift
+      await pool.query(
+        `UPDATE campaigns SET filled_slots = (
+           SELECT COUNT(*) FROM campaign_completions WHERE campaign_id = $1
+         ) WHERE id = $1`,
+        [id]
+      )
+      return NextResponse.json({ success: true })
+    }
+    if (action === "remove-completion") {
+      const testerWallet = data?.tester_wallet?.trim()?.toLowerCase()
+      if (!testerWallet) return NextResponse.json({ error: "tester_wallet required" }, { status: 400 })
+      const del = await pool.query(
+        "DELETE FROM campaign_completions WHERE campaign_id = $1 AND tester_wallet = $2 RETURNING id",
+        [id, testerWallet]
+      )
+      if (del.rowCount) {
+        await pool.query("UPDATE campaigns SET filled_slots = GREATEST(0, filled_slots - 1) WHERE id = $1", [id])
+      }
+      return NextResponse.json({ success: true, removed: del.rowCount })
+    }
+    if (action === "reset-campaign") {
+      // Clear all completions and reset slot count — keeps campaign active
+      await pool.query("DELETE FROM campaign_completions WHERE campaign_id = $1", [id])
+      await pool.query("UPDATE campaigns SET filled_slots = 0, status = 'active' WHERE id = $1", [id])
+      return NextResponse.json({ success: true })
+    }
     if (action === "approve-campaign-update") {
       const upd = await pool.query(`SELECT * FROM pending_campaign_updates WHERE id = $1`, [id])
       if (upd.rows.length > 0) {
