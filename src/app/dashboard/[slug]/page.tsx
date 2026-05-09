@@ -82,6 +82,7 @@ export default function DashboardPage() {
             const data = await res.json()
             const match = data.projects?.[0]
             if (match) {
+              localStorage.setItem("arclens-wallet", accounts[0].toLowerCase())
               await loadDashboardWithToken(null, accounts[0])
               return true
             }

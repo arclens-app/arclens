@@ -120,6 +120,7 @@ export default function ActivatePage() {
       const data = await res.json()
       if (!res.ok) { setActionError(data.error || "Failed to activate. Try again."); setStep("sign"); return }
 
+      localStorage.setItem("arclens-wallet", wallet.toLowerCase())
       setStep("done")
       setTimeout(() => router.replace(`/dashboard/${slug}`), 2000)
     } catch (e: any) {

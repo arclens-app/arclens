@@ -106,9 +106,9 @@ export async function POST(req: NextRequest) {
     if (!tasks?.length)         return NextResponse.json({ error: "At least one task required" }, { status: 400 })
     if (!review_questions?.length) return NextResponse.json({ error: "At least one review question required" }, { status: 400 })
 
-    // Gate: creator must have at least one approved project on Arc Ecosystem
+    // Gate: creator must have at least one approved and live project on Arc Ecosystem
     const projGate = await pool.query(
-      `SELECT id FROM projects WHERE owner_wallet = $1 AND approved = true LIMIT 1`,
+      `SELECT id FROM projects WHERE owner_wallet = $1 AND approved = true AND live = true LIMIT 1`,
       [creator_wallet.toLowerCase()]
     )
     if (!projGate.rows.length) {
