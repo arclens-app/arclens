@@ -69,6 +69,25 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
          total_score  = GREATEST(0, total_score - $1 + $2),
          avg_score    = ROUND(GREATEST(0, total_score - $1 + $2) / NULLIF(campaigns_completed, 0), 2),
          impact_count = impact_count + $3,
+         rank = CASE
+           WHEN rank = 3
+             AND campaigns_completed >= 50
+             AND ROUND(GREATEST(0, total_score - $1 + $2) / NULLIF(campaigns_completed, 0), 2) >= 4.5
+             THEN 4
+           WHEN rank = 2
+             AND campaigns_completed >= 25
+             AND ROUND(GREATEST(0, total_score - $1 + $2) / NULLIF(campaigns_completed, 0), 2) >= 4.0
+             THEN 3
+           WHEN rank = 1
+             AND campaigns_completed >= 10
+             AND ROUND(GREATEST(0, total_score - $1 + $2) / NULLIF(campaigns_completed, 0), 2) >= 3.5
+             THEN 2
+           WHEN rank = 0
+             AND campaigns_completed >= 3
+             AND ROUND(GREATEST(0, total_score - $1 + $2) / NULLIF(campaigns_completed, 0), 2) >= 3.0
+             THEN 1
+           ELSE rank
+         END,
          updated_at   = NOW()
        WHERE wallet = $4`,
       [prevScore, quality_score, impact_credited ? 1 : 0, wallet]

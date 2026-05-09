@@ -53,6 +53,7 @@ export default function AdminPage() {
   const [events, setEvents]           = useState<Event[]>([])
   const [pendingCampaigns, setPendingCampaigns] = useState<AdminCampaign[]>([])
   const [pendingCampaignUpdates, setPendingCampaignUpdates] = useState<any[]>([])
+  const [allCampaigns, setAllCampaigns] = useState<any[]>([])
   const [acting, setActing]           = useState(false)
   const [locInputs, setLocInputs]     = useState<Record<number,{city:string;country:string;status:string;result:string}>>({})
   const [toast, setToast]             = useState<{ok:boolean;text:string}|null>(null)
@@ -109,6 +110,7 @@ export default function AdminPage() {
       setEvents(data.events || [])
       setPendingCampaigns(data.pendingCampaigns || [])
       setPendingCampaignUpdates(data.pendingCampaignUpdates || [])
+      setAllCampaigns(data.allCampaigns || [])
     } finally { setLoading(false) }
   }
 
@@ -996,6 +998,46 @@ export default function AdminPage() {
                           )}
                         </div>
                       ))}
+                    </div>
+                  )}
+
+                  {/* ── All Campaigns (manage / delete) ── */}
+                  {allCampaigns.length > 0 && (
+                    <div style={{ marginTop: 28 }}>
+                      <div style={{ fontSize:"11px", fontFamily:mono, color:t3, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:12 }}>
+                        All Campaigns ({allCampaigns.length})
+                      </div>
+                      <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                        {allCampaigns.map((c: any) => {
+                          const statusColor: Record<string,string> = {
+                            active: "#00b87a", pending_approval: "#e08810", approved: "#8aaeff",
+                            rejected: "#e03348", ended: "#6b7da8", completed: "#a855f7",
+                          }
+                          const sc = statusColor[c.status] || t3
+                          return (
+                            <div key={c.id} style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 14px", background:surf2, border:"1px solid "+bdr, borderRadius:9 }}>
+                              <div style={{ width:7, height:7, borderRadius:"50%", background:sc, flexShrink:0 }} />
+                              <div style={{ flex:1, minWidth:0 }}>
+                                <div style={{ fontSize:13, fontWeight:600, color:t1, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{c.title}</div>
+                                <div style={{ fontSize:10, fontFamily:mono, color:t3, marginTop:2 }}>
+                                  {c.project_name && <>{c.project_name} · </>}
+                                  {c.status} · {c.filled_slots}/{c.total_slots ?? "∞"} slots · {new Date(c.created_at).toLocaleDateString()}
+                                </div>
+                              </div>
+                              <a href={`/forge/${c.id}`} target="_blank" rel="noopener noreferrer"
+                                style={{ fontSize:10, fontFamily:mono, color:t3, textDecoration:"none", padding:"3px 8px", border:"1px solid "+bdr, borderRadius:4, flexShrink:0 }}>
+                                View
+                              </a>
+                              <button
+                                onClick={() => { if (window.confirm(`Delete "${c.title}"? This also removes all completions and cannot be undone.`)) act(c.id, "delete-campaign") }}
+                                disabled={acting}
+                                style={{ height:28, padding:"0 12px", background:"rgba(224,51,72,0.08)", color:"#e03348", fontSize:11, border:"1px solid rgba(224,51,72,0.2)", borderRadius:5, cursor:"pointer", fontFamily:"'Geist',sans-serif", fontWeight:600, flexShrink:0 }}>
+                                Delete
+                              </button>
+                            </div>
+                          )
+                        })}
+                      </div>
                     </div>
                   )}
                 </div>

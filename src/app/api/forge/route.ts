@@ -10,8 +10,12 @@ export async function GET(req: NextRequest) {
   const type    = searchParams.get("type")    || ""
   const wallet  = searchParams.get("wallet")  || ""
   const creator = searchParams.get("creator") || ""
+  const status  = searchParams.get("status")  || "active"
 
   try {
+    // Expire campaigns past their deadline — fire and forget, never blocks the response
+    pool.query("UPDATE campaigns SET status = 'ended' WHERE status = 'active' AND expires_at IS NOT NULL AND expires_at < NOW()").catch(() => {})
+
     const conditions: string[] = []
     const params: unknown[]    = []
 
@@ -20,7 +24,8 @@ export async function GET(req: NextRequest) {
       params.push(creator.toLowerCase())
       conditions.push(`c.creator_wallet = $${params.length}`)
     } else {
-      conditions.push("c.status = 'active'")
+      params.push(status === "ended" ? "ended" : "active")
+      conditions.push(`c.status = $${params.length}`)
     }
 
     if (type && type !== "all") {

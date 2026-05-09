@@ -83,6 +83,7 @@ const REWARD_META: Record<string, { label: string; color: string }> = {
 }
 
 const RANK_LABELS = ["Scout", "Builder", "Verified", "Trusted", "Arc Proven"]
+const RANK_COLORS = ["#6b7da8", "#00b87a", "#8aaeff", "#c08828", "#a855f7"]
 
 function wordCount(s: string) {
   return s.trim().split(/\s+/).filter(Boolean).length
@@ -107,6 +108,8 @@ export default function CampaignDetailPage() {
   const [autoScore, setAutoScore]       = useState<number | null>(null)
   const [contractVerified, setContractVerified] = useState<boolean | null>(null)
   const [alreadyDone, setAlreadyDone]   = useState(false)
+  const [testerRank, setTesterRank]     = useState<number | null>(null)
+  const [testerProgress, setTesterProgress] = useState<{ label: string; campaigns_needed: number; score_needed: number } | null>(null)
 
   // Builder rating state
   const [ratingWallet, setRatingWallet] = useState("")
@@ -137,8 +140,17 @@ export default function CampaignDetailPage() {
   useEffect(() => {
     if (wallet && campaign) {
       setIsOwner(campaign.creator_wallet.toLowerCase() === wallet.toLowerCase())
-      // Check if already submitted
       checkAlreadyDone(wallet)
+      // Fetch rank only if campaign has a rank requirement
+      if (campaign.min_rank > 0) {
+        fetch(`/api/forge/reputation?wallet=${encodeURIComponent(wallet)}`)
+          .then(r => r.json())
+          .then(d => {
+            setTesterRank(d.reputation?.rank ?? 0)
+            if (d.reputation?.next_rank) setTesterProgress(d.reputation.next_rank)
+          })
+          .catch(() => setTesterRank(0))
+      }
     }
   }, [wallet, campaign])
 
@@ -336,36 +348,57 @@ export default function CampaignDetailPage() {
         {campaign.status === "rejected" && (
           <div style={{ padding: "12px 16px", background: "rgba(224,51,72,0.06)", border: "1px solid rgba(224,51,72,0.2)", borderRadius: 10, marginBottom: 20 }}>
             <div style={{ fontSize: 12, fontWeight: 600, color: "#e03348", marginBottom: 4 }}>Campaign Rejected</div>
-            {campaign.rejection_reason
-              ? <div style={{ fontSize: 11, color: "#e03348", opacity: 0.8, lineHeight: 1.5, marginBottom: 4 }}>{campaign.rejection_reason}</div>
-              : null
-            }
+            {campaign.rejection_reason && <div style={{ fontSize: 11, color: "#e03348", opacity: 0.8, lineHeight: 1.5, marginBottom: 4 }}>{campaign.rejection_reason}</div>}
             <div style={{ fontSize: 11, color: "var(--t2,#6b7da8)" }}>Contact the Arclens team if you have questions.</div>
           </div>
         )}
+        {campaign.status === "ended" && (
+          <div style={{ padding: "12px 16px", background: "rgba(107,125,168,0.06)", border: "1px solid rgba(107,125,168,0.15)", borderRadius: 10, marginBottom: 20, display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#6b7da8", flexShrink: 0 }} />
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: "var(--t2,#6b7da8)", marginBottom: 2 }}>Campaign Ended</div>
+              <div style={{ fontSize: 11, color: "var(--t3,#2e3a5c)" }}>This campaign has closed. New submissions are no longer accepted.</div>
+            </div>
+          </div>
+        )}
 
-        {/* ── Header ── */}
-        <div style={{ display: "flex", alignItems: "flex-start", gap: 16, marginBottom: 24 }}>
-          <div style={{ width: 48, height: 48, borderRadius: 10, background: `${tm.color}15`, border: `1px solid ${tm.color}30`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden" }}>
-            {(campaign.campaign_logo || campaign.project_logo)
-              ? <img src={`/api/image-proxy?url=${encodeURIComponent((campaign.campaign_logo || campaign.project_logo)!)}`} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-              : <span style={{ fontSize: 13, fontWeight: 800, fontFamily: "var(--font-mono,monospace)", color: tm.color, letterSpacing: "-0.02em" }}>{tm.abbr}</span>
-            }
-          </div>
-          <div style={{ flex: 1 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 4 }}>
-              <span style={{ fontSize: 9, fontFamily: "var(--font-mono,monospace)", background: `${tm.color}15`, color: tm.color, border: `1px solid ${tm.color}30`, padding: "3px 8px", borderRadius: 4 }}>{tm.label}</span>
-              <span style={{ fontSize: 9, fontFamily: "var(--font-mono,monospace)", background: `${rm.color}15`, color: rm.color, border: `1px solid ${rm.color}30`, padding: "3px 8px", borderRadius: 4 }}>{rm.label}</span>
-              {campaign.project_name && <span style={{ fontSize: 11, color: "var(--t2,#6b7da8)" }}>{campaign.project_name}</span>}
+        {/* ── Hero Banner ── */}
+        <div style={{ background: "var(--surf,#0a0e1a)", border: "1px solid var(--bdr,rgba(255,255,255,0.06))", borderRadius: 14, marginBottom: 20, overflow: "hidden", borderTop: `2px solid ${tm.color}50` }}>
+          <div style={{ padding: "24px 24px 20px", background: `linear-gradient(180deg, ${tm.color}08 0%, transparent 80%)` }}>
+            <div style={{ display: "flex", gap: 20, alignItems: "flex-start" }}>
+              {/* Logo 88x88 — abbr always rendered as fallback underneath */}
+              <div style={{ position: "relative", width: 88, height: 88, borderRadius: 16, background: `${tm.color}12`, border: `1px solid ${tm.color}25`, flexShrink: 0, overflow: "hidden" }}>
+                <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, fontWeight: 800, fontFamily: "var(--font-mono,monospace)", color: tm.color, letterSpacing: "-0.02em" }}>{tm.abbr}</span>
+                {(campaign.campaign_logo || campaign.project_logo) && (
+                  <img src={`/api/image-proxy?url=${encodeURIComponent((campaign.campaign_logo || campaign.project_logo)!)}`} alt="" onError={e => (e.currentTarget.style.display = "none")} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
+                )}
+              </div>
+              {/* Content */}
+              <div style={{ flex: 1, minWidth: 0, paddingTop: 2 }}>
+                <h1 style={{ fontSize: 24, fontWeight: 700, color: "var(--t1,#e8ecff)", margin: "0 0 6px", letterSpacing: "-0.02em", lineHeight: 1.2 }}>{campaign.title}</h1>
+                {campaign.tagline && <p style={{ fontSize: 13, color: "var(--t2,#6b7da8)", margin: "0 0 12px", lineHeight: 1.6 }}>{campaign.tagline}</p>}
+                <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 10, fontFamily: "var(--font-mono,monospace)", background: `${tm.color}15`, color: tm.color, border: `1px solid ${tm.color}25`, padding: "3px 9px", borderRadius: 4 }}>{tm.label}</span>
+                  <span style={{ fontSize: 10, fontFamily: "var(--font-mono,monospace)", background: `${rm.color}15`, color: rm.color, border: `1px solid ${rm.color}25`, padding: "3px 9px", borderRadius: 4 }}>{rm.label}</span>
+                  {campaign.project_name && (
+                    <span style={{ fontSize: 11, color: "var(--t3,#2e3a5c)", fontFamily: "var(--font-mono,monospace)" }}>{campaign.project_name}</span>
+                  )}
+                </div>
+              </div>
             </div>
-            <h1 style={{ fontSize: 22, fontWeight: 700, color: "var(--t1,#e8ecff)", margin: "0 0 4px" }}>{campaign.title}</h1>
-            {campaign.tagline && <p style={{ fontSize: 13, color: "var(--t2,#6b7da8)", margin: 0 }}>{campaign.tagline}</p>}
           </div>
-          <div style={{ textAlign: "right", flexShrink: 0 }}>
-            <div style={{ fontSize: 20, fontWeight: 700, color: slotsLeft === 0 ? "#e03348" : "#00b87a" }}>
-              {slotsLeft !== null ? (slotsLeft === 0 ? "Full" : `${slotsLeft} left`) : "Open"}
-            </div>
-            <div style={{ fontSize: 11, color: "var(--t2,#6b7da8)" }}>{campaign.completion_count} completed</div>
+          {/* Stat bar */}
+          <div style={{ display: "grid", gridTemplateColumns: `repeat(${campaign.expires_at ? 3 : 2}, 1fr)`, borderTop: "1px solid var(--bdr,rgba(255,255,255,0.06))" }}>
+            {[
+              { label: "slots left", value: slotsLeft !== null ? (slotsLeft === 0 ? "Full" : String(slotsLeft)) : "Open", color: slotsLeft === 0 ? "#e03348" : "#00b87a" },
+              { label: "completed",  value: String(campaign.completion_count), color: "var(--t1,#e8ecff)" },
+              ...(campaign.expires_at ? [{ label: "closes", value: new Date(campaign.expires_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }), color: "var(--t2,#6b7da8)" }] : []),
+            ].map((s, i, arr) => (
+              <div key={i} style={{ padding: "13px 0", textAlign: "center", borderRight: i < arr.length - 1 ? "1px solid var(--bdr,rgba(255,255,255,0.06))" : "none" }}>
+                <div style={{ fontSize: 17, fontWeight: 700, color: s.color, fontFamily: "var(--font-mono,monospace)", lineHeight: 1 }}>{s.value}</div>
+                <div style={{ fontSize: 9, color: "var(--t3,#2e3a5c)", textTransform: "uppercase", letterSpacing: "0.08em", marginTop: 5, fontFamily: "var(--font-mono,monospace)" }}>{s.label}</div>
+              </div>
+            ))}
           </div>
         </div>
 
@@ -397,6 +430,8 @@ export default function CampaignDetailPage() {
                   <div style={{ padding: "32px 20px", textAlign: "center", color: "var(--t2,#6b7da8)", fontSize: 13 }}>
                     {campaign.status === "approved"
                       ? "This campaign is approved but not yet funded — check back soon"
+                      : campaign.status === "ended"
+                      ? "This campaign has ended and is no longer accepting submissions"
                       : "This campaign is not currently accepting submissions"}
                   </div>
 
@@ -417,6 +452,81 @@ export default function CampaignDetailPage() {
                     <div style={{ fontSize: 10, fontFamily: "var(--font-mono,monospace)", color: "var(--t3,#2e3a5c)", marginTop: 12 }}>
                       MetaMask, Rabby, or any injected wallet
                     </div>
+                  </div>
+
+                ) : campaign.min_rank > 0 && testerRank !== null && testerRank < campaign.min_rank ? (
+                  <div style={{ padding: "28px 24px 24px" }}>
+                    {/* Lock header */}
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginBottom: 24 }}>
+                      <div style={{ width: 44, height: 44, borderRadius: 12, background: "var(--surf2,#0e1224)", border: "1px solid var(--bdr,rgba(255,255,255,0.06))", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 14 }}>
+                        <svg width="18" height="18" viewBox="0 0 20 20" fill="none" style={{ color: "var(--t2,#6b7da8)" }}>
+                          <rect x="4" y="9" width="12" height="9" rx="2" stroke="currentColor" strokeWidth="1.5"/>
+                          <path d="M7 9V6a3 3 0 016 0v3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                        </svg>
+                      </div>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: "var(--t1,#e8ecff)", marginBottom: 5 }}>Access Restricted</div>
+                      <div style={{ fontSize: 12, color: "var(--t2,#6b7da8)", textAlign: "center", lineHeight: 1.7, maxWidth: 280 }}>
+                        This campaign requires <strong style={{ color: RANK_COLORS[campaign.min_rank] }}>{RANK_LABELS[campaign.min_rank]}</strong> rank. Build your reputation to unlock it.
+                      </div>
+                    </div>
+
+                    {/* Rank comparison */}
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 28px 1fr", alignItems: "center", gap: 8, marginBottom: 20 }}>
+                      {/* Current rank */}
+                      <div style={{ background: "var(--surf2,#0e1224)", border: `1px solid ${RANK_COLORS[testerRank]}25`, borderRadius: 10, padding: "14px 12px", textAlign: "center" }}>
+                        <div style={{ fontSize: 9, fontFamily: "var(--font-mono,monospace)", color: "var(--t3,#2e3a5c)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 }}>Your rank</div>
+                        <div style={{ width: 28, height: 28, borderRadius: "50%", background: `${RANK_COLORS[testerRank]}15`, border: `2px solid ${RANK_COLORS[testerRank]}50`, margin: "0 auto 8px" }} />
+                        <div style={{ fontSize: 12, fontWeight: 700, color: RANK_COLORS[testerRank] }}>{RANK_LABELS[testerRank]}</div>
+                      </div>
+                      {/* Arrow */}
+                      <div style={{ display: "flex", justifyContent: "center" }}>
+                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ color: "var(--t3,#2e3a5c)" }}>
+                          <path d="M3 7h8M8 4l3 3-3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      </div>
+                      {/* Required rank */}
+                      <div style={{ background: "var(--surf2,#0e1224)", border: `1px solid ${RANK_COLORS[campaign.min_rank]}25`, borderRadius: 10, padding: "14px 12px", textAlign: "center" }}>
+                        <div style={{ fontSize: 9, fontFamily: "var(--font-mono,monospace)", color: "var(--t3,#2e3a5c)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 }}>Required</div>
+                        <div style={{ width: 28, height: 28, borderRadius: "50%", background: `${RANK_COLORS[campaign.min_rank]}15`, border: `2px dashed ${RANK_COLORS[campaign.min_rank]}50`, margin: "0 auto 8px", position: "relative" }}>
+                          <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                            <svg width="10" height="10" viewBox="0 0 20 20" fill="none" style={{ color: `${RANK_COLORS[campaign.min_rank]}80` }}>
+                              <rect x="4" y="9" width="12" height="9" rx="2" stroke="currentColor" strokeWidth="2"/>
+                              <path d="M7 9V6a3 3 0 016 0v3" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                            </svg>
+                          </div>
+                        </div>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: RANK_COLORS[campaign.min_rank] }}>{RANK_LABELS[campaign.min_rank]}</div>
+                      </div>
+                    </div>
+
+                    {/* What it takes */}
+                    {testerProgress && (
+                      <div style={{ background: "var(--surf2,#0e1224)", border: "1px solid var(--bdr,rgba(255,255,255,0.06))", borderRadius: 10, padding: "14px 16px", marginBottom: 16 }}>
+                        <div style={{ fontSize: 10, fontFamily: "var(--font-mono,monospace)", color: "var(--t3,#2e3a5c)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>
+                          Path to {testerProgress.label}
+                        </div>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1px 1fr", gap: 12, alignItems: "center" }}>
+                          <div style={{ textAlign: "center" }}>
+                            <div style={{ fontSize: 22, fontWeight: 700, color: "var(--t1,#e8ecff)", fontFamily: "var(--font-mono,monospace)", lineHeight: 1, marginBottom: 4 }}>
+                              {testerProgress.campaigns_needed}
+                            </div>
+                            <div style={{ fontSize: 10, color: "var(--t2,#6b7da8)", lineHeight: 1.4 }}>more campaigns<br/>to complete</div>
+                          </div>
+                          <div style={{ background: "var(--bdr,rgba(255,255,255,0.06))", height: "100%", minHeight: 40 }} />
+                          <div style={{ textAlign: "center" }}>
+                            <div style={{ fontSize: 22, fontWeight: 700, color: "var(--t1,#e8ecff)", fontFamily: "var(--font-mono,monospace)", lineHeight: 1, marginBottom: 4 }}>
+                              {testerProgress.score_needed}+
+                            </div>
+                            <div style={{ fontSize: 10, color: "var(--t2,#6b7da8)", lineHeight: 1.4 }}>avg quality<br/>score needed</div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    <button onClick={() => router.push("/forge")}
+                      style={{ width: "100%", height: 42, background: "rgba(26,86,255,0.08)", color: "#8aaeff", border: "1px solid rgba(26,86,255,0.2)", borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: "pointer", letterSpacing: "-0.01em" }}>
+                      Browse open campaigns →
+                    </button>
                   </div>
 
                 ) : alreadyDone ? (
@@ -740,6 +850,9 @@ export default function CampaignDetailPage() {
                             <input type="text" value={editForm.reward_description || ""} onChange={e => setEditForm(f => ({ ...f, reward_description: e.target.value }))} placeholder={campaign.reward_description || "What testers earn"} style={ei} />
                           </EF>
                         </div>
+                        <EF label="Contract address" >
+                          <input type="text" value={editForm.contract_address || ""} onChange={e => setEditForm(f => ({ ...f, contract_address: e.target.value.trim() }))} placeholder={campaign.contract_address || "0x... (leave blank to keep current)"} style={{ ...ei, fontFamily: "'DM Mono', monospace", fontSize: 11 }} />
+                        </EF>
                         {editError && (
                           <div style={{ fontSize: 11, color: "#e03348", padding: "7px 10px", background: "rgba(224,51,72,0.08)", borderRadius: 6, fontFamily: "var(--font-mono,monospace)" }}>{editError}</div>
                         )}
@@ -797,26 +910,27 @@ export default function CampaignDetailPage() {
             {/* Builder info */}
             <div style={{ background: "var(--surf,#0a0e1a)", border: "1px solid var(--bdr,rgba(255,255,255,0.06))", borderRadius: 12, padding: "16px 18px" }}>
               <div style={{ fontSize: 10, fontFamily: "var(--font-mono,monospace)", color: "var(--t2,#6b7da8)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Hosted by</div>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-                {(campaign.project_logo || campaign.campaign_logo) && (
-                  <div style={{ width: 44, height: 44, borderRadius: 10, overflow: "hidden", flexShrink: 0, border: "1px solid var(--bdr,rgba(255,255,255,0.06))" }}>
-                    <img src={`/api/image-proxy?url=${encodeURIComponent((campaign.project_logo || campaign.campaign_logo)!)}`} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                  </div>
-                )}
-                <div>
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <div style={{ position: "relative", width: 44, height: 44, borderRadius: 10, overflow: "hidden", flexShrink: 0, border: "1px solid var(--bdr,rgba(255,255,255,0.06))", background: "var(--surf2,#0e1224)" }}>
+                  <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 700, color: "var(--t3,#2e3a5c)", fontFamily: "var(--font-mono,monospace)" }}>
+                    {(campaign.project_name || "?").slice(0, 1).toUpperCase()}
+                  </span>
+                  {(campaign.project_logo || campaign.campaign_logo) && (
+                    <img src={`/api/image-proxy?url=${encodeURIComponent((campaign.project_logo || campaign.campaign_logo)!)}`} alt="" onError={e => (e.currentTarget.style.display = "none")} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
+                  )}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
                   {campaign.project_name
                     ? <a href={`/ecosystem/${campaign.project_name.toLowerCase().replace(/\s+/g, "-")}`}
-                        style={{ fontSize: 13, fontWeight: 600, color: "var(--t1,#e8ecff)", textDecoration: "none" }}
+                        style={{ fontSize: 14, fontWeight: 700, color: "var(--t1,#e8ecff)", textDecoration: "none", display: "block", marginBottom: 3 }}
                         onMouseOver={e => (e.currentTarget.style.color = "#8aaeff")}
                         onMouseOut={e => (e.currentTarget.style.color = "var(--t1,#e8ecff)")}
                       >
                         {campaign.project_name}
                       </a>
-                    : <span style={{ fontSize: 13, fontWeight: 600, color: "var(--t1,#e8ecff)" }}>Unknown</span>
+                    : <span style={{ fontSize: 14, fontWeight: 700, color: "var(--t1,#e8ecff)", display: "block", marginBottom: 3 }}>Unknown Project</span>
                   }
-                  <div style={{ fontSize: 10, fontFamily: "var(--font-mono,monospace)", color: "var(--t2,#6b7da8)", marginTop: 2 }}>
-                    {campaign.creator_wallet.slice(0, 8)}...{campaign.creator_wallet.slice(-6)}
-                  </div>
+                  <div style={{ fontSize: 11, color: "var(--t3,#2e3a5c)" }}>Verified on Arc Ecosystem</div>
                 </div>
               </div>
             </div>

@@ -132,6 +132,7 @@ export default function CreateCampaignPage() {
   const [projects, setProjects]     = useState<Project[]>([])
   const [hasProject, setHasProject] = useState<boolean | null>(null)
   const [mounted, setMounted]       = useState(false)
+  const [walletMissing, setWalletMissing] = useState(false)
 
   const [type, setType]                         = useState("beta_test")
   const [title, setTitle]                       = useState("")
@@ -149,12 +150,14 @@ export default function CreateCampaignPage() {
   const [isFcfs, setIsFcfs]                     = useState(true)
   const [minRank, setMinRank]                   = useState(0)
   const [campaignLogo, setCampaignLogo]         = useState<string | null>(null)
+  const [logoPreview, setLogoPreview]           = useState<string | null>(null)
   const [logoUploading, setLogoUploading]       = useState(false)
   const logoInputRef                            = useRef<HTMLInputElement>(null)
   const [appUrl, setAppUrl]                     = useState("")
   const [submitting, setSubmitting]             = useState(false)
   const [depositing, setDepositing]             = useState(false)
   const [error, setError]                       = useState("")
+  const errorRef                                = useRef<HTMLDivElement>(null)
 
   const mono  = "'DM Mono', monospace"
   const bdr   = "var(--bdr, rgba(255,255,255,0.06))"
@@ -165,18 +168,54 @@ export default function CreateCampaignPage() {
   const t3    = "var(--t3, #2e3a5c)"
 
   useEffect(() => {
+    if (error) errorRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })
+  }, [error])
+
+  useEffect(() => {
     setMounted(true)
     const w = localStorage.getItem("arclens-wallet")
-    if (!w) { router.push("/forge"); return }
+    if (!w) { setWalletMissing(true); return }
     setWallet(w)
     fetch("/api/claim", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ wallet: w }) })
       .then(r => r.json())
-      .then(d => { if (d.projects?.length) { setProjects(d.projects); setHasProject(true) } else setHasProject(false) })
+      .then(d => {
+        if (d.projects?.length) {
+          setProjects(d.projects)
+          setHasProject(true)
+          if (d.projects.length === 1) setProjectId(d.projects[0].id)
+        } else setHasProject(false)
+      })
       .catch(() => setHasProject(false))
   }, [])
 
+  async function connectWallet() {
+    if (!(window as any).ethereum) { setError("No wallet detected. Install MetaMask or Rabby."); return }
+    try {
+      const accounts = await (window as any).ethereum.request({ method: "eth_requestAccounts" })
+      const addr = accounts?.[0]
+      if (!addr) return
+      localStorage.setItem("arclens-wallet", addr.toLowerCase())
+      setWallet(addr.toLowerCase())
+      setWalletMissing(false)
+      fetch("/api/claim", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ wallet: addr.toLowerCase() }) })
+        .then(r => r.json())
+        .then(d => {
+          if (d.projects?.length) {
+            setProjects(d.projects)
+            setHasProject(true)
+            if (d.projects.length === 1) setProjectId(d.projects[0].id)
+          } else setHasProject(false)
+        })
+        .catch(() => setHasProject(false))
+    } catch { }
+  }
+
   async function uploadLogo(file: File) {
     if (file.size > 5 * 1024 * 1024) { setError("Image must be under 5MB"); return }
+    // Show blob URL instantly — founder sees their logo immediately, zero proxy calls
+    const blob = URL.createObjectURL(file)
+    if (logoPreview) URL.revokeObjectURL(logoPreview)
+    setLogoPreview(blob)
     setLogoUploading(true)
     try {
       const fd = new FormData()
@@ -266,18 +305,41 @@ export default function CreateCampaignPage() {
   const totalUsdcCost = rewardType === "usdc" && rewardUsdcAmount && totalSlots
     ? (parseFloat(rewardUsdcAmount) * parseInt(totalSlots)).toFixed(2) : null
 
-  if (!mounted || hasProject === null) return <div style={{ minHeight: "100vh", background: "#060812" }} />
+  if (!mounted) return <div style={{ minHeight: "100vh", background: "#060812" }} />
+
+  if (walletMissing) return (
+    <ArcLayout active="forge">
+      <div style={{ padding: "80px 28px", maxWidth: 480, margin: "0 auto", textAlign: "center" }}>
+        <div style={{ width: 48, height: 48, borderRadius: 12, background: "rgba(26,86,255,0.1)", border: "1px solid rgba(26,86,255,0.2)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px", fontSize: 20, fontFamily: mono, fontWeight: 700, color: "#8aaeff" }}>⬡</div>
+        <div style={{ fontSize: 20, fontWeight: 700, color: t1, marginBottom: 8, letterSpacing: "-0.03em" }}>Connect your wallet</div>
+        <p style={{ fontSize: 13, color: t2, lineHeight: 1.8, marginBottom: 28 }}>
+          You need to connect your wallet to create a campaign. This links your campaign to your project on Arc Ecosystem.
+        </p>
+        {error && <div style={{ fontSize: 12, color: "#e03348", marginBottom: 16, padding: "10px 14px", background: "rgba(224,51,72,0.08)", borderRadius: 8, border: "1px solid rgba(224,51,72,0.2)" }}>{error}</div>}
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <button onClick={connectWallet} style={{ height: 44, background: "#1a56ff", color: "#fff", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: "pointer", letterSpacing: "-0.01em" }}>Connect Wallet</button>
+          <button onClick={() => router.push("/forge")} style={{ height: 40, background: "transparent", color: t2, border: "1px solid " + bdr, borderRadius: 10, fontSize: 13, cursor: "pointer" }}>Back to Arc Trials</button>
+        </div>
+        <div style={{ fontSize: 11, fontFamily: mono, color: t3, marginTop: 16 }}>Works with MetaMask, Rabby, and any injected wallet</div>
+      </div>
+    </ArcLayout>
+  )
+
+  if (hasProject === null) return <div style={{ minHeight: "100vh", background: "#060812", display: "flex", alignItems: "center", justifyContent: "center" }}><div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: "var(--t3, #2e3a5c)", letterSpacing: "0.08em" }}>Checking projects...</div></div>
 
   if (hasProject === false) return (
     <ArcLayout active="forge">
       <div style={{ padding: "80px 28px", maxWidth: 480, margin: "0 auto", textAlign: "center" }}>
         <div style={{ width: 48, height: 48, borderRadius: 12, background: "rgba(26,86,255,0.1)", border: "1px solid rgba(26,86,255,0.2)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px", fontSize: 20, fontFamily: mono, fontWeight: 700, color: "#8aaeff" }}>!</div>
         <div style={{ fontSize: 20, fontWeight: 700, color: t1, marginBottom: 8, letterSpacing: "-0.03em" }}>Project Required</div>
-        <p style={{ fontSize: 13, color: t2, lineHeight: 1.8, marginBottom: 28 }}>
+        <p style={{ fontSize: 13, color: t2, lineHeight: 1.8, marginBottom: 8 }}>
           To create a campaign, your project must first be listed and approved on Arc Ecosystem. This ensures every campaign is backed by a real, verifiable builder.
         </p>
+        <p style={{ fontSize: 12, color: t3, lineHeight: 1.7, marginBottom: 28, fontFamily: mono }}>
+          Already listed? Activate your founder dashboard first — go to your project page on Arc Ecosystem and click <strong style={{ color: t2 }}>Claim Dashboard</strong>.
+        </p>
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          <button onClick={() => router.push("/ecosystem")} style={{ height: 44, background: "#1a56ff", color: "#fff", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: "pointer", letterSpacing: "-0.01em" }}>List Your Project on Arc Ecosystem</button>
+          <button onClick={() => router.push("/ecosystem")} style={{ height: 44, background: "#1a56ff", color: "#fff", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: "pointer", letterSpacing: "-0.01em" }}>Browse Arc Ecosystem →</button>
           <button onClick={() => router.push("/forge")} style={{ height: 40, background: "transparent", color: t2, border: "1px solid " + bdr, borderRadius: 10, fontSize: 13, cursor: "pointer" }}>Back to Arc Trials</button>
         </div>
       </div>
@@ -338,48 +400,91 @@ export default function CreateCampaignPage() {
           <Card step="02" title="Campaign details" sub="The more context you give, the better feedback you'll get. Be specific about what stage you're at.">
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
 
-              {/* Campaign logo upload */}
-              <Field label="Campaign image" hint="Logo or screenshot shown on the campaign card">
-                <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                  {/* Preview or placeholder */}
-                  <div
-                    onClick={() => logoInputRef.current?.click()}
-                    style={{
-                      width: 64, height: 64, borderRadius: 12, flexShrink: 0,
-                      background: campaignLogo ? "transparent" : surf2,
-                      border: `1px solid ${campaignLogo ? "rgba(0,184,122,0.3)" : bdr}`,
-                      cursor: "pointer", overflow: "hidden", position: "relative",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                    }}
-                  >
-                    {campaignLogo
-                      ? <img src={`/api/image-proxy?url=${encodeURIComponent(campaignLogo)}`} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                      : logoUploading
-                        ? <div style={{ width: 18, height: 18, borderRadius: "50%", border: "2px solid #1a56ff", borderTopColor: "transparent", animation: "spin 0.7s linear infinite" }} />
-                        : <span style={{ fontSize: 20, color: t3 }}>+</span>
-                    }
-                  </div>
-                  <div>
-                    <button
-                      type="button"
+              {/* Campaign logo upload + live card preview */}
+              <div style={{ display: "flex", gap: 20, alignItems: "flex-start", flexWrap: "wrap" }}>
+
+                {/* Upload controls */}
+                <div style={{ flex: "0 0 auto" }}>
+                  <div style={{ fontSize: 12, fontWeight: 500, color: t1, marginBottom: 6 }}>Campaign image</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                    <div
                       onClick={() => logoInputRef.current?.click()}
-                      disabled={logoUploading}
-                      style={{ height: 32, padding: "0 14px", background: surf2, border: "1px solid " + bdr, borderRadius: 7, fontSize: 12, color: logoUploading ? t3 : t1, cursor: logoUploading ? "default" : "pointer", marginBottom: 6 }}
+                      style={{
+                        width: 64, height: 64, borderRadius: 12, flexShrink: 0,
+                        background: campaignLogo ? "transparent" : surf2,
+                        border: `1px solid ${campaignLogo ? "rgba(0,184,122,0.3)" : bdr}`,
+                        cursor: "pointer", overflow: "hidden",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                      }}
                     >
-                      {logoUploading ? "Uploading..." : campaignLogo ? "Change image" : "Upload image"}
-                    </button>
-                    <div style={{ fontSize: 10, fontFamily: mono, color: t3 }}>PNG, JPG, GIF · max 5MB</div>
-                    {campaignLogo && (
-                      <button type="button" onClick={() => setCampaignLogo(null)}
-                        style={{ fontSize: 10, fontFamily: mono, color: "#e03348", background: "none", border: "none", cursor: "pointer", padding: 0, marginTop: 4 }}>
-                        Remove
+                      {logoPreview
+                        ? <img src={logoPreview} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                        : logoUploading
+                          ? <div style={{ width: 18, height: 18, borderRadius: "50%", border: "2px solid #1a56ff", borderTopColor: "transparent", animation: "spin 0.7s linear infinite" }} />
+                          : <span style={{ fontSize: 20, color: t3 }}>+</span>
+                      }
+                    </div>
+                    <div>
+                      <button type="button" onClick={() => logoInputRef.current?.click()} disabled={logoUploading}
+                        style={{ height: 32, padding: "0 14px", background: surf2, border: "1px solid " + bdr, borderRadius: 7, fontSize: 12, color: logoUploading ? t3 : t1, cursor: logoUploading ? "default" : "pointer", marginBottom: 6 }}>
+                        {logoUploading ? "Uploading..." : campaignLogo ? "Change image" : "Upload image"}
                       </button>
-                    )}
+                      <div style={{ fontSize: 10, fontFamily: mono, color: t3 }}>PNG, JPG, GIF · max 5MB</div>
+                      {campaignLogo && (
+                        <button type="button" onClick={() => { setCampaignLogo(null); if (logoPreview) { URL.revokeObjectURL(logoPreview); setLogoPreview(null) } }}
+                          style={{ fontSize: 10, fontFamily: mono, color: "#e03348", background: "none", border: "none", cursor: "pointer", padding: 0, marginTop: 4 }}>
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                    <input ref={logoInputRef} type="file" accept="image/*" style={{ display: "none" }}
+                      onChange={e => { const f = e.target.files?.[0]; if (f) uploadLogo(f) }} />
                   </div>
-                  <input ref={logoInputRef} type="file" accept="image/*" style={{ display: "none" }}
-                    onChange={e => { const f = e.target.files?.[0]; if (f) uploadLogo(f) }} />
                 </div>
-              </Field>
+
+                {/* Live card preview */}
+                <div style={{ flex: "1 1 260px" }}>
+                  <div style={{ fontSize: 12, fontWeight: 500, color: t1, marginBottom: 6 }}>
+                    Card preview <span style={{ fontSize: 10, fontFamily: mono, color: t3, fontWeight: 400 }}>· updates as you fill in details</span>
+                  </div>
+                  <div style={{
+                    background: surf2, border: `1px solid ${selectedType.color}25`,
+                    borderRadius: 12, padding: "16px 18px",
+                    display: "flex", flexDirection: "column", gap: 10,
+                  }}>
+                    <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+                      {/* Card preview logo — exact same render as live listing page */}
+                      <div style={{ position: "relative", width: 48, height: 48, borderRadius: 12, background: `${selectedType.color}12`, border: `1px solid ${selectedType.color}25`, overflow: "hidden", flexShrink: 0 }}>
+                        <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 800, fontFamily: mono, color: selectedType.color, letterSpacing: "-0.02em" }}>{selectedType.abbr}</span>
+                        {logoPreview && <img src={logoPreview} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0, paddingTop: 2 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4, flexWrap: "wrap" }}>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: title ? t1 : t3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title || "Campaign title"}</div>
+                          <span style={{ fontSize: 9, fontWeight: 800, color: selectedType.color, fontFamily: mono, padding: "1px 6px", borderRadius: 4, background: `${selectedType.color}15`, border: `1px solid ${selectedType.color}30`, flexShrink: 0 }}>{selectedType.abbr}</span>
+                        </div>
+                        {projects.find(p => p.id === projectId) && (
+                          <div style={{ fontSize: 11, color: t2 }}>{projects.find(p => p.id === projectId)?.name}</div>
+                        )}
+                      </div>
+                    </div>
+                    {tagline && (
+                      <p style={{ fontSize: 12, color: t2, margin: 0, lineHeight: 1.5, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" as const }}>{tagline}</p>
+                    )}
+                    <div>
+                      {rewardType === "usdc" && rewardUsdcAmount
+                        ? <div><span style={{ fontSize: 18, fontWeight: 800, color: "#00d990", fontFamily: mono }}>${rewardUsdcAmount}</span><span style={{ fontSize: 11, color: t2, marginLeft: 5 }}>USDC per tester</span></div>
+                        : <span style={{ fontSize: 10, background: `${selectedRwd.color}15`, color: selectedRwd.color, border: `1px solid ${selectedRwd.color}30`, padding: "3px 8px", borderRadius: 4, fontFamily: mono }}>{selectedRwd.label}</span>
+                      }
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", paddingTop: 8, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                      <span style={{ fontSize: 11, color: t3, fontFamily: mono }}>{tasks.length} task{tasks.length !== 1 ? "s" : ""} · 0 done</span>
+                      <span style={{ fontSize: 11, color: t3 }}>just now</span>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
 
               <Field label="Title" required>
                 <input type="text" value={title} onChange={e => setTitle(e.target.value.slice(0,80))}
@@ -406,7 +511,7 @@ export default function CreateCampaignPage() {
                   style={inp} />
               </Field>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div style={{ display: "grid", gridTemplateColumns: CONTRACT_HIDDEN.has(type) ? "1fr" : "1fr 1fr", gap: 12 }}>
                 {/* Primary contract — required for contract types, hidden for UI-only types */}
                 {!CONTRACT_HIDDEN.has(type) && (
                   <Field
@@ -448,7 +553,7 @@ export default function CreateCampaignPage() {
           </Card>
 
           {/* ── 03 Tester Tasks ── */}
-          <Card step="03" title="What should testers do?" sub="Each step can point to its own contract. Multi-contract protocols should assign the relevant contract per task — testers are verified against all of them.">
+          <Card step="03" title="What should testers do?" sub={CONTRACT_REQUIRED.has(type) ? "Each step can have its own contract address — expand a step to set it. Testers are verified on-chain against every contract you add." : "Walk testers through exactly what to do, step by step. Be specific — the clearer the task, the better the feedback."}>
             <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 10 }}>
               {tasks.map((task, i) => {
                 const taskContractValid = task.contract_address && /^0x[a-fA-F0-9]{40}$/.test(task.contract_address)
@@ -625,8 +730,19 @@ export default function CreateCampaignPage() {
                 </div>
               </div>
               {minRank > 0 && (
-                <div style={{ padding: "10px 14px", background: "rgba(192,136,40,0.05)", border: "1px solid rgba(192,136,40,0.2)", borderRadius: 8, fontSize: 11, color: "#c08828", fontFamily: mono, lineHeight: 1.6 }}>
-                  Testers must reach <strong>{["","Builder","Verified","Trusted","Arc Proven"][minRank]}</strong> rank before they can participate. Your campaign will be visible but locked to lower-ranked testers until they earn it.
+                <div style={{ padding: "12px 14px", background: "rgba(192,136,40,0.05)", border: "1px solid rgba(192,136,40,0.25)", borderRadius: 8, display: "flex", flexDirection: "column", gap: 6 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#c08828", flexShrink: 0 }} />
+                    <span style={{ fontSize: 11, fontWeight: 600, color: "#c08828", fontFamily: mono }}>
+                      Rank gate active — {["","Builder","Verified","Trusted","Arc Proven"][minRank]} required
+                    </span>
+                  </div>
+                  <p style={{ fontSize: 11, color: t2, margin: 0, lineHeight: 1.7, fontFamily: mono }}>
+                    ArcLens is early — most testers are currently <strong style={{ color: t1 }}>Scout</strong> rank with no campaigns completed yet. Setting a rank requirement now will significantly shrink your tester pool.
+                  </p>
+                  <p style={{ fontSize: 11, color: t3, margin: 0, lineHeight: 1.7, fontFamily: mono }}>
+                    Recommended: leave at <strong style={{ color: t2 }}>Any rank</strong> while the platform grows. You can raise the bar once the tester community has built reputation.
+                  </p>
                 </div>
               )}
             </div>
@@ -634,7 +750,7 @@ export default function CreateCampaignPage() {
 
           {/* ── Submit ── */}
           {error && (
-            <div style={{ fontSize: 13, color: "#e03348", padding: "12px 16px", background: "rgba(224,51,72,0.08)", borderRadius: 8, border: "1px solid rgba(224,51,72,0.2)" }}>{error}</div>
+            <div ref={errorRef} style={{ fontSize: 13, color: "#e03348", padding: "12px 16px", background: "rgba(224,51,72,0.08)", borderRadius: 8, border: "1px solid rgba(224,51,72,0.2)" }}>{error}</div>
           )}
 
           <div style={{ background: surf, border: "1px solid " + bdr, borderRadius: 12, padding: "16px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>

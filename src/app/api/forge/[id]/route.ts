@@ -11,6 +11,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const whereClause = isNumeric ? "c.id = $1" : "c.slug = $1"
 
   try {
+    pool.query("UPDATE campaigns SET status = 'ended' WHERE status = 'active' AND expires_at IS NOT NULL AND expires_at < NOW()").catch(() => {})
+
     const campaignRes = await pool.query(
       `SELECT
          c.*,
@@ -76,7 +78,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     if (!campaign.rows.length) return NextResponse.json({ error: "Campaign not found or not authorized" }, { status: 403 })
     const c = campaign.rows[0]
 
-    const ALLOWED = ["expires_at", "total_slots", "tagline", "description", "app_url", "reward_description"]
+    const ALLOWED = ["expires_at", "total_slots", "tagline", "description", "app_url", "reward_description", "contract_address"]
     const sanitized: Record<string, any> = {}
     for (const [key, val] of Object.entries(changes)) {
       if (ALLOWED.includes(key) && val !== undefined && val !== "") sanitized[key] = val
@@ -87,6 +89,13 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       const n = parseInt(String(sanitized.total_slots))
       if (isNaN(n) || n < 1) return NextResponse.json({ error: "Invalid slot count" }, { status: 400 })
       if (n < c.filled_slots) return NextResponse.json({ error: `Slot count cannot be below current filled count (${c.filled_slots})` }, { status: 400 })
+    }
+    if (sanitized.contract_address !== undefined) {
+      const addr = String(sanitized.contract_address).trim()
+      if (addr && !/^0x[a-fA-F0-9]{40}$/.test(addr)) {
+        return NextResponse.json({ error: "Contract address must be a valid 0x address" }, { status: 400 })
+      }
+      sanitized.contract_address = addr || null
     }
 
     await pool.query(`

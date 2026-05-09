@@ -381,6 +381,15 @@ export async function GET(req: NextRequest) {
         )
         pendingCampaigns = pc.rows
       } catch { }
+      let allCampaigns: unknown[] = []
+      try {
+        const ac = await pool.query(
+          `SELECT id, title, status, creator_wallet, project_name, filled_slots, total_slots, created_at
+           FROM campaigns ORDER BY created_at DESC LIMIT 200`
+        )
+        allCampaigns = ac.rows
+      } catch { }
+
       return NextResponse.json({
         submissions: pending.rows,
         projects: approved.rows,
@@ -389,6 +398,7 @@ export async function GET(req: NextRequest) {
         events,
         pendingCampaigns,
         pendingCampaignUpdates,
+        allCampaigns,
       }, { headers: { "Cache-Control": "no-store" } })
     } catch (e) {
       console.error("[Admin] list error:", e)
@@ -547,6 +557,12 @@ export async function POST(req: NextRequest) {
     }
     if (action === "reject-update") {
       await pool.query(`UPDATE pending_updates SET status = 'rejected' WHERE id = $1`, [id])
+      return NextResponse.json({ success: true })
+    }
+    if (action === "delete-campaign") {
+      await pool.query("DELETE FROM campaign_completions WHERE campaign_id = $1", [id])
+      await pool.query("DELETE FROM pending_campaign_updates WHERE campaign_id = $1", [id]).catch(() => {})
+      await pool.query("DELETE FROM campaigns WHERE id = $1", [id])
       return NextResponse.json({ success: true })
     }
     if (action === "approve-campaign-update") {

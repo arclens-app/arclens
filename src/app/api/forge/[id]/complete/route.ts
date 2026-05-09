@@ -5,18 +5,21 @@ import { rateLimit, getIp } from "@/lib/ratelimit"
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
 
+// Ensure unique constraint exists — safe to run on every cold start
+pool.query("CREATE UNIQUE INDEX IF NOT EXISTS tester_reputation_wallet_unique ON tester_reputation (wallet)").catch(() => {})
+
 // Check if a wallet has interacted with any of the provided contracts via Arc RPC event logs.
 // Checks campaign-level + per-task contract addresses in parallel.
 // Any event emitted by a contract that includes the tester wallet as a topic = verified.
 async function checkContractVerification(
   contractAddresses: string[],
   testerWallet: string
-): Promise<boolean> {
+): Promise<boolean | null> {
   // Deduplicate and filter valid addresses
   const unique = [...new Set(
     contractAddresses.filter(a => a && /^0x[a-fA-F0-9]{40}$/i.test(a))
   )]
-  if (!unique.length) return false
+  if (!unique.length) return null
 
   try {
     const provider   = getProvider()
@@ -39,7 +42,7 @@ async function checkContractVerification(
     return results.some(Boolean)
   } catch (e) {
     console.error("[arc-verify]", e)
-    return false
+    return null  // RPC error — don't penalise tester, allow submission unverified
   }
 }
 
@@ -130,6 +133,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (campaign.total_slots && campaign.filled_slots >= campaign.total_slots) {
       return NextResponse.json({ error: "Campaign is full" }, { status: 400 })
     }
+    // Note: final atomic slot claim happens after insert (see below) to prevent race conditions
 
     // Check tester rank requirement
     if (campaign.min_rank > 0) {
@@ -199,11 +203,21 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       [campaignNumericId, wallet, tx_hashes, JSON.stringify(review_answers), auto_score, contract_verified, provisionalScore]
     )
 
-    // Increment filled_slots
-    await pool.query(
-      `UPDATE campaigns SET filled_slots = filled_slots + 1 WHERE id = $1`,
-      [campaignNumericId]
-    )
+    // Atomic slot increment — prevents race condition when two testers submit simultaneously
+    if (campaign.total_slots) {
+      const slotRes = await pool.query(
+        `UPDATE campaigns SET filled_slots = filled_slots + 1
+         WHERE id = $1 AND filled_slots < total_slots RETURNING id`,
+        [campaignNumericId]
+      )
+      if (!slotRes.rows.length) {
+        // Another tester claimed the last slot between our check and now — roll back completion
+        await pool.query(`DELETE FROM campaign_completions WHERE campaign_id = $1 AND tester_wallet = $2`, [campaignNumericId, wallet])
+        return NextResponse.json({ error: "Campaign is full" }, { status: 400 })
+      }
+    } else {
+      await pool.query(`UPDATE campaigns SET filled_slots = filled_slots + 1 WHERE id = $1`, [campaignNumericId])
+    }
 
     // Upsert reputation record (provisional — quality_score refined after builder rating)
     await pool.query(
