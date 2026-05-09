@@ -413,7 +413,7 @@ export default function CreateCampaignPage() {
                   <div style={{ fontSize: 12, fontWeight: 500, color: t1, marginBottom: 6 }}>
                     Campaign banner
                     <span style={{ fontSize: 10, fontFamily: mono, color: t3, fontWeight: 400, marginLeft: 6 }}>
-                      {logoPreview ? "· drag to reposition" : "· shown as full-width cover on the campaign page"}
+                      {logoPreview ? "· drag to reposition · exact size as live page" : "· full-width cover on campaign page (200px tall)"}
                     </span>
                   </div>
                   {/* Banner preview — drag to reposition when image loaded */}
@@ -444,7 +444,7 @@ export default function CreateCampaignPage() {
                       window.addEventListener("mouseup", onUp)
                     } : undefined}
                     style={{
-                      position: "relative", width: "100%", height: 130, borderRadius: 10, overflow: "hidden",
+                      position: "relative", width: "100%", height: 200, borderRadius: 10, overflow: "hidden",
                       background: `linear-gradient(135deg, ${selectedType.color}18 0%, ${selectedType.color}06 100%)`,
                       border: `1px dashed ${logoPreview ? "rgba(0,184,122,0.35)" : selectedType.color + "40"}`,
                       cursor: logoPreview ? (isDragging ? "grabbing" : "grab") : "pointer",
