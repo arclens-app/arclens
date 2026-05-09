@@ -244,7 +244,7 @@ export default function CampaignDetailPage() {
     try {
       if (!(window as any).ethereum) return
       const accounts = await (window as any).ethereum.request({ method: "eth_requestAccounts" })
-      if (accounts?.[0]) { setWallet(accounts[0]); localStorage.setItem("arclens-wallet", accounts[0]) }
+      if (accounts?.[0]) { setWallet(accounts[0]); localStorage.setItem("arclens-wallet", accounts[0].toLowerCase()) }
     } catch { }
   }
 
