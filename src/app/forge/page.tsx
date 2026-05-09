@@ -10,6 +10,7 @@ interface Campaign {
   title: string
   tagline: string | null
   type: string
+  status: string
   reward_type: string
   reward_description: string | null
   reward_usdc_amount: number | null
@@ -92,13 +93,14 @@ function daysLeft(d: string) {
 
 export default function ForgePage() {
   const router = useRouter()
-  const [mounted, setMounted]       = useState(false)
-  const [campaigns, setCampaigns]   = useState<Campaign[]>([])
-  const [stats, setStats]           = useState<Stats | null>(null)
-  const [reputation, setReputation] = useState<Reputation | null>(null)
-  const [loading, setLoading]       = useState(true)
-  const [filter, setFilter]         = useState("all")
-  const [wallet, setWallet]         = useState<string | null>(null)
+  const [mounted, setMounted]         = useState(false)
+  const [campaigns, setCampaigns]     = useState<Campaign[]>([])
+  const [stats, setStats]             = useState<Stats | null>(null)
+  const [reputation, setReputation]   = useState<Reputation | null>(null)
+  const [loading, setLoading]         = useState(true)
+  const [filter, setFilter]           = useState("all")
+  const [statusFilter, setStatusFilter] = useState<"active" | "ended">("active")
+  const [wallet, setWallet]           = useState<string | null>(null)
   const [hoveredCard, setHoveredCard] = useState<number | null>(null)
 
   useEffect(() => {
@@ -110,7 +112,7 @@ export default function ForgePage() {
   useEffect(() => {
     if (!mounted) return
     load()
-  }, [mounted, filter, wallet])
+  }, [mounted, filter, statusFilter, wallet])
 
   async function load() {
     setLoading(true)
@@ -118,6 +120,7 @@ export default function ForgePage() {
       const qs = new URLSearchParams()
       if (filter !== "all") qs.set("type", filter)
       if (wallet) qs.set("wallet", wallet)
+      qs.set("status", statusFilter)
       const res  = await fetch(`/api/forge?${qs}`)
       const data = await res.json()
       setCampaigns(data.campaigns || [])
@@ -241,7 +244,29 @@ export default function ForgePage() {
           </div>
         )}
 
-        {/* ── Filter Pills ── */}
+        {/* ── Status Tabs ── */}
+        <div style={{ display: "flex", gap: 4, marginBottom: 14, background: "#0a0e1a", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 10, padding: 4 }}>
+          {([
+            { id: "active", label: "Active",  color: "#00b87a" },
+            { id: "ended",  label: "Ended",   color: "#6b7da8" },
+          ] as const).map(s => (
+            <button key={s.id} onClick={() => setStatusFilter(s.id)}
+              style={{
+                flex: 1, height: 34, borderRadius: 7, cursor: "pointer",
+                background: statusFilter === s.id ? `${s.color}18` : "transparent",
+                color: statusFilter === s.id ? s.color : "#6b7da8",
+                border: statusFilter === s.id ? `1px solid ${s.color}30` : "1px solid transparent",
+                fontSize: 13, fontWeight: statusFilter === s.id ? 600 : 400,
+                display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
+                transition: "all 0.15s",
+              }}>
+              <div style={{ width: 6, height: 6, borderRadius: "50%", background: statusFilter === s.id ? s.color : "rgba(255,255,255,0.1)" }} />
+              {s.label}
+            </button>
+          ))}
+        </div>
+
+        {/* ── Type Filter Pills ── */}
         <div style={{ display: "flex", gap: 8, marginBottom: 20, overflowX: "auto", paddingBottom: 4 }}>
           {filterButtons.map(f => {
             const active = filter === f.id
@@ -251,12 +276,13 @@ export default function ForgePage() {
                 key={f.id}
                 onClick={() => setFilter(f.id)}
                 style={{
-                  height: 32, padding: "0 14px", whiteSpace: "nowrap", flexShrink: 0,
+                  height: 30, padding: "0 12px", whiteSpace: "nowrap", flexShrink: 0,
                   background: active ? (color + "20") : "#0a0e1a",
                   color: active ? color : "#6b7da8",
                   border: `1px solid ${active ? (color + "50") : "rgba(255,255,255,0.06)"}`,
-                  borderRadius: 8, fontSize: 12, fontWeight: active ? 700 : 400, cursor: "pointer",
-                  display: "flex", alignItems: "center", gap: 6,
+                  borderRadius: 7, fontSize: 11, fontWeight: active ? 700 : 400, cursor: "pointer",
+                  display: "flex", alignItems: "center", gap: 5,
+                  transition: "all 0.15s",
                 }}
               >
                 {f.id !== "all" && (
@@ -282,9 +308,16 @@ export default function ForgePage() {
             </div>
             <div style={{ fontSize: 15, fontWeight: 600, color: "#e8ecff", marginBottom: 6 }}>No campaigns found</div>
             <div style={{ fontSize: 13, color: "#6b7da8", marginBottom: 20 }}>
-              {filter !== "all" ? `No ${TYPE_META[filter]?.label ?? filter} campaigns right now.` : "Be the first builder to create one."}
+              {statusFilter === "ended"
+                ? filter !== "all"
+                  ? `No ended ${TYPE_META[filter]?.label ?? filter} campaigns yet.`
+                  : "No ended campaigns yet."
+                : filter !== "all"
+                  ? `No active ${TYPE_META[filter]?.label ?? filter} campaigns right now.`
+                  : "Be the first builder to create one."
+              }
             </div>
-            {wallet && (
+            {wallet && statusFilter === "active" && (
               <button onClick={() => router.push("/forge/create")} style={{ height: 38, padding: "0 20px", background: "#1a56ff", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
                 Create Campaign
               </button>
@@ -299,35 +332,33 @@ export default function ForgePage() {
               const full      = left !== null && left === 0
               const logoUrl   = imgSrc(c.campaign_logo || c.project_logo)
               const isHovered = hoveredCard === c.id
+              const isEnded   = statusFilter === "ended"
               const expiresIn = c.expires_at ? daysLeft(c.expires_at) : null
               const endingSoon = expiresIn !== null && expiresIn <= 1 && expiresIn > 0
               const daysLeftNum = expiresIn !== null && expiresIn > 0 && expiresIn <= 7 ? Math.ceil(expiresIn) : null
-              const initials  = (c.project_name || c.title || "").slice(0, 2).toUpperCase()
 
               return (
                 <div
                   key={c.id}
-                  onClick={() => !full && router.push(`/forge/${c.slug || c.id}`)}
-                  onMouseEnter={() => { if (!full) setHoveredCard(c.id) }}
+                  onClick={() => router.push(`/forge/${c.slug || c.id}`)}
+                  onMouseEnter={() => setHoveredCard(c.id)}
                   onMouseLeave={() => setHoveredCard(null)}
                   style={{
-                    background: isHovered ? `${tm.color}05` : "#0a0e1a",
-                    border: `1px solid ${isHovered && !full ? tm.color + "40" : "rgba(255,255,255,0.06)"}`,
+                    background: isHovered ? (isEnded ? "rgba(255,255,255,0.02)" : `${tm.color}05`) : "#0a0e1a",
+                    border: `1px solid ${isHovered && !isEnded ? tm.color + "40" : "rgba(255,255,255,0.06)"}`,
                     borderRadius: 12, padding: "18px 20px",
-                    cursor: full ? "default" : "pointer",
-                    opacity: full ? 0.5 : 1,
+                    cursor: "pointer",
+                    opacity: isEnded ? 0.65 : full ? 0.55 : 1,
                     transition: "border-color 0.15s, background 0.15s",
                     display: "flex", flexDirection: "column", gap: 12,
                   }}
                 >
                   {/* Top bar: logo + title + type badge */}
                   <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
-                    {/* Logo or initials */}
-                    <div style={{ width: 48, height: 48, borderRadius: 12, background: `${tm.color}12`, border: `1px solid ${tm.color}25`, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", flexShrink: 0 }}>
-                      {logoUrl
-                        ? <img src={logoUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                        : <span style={{ fontSize: 16, fontWeight: 700, color: tm.color }}>{initials}</span>
-                      }
+                    {/* Campaign logo — abbr always rendered as fallback underneath */}
+                    <div style={{ position: "relative", width: 48, height: 48, borderRadius: 12, background: `${tm.color}12`, border: `1px solid ${tm.color}25`, flexShrink: 0, overflow: "hidden" }}>
+                      <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 800, fontFamily: "monospace", color: tm.color, letterSpacing: "-0.02em" }}>{tm.abbr}</span>
+                      {logoUrl && <img src={logoUrl} alt="" onError={e => (e.currentTarget.style.display = "none")} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />}
                     </div>
                     {/* Title block */}
                     <div style={{ flex: 1, minWidth: 0, paddingTop: 2 }}>
@@ -339,17 +370,20 @@ export default function ForgePage() {
                     </div>
                     {/* Badges top-right */}
                     <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-end", flexShrink: 0 }}>
-                      {full && (
+                      {isEnded && (
+                        <span style={{ fontSize: 9, fontFamily: "monospace", background: "rgba(107,125,168,0.1)", color: "#6b7da8", border: "1px solid rgba(107,125,168,0.2)", padding: "2px 7px", borderRadius: 3 }}>Ended</span>
+                      )}
+                      {!isEnded && full && (
                         <span style={{ fontSize: 9, fontFamily: "monospace", background: "#e0334815", color: "#e03348", border: "1px solid #e0334830", padding: "2px 6px", borderRadius: 3 }}>Full</span>
                       )}
-                      {endingSoon && (
+                      {!isEnded && endingSoon && (
                         <span style={{ fontSize: 9, fontFamily: "monospace", background: "#e0334815", color: "#e03348", border: "1px solid #e0334830", padding: "2px 6px", borderRadius: 3 }}>Ending soon</span>
                       )}
-                      {!endingSoon && daysLeftNum !== null && (
+                      {!isEnded && !endingSoon && daysLeftNum !== null && (
                         <span style={{ fontSize: 9, fontFamily: "monospace", background: "#e0881015", color: "#e08810", border: "1px solid #e0881030", padding: "2px 6px", borderRadius: 3 }}>{daysLeftNum}d left</span>
                       )}
                       {c.contract_address && (
-                        <span style={{ fontSize: 9, fontFamily: "monospace", background: "#00b87a15", color: "#00d990", border: "1px solid #00b87a30", padding: "2px 6px", borderRadius: 3 }}>✓ on-chain</span>
+                        <span style={{ fontSize: 9, fontFamily: "monospace", background: "#00b87a15", color: "#00d990", border: "1px solid #00b87a30", padding: "2px 6px", borderRadius: 3 }}>on-chain</span>
                       )}
                     </div>
                   </div>
