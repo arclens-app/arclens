@@ -22,6 +22,7 @@ interface Campaign {
   project_name: string | null
   project_logo: string | null
   campaign_logo: string | null
+  banner_position: string | null
   creator_wallet: string
   tasks: { id: string; title: string; requires_tx: boolean }[]
   created_at: string
@@ -349,94 +350,82 @@ export default function ForgePage() {
                   onMouseEnter={() => setHoveredCard(c.id)}
                   onMouseLeave={() => setHoveredCard(null)}
                   style={{
-                    background: isHovered ? (isEnded ? "rgba(255,255,255,0.02)" : `${tm.color}05`) : "#0a0e1a",
-                    border: `1px solid ${isHovered && !isEnded ? tm.color + "40" : "rgba(255,255,255,0.06)"}`,
-                    borderRadius: 12, padding: "18px 20px",
+                    background: "#0a0e1a",
+                    border: `1px solid ${isHovered && !isEnded ? tm.color + "50" : "rgba(255,255,255,0.06)"}`,
+                    borderRadius: 12, overflow: "hidden",
                     cursor: "pointer",
-                    opacity: isEnded ? 0.65 : full ? 0.55 : 1,
-                    transition: "border-color 0.15s, background 0.15s",
-                    display: "flex", flexDirection: "column", gap: 12,
+                    opacity: isEnded ? 0.65 : full ? 0.6 : 1,
+                    transition: "border-color 0.15s, transform 0.15s",
+                    transform: isHovered && !isEnded ? "translateY(-2px)" : "none",
+                    display: "flex", flexDirection: "column",
                   }}
                 >
-                  {/* Top bar: logo + title + type badge */}
-                  <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
-                    {/* Campaign logo — abbr always rendered as fallback underneath */}
-                    <div style={{ position: "relative", width: 48, height: 48, borderRadius: 12, background: `${tm.color}12`, border: `1px solid ${tm.color}25`, flexShrink: 0, overflow: "hidden" }}>
-                      <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 800, fontFamily: "monospace", color: tm.color, letterSpacing: "-0.02em" }}>{tm.abbr}</span>
-                      {logoUrl && <img src={logoUrl} alt="" onError={e => (e.currentTarget.style.display = "none")} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />}
+                  {/* Banner */}
+                  <div style={{ position: "relative", width: "100%", height: 110, background: `linear-gradient(135deg, ${tm.color}20 0%, ${tm.color}08 60%, #0a0e1a 100%)`, overflow: "hidden", flexShrink: 0 }}>
+                    <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 56, fontWeight: 900, fontFamily: "monospace", color: `${tm.color}15`, letterSpacing: "-0.04em", userSelect: "none" }}>{tm.abbr}</span>
+                    <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: `linear-gradient(90deg, ${tm.color}, ${tm.color}30)` }} />
+                    {logoUrl && (
+                      <img src={logoUrl} alt="" onError={e => (e.currentTarget.style.display = "none")}
+                        style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: (c as any).banner_position || "50% 50%" }} />
+                    )}
+                    {/* Gradient fade into card body */}
+                    <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 40, background: "linear-gradient(0deg, #0a0e1a 0%, transparent 100%)" }} />
+                    {/* Status badges over banner */}
+                    <div style={{ position: "absolute", top: 8, right: 8, display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-end" }}>
+                      {isEnded && <span style={{ fontSize: 9, fontFamily: "monospace", background: "rgba(0,0,0,0.6)", color: "#6b7da8", border: "1px solid rgba(107,125,168,0.3)", padding: "2px 7px", borderRadius: 3, backdropFilter: "blur(4px)" }}>Ended</span>}
+                      {!isEnded && full && <span style={{ fontSize: 9, fontFamily: "monospace", background: "rgba(0,0,0,0.6)", color: "#e03348", border: "1px solid #e0334840", padding: "2px 7px", borderRadius: 3, backdropFilter: "blur(4px)" }}>Full</span>}
+                      {!isEnded && endingSoon && <span style={{ fontSize: 9, fontFamily: "monospace", background: "rgba(0,0,0,0.6)", color: "#e03348", border: "1px solid #e0334840", padding: "2px 7px", borderRadius: 3, backdropFilter: "blur(4px)" }}>Ending soon</span>}
+                      {!isEnded && !endingSoon && daysLeftNum !== null && <span style={{ fontSize: 9, fontFamily: "monospace", background: "rgba(0,0,0,0.6)", color: "#e08810", border: "1px solid #e0881040", padding: "2px 7px", borderRadius: 3, backdropFilter: "blur(4px)" }}>{daysLeftNum}d left</span>}
+                      {c.contract_address && <span style={{ fontSize: 9, fontFamily: "monospace", background: "rgba(0,0,0,0.6)", color: "#00d990", border: "1px solid #00b87a40", padding: "2px 7px", borderRadius: 3, backdropFilter: "blur(4px)" }}>on-chain</span>}
                     </div>
-                    {/* Title block */}
-                    <div style={{ flex: 1, minWidth: 0, paddingTop: 2 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4, flexWrap: "wrap" }}>
-                        <div style={{ fontSize: 14, fontWeight: 700, color: "#e8ecff", lineHeight: 1.3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.title}</div>
+                  </div>
+
+                  {/* Card body */}
+                  <div style={{ padding: "14px 16px 16px", display: "flex", flexDirection: "column", gap: 10, flex: 1 }}>
+                    {/* Title + type badge */}
+                    <div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3, flexWrap: "wrap" }}>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: "#e8ecff", lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, minWidth: 0 }}>{c.title}</div>
                         <span style={{ fontSize: 9, fontWeight: 800, color: tm.color, fontFamily: "monospace", padding: "1px 6px", borderRadius: 4, background: `${tm.color}15`, border: `1px solid ${tm.color}30`, flexShrink: 0 }}>{tm.abbr}</span>
                       </div>
                       {c.project_name && <div style={{ fontSize: 11, color: "#6b7da8" }}>{c.project_name}</div>}
                     </div>
-                    {/* Badges top-right */}
-                    <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-end", flexShrink: 0 }}>
-                      {isEnded && (
-                        <span style={{ fontSize: 9, fontFamily: "monospace", background: "rgba(107,125,168,0.1)", color: "#6b7da8", border: "1px solid rgba(107,125,168,0.2)", padding: "2px 7px", borderRadius: 3 }}>Ended</span>
-                      )}
-                      {!isEnded && full && (
-                        <span style={{ fontSize: 9, fontFamily: "monospace", background: "#e0334815", color: "#e03348", border: "1px solid #e0334830", padding: "2px 6px", borderRadius: 3 }}>Full</span>
-                      )}
-                      {!isEnded && endingSoon && (
-                        <span style={{ fontSize: 9, fontFamily: "monospace", background: "#e0334815", color: "#e03348", border: "1px solid #e0334830", padding: "2px 6px", borderRadius: 3 }}>Ending soon</span>
-                      )}
-                      {!isEnded && !endingSoon && daysLeftNum !== null && (
-                        <span style={{ fontSize: 9, fontFamily: "monospace", background: "#e0881015", color: "#e08810", border: "1px solid #e0881030", padding: "2px 6px", borderRadius: 3 }}>{daysLeftNum}d left</span>
-                      )}
-                      {c.contract_address && (
-                        <span style={{ fontSize: 9, fontFamily: "monospace", background: "#00b87a15", color: "#00d990", border: "1px solid #00b87a30", padding: "2px 6px", borderRadius: 3 }}>on-chain</span>
+
+                    {/* Tagline */}
+                    {c.tagline && (
+                      <p style={{ fontSize: 12, color: "#6b7da8", margin: 0, lineHeight: 1.5, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" as const }}>{c.tagline}</p>
+                    )}
+
+                    {/* Reward */}
+                    <div>
+                      {c.reward_type === "usdc" && c.reward_usdc_amount != null ? (
+                        <div>
+                          <span style={{ fontSize: 18, fontWeight: 800, color: "#00d990", fontFamily: "monospace" }}>${c.reward_usdc_amount}</span>
+                          <span style={{ fontSize: 11, color: "#6b7da8", marginLeft: 5 }}>USDC per tester</span>
+                        </div>
+                      ) : (
+                        <span style={{ fontSize: 10, background: `${rm.color}15`, color: rm.color, border: `1px solid ${rm.color}30`, padding: "3px 8px", borderRadius: 4, fontFamily: "monospace" }}>{rm.label}</span>
                       )}
                     </div>
-                  </div>
 
-                  {/* Tagline */}
-                  {c.tagline && (
-                    <p style={{
-                      fontSize: 12, color: "#6b7da8", margin: 0, lineHeight: 1.5,
-                      overflow: "hidden", display: "-webkit-box",
-                      WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
-                    }}>{c.tagline}</p>
-                  )}
-
-                  {/* Reward section */}
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                    {c.reward_type === "usdc" && c.reward_usdc_amount != null ? (
+                    {/* Slot bar */}
+                    {c.total_slots && c.total_slots > 0 && (
                       <div>
-                        <span style={{ fontSize: 20, fontWeight: 800, color: "#00d990", fontFamily: "monospace" }}>${c.reward_usdc_amount}</span>
-                        <span style={{ fontSize: 11, color: "#6b7da8", marginLeft: 5 }}>USDC per tester</span>
-                      </div>
-                    ) : (
-                      <div style={{ fontSize: 10, background: `${rm.color}15`, color: rm.color, border: `1px solid ${rm.color}30`, padding: "3px 8px", borderRadius: 4, fontFamily: "monospace" }}>
-                        {rm.label}
+                        <div style={{ height: 3, background: "rgba(255,255,255,0.06)", borderRadius: 2, overflow: "hidden", marginBottom: 4 }}>
+                          <div style={{ height: "100%", width: `${Math.min(100, (c.filled_slots / c.total_slots) * 100)}%`, background: full ? "#e03348" : tm.color, borderRadius: 2, transition: "width 0.3s ease" }} />
+                        </div>
+                        <div style={{ display: "flex", justifyContent: "space-between" }}>
+                          <span style={{ fontSize: 10, color: "#2e3a5c" }}>{c.filled_slots}/{c.total_slots} filled</span>
+                          {left !== null && left > 0 && <span style={{ fontSize: 10, color: left <= 3 ? "#e03348" : "#2e3a5c", fontWeight: left <= 3 ? 700 : 400 }}>{left} left</span>}
+                        </div>
                       </div>
                     )}
-                  </div>
 
-                  {/* Slot progress bar */}
-                  {c.total_slots && c.total_slots > 0 && (
-                    <div>
-                      <div style={{ height: 4, background: "rgba(255,255,255,0.06)", borderRadius: 2, overflow: "hidden", marginBottom: 4 }}>
-                        <div style={{ height: "100%", width: `${Math.min(100, (c.filled_slots / c.total_slots) * 100)}%`, background: full ? "#e03348" : tm.color, borderRadius: 2, transition: "width 0.3s ease" }} />
-                      </div>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <span style={{ fontSize: 10, color: "#6b7da8" }}>{c.filled_slots}/{c.total_slots} filled</span>
-                        {left !== null && left > 0 && (
-                          <span style={{ fontSize: 10, color: left <= 3 ? "#e03348" : "#6b7da8", fontWeight: left <= 3 ? 700 : 400 }}>{left} left</span>
-                        )}
-                      </div>
+                    {/* Footer */}
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingTop: 8, borderTop: "1px solid rgba(255,255,255,0.05)", marginTop: "auto" }}>
+                      <span style={{ fontSize: 10, color: "#2e3a5c", fontFamily: "monospace" }}>{c.tasks?.length || 0} task{c.tasks?.length !== 1 ? "s" : ""} · {Number(c.completion_count)} done</span>
+                      <span style={{ fontSize: 10, color: "#2e3a5c" }}>{timeAgo(c.created_at)}</span>
                     </div>
-                  )}
-
-                  {/* Footer */}
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingTop: 10, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-                    <span style={{ fontSize: 11, color: "#2e3a5c", fontFamily: "monospace" }}>
-                      {c.tasks?.length || 0} task{c.tasks?.length !== 1 ? "s" : ""} · {Number(c.completion_count)} done
-                    </span>
-                    <span style={{ fontSize: 11, color: "#2e3a5c" }}>{timeAgo(c.created_at)}</span>
                   </div>
                 </div>
               )

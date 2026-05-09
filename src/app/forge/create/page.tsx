@@ -152,6 +152,10 @@ export default function CreateCampaignPage() {
   const [campaignLogo, setCampaignLogo]         = useState<string | null>(null)
   const [logoPreview, setLogoPreview]           = useState<string | null>(null)
   const [logoUploading, setLogoUploading]       = useState(false)
+  const [bannerPos, setBannerPos]               = useState({ x: 50, y: 50 })
+  const [isDragging, setIsDragging]             = useState(false)
+  const dragStart                               = useRef<{ mx: number; my: number; px: number; py: number } | null>(null)
+  const bannerRef                               = useRef<HTMLDivElement>(null)
   const logoInputRef                            = useRef<HTMLInputElement>(null)
   const [appUrl, setAppUrl]                     = useState("")
   const [submitting, setSubmitting]             = useState(false)
@@ -292,6 +296,7 @@ export default function CreateCampaignPage() {
           total_slots: totalSlots ? parseInt(totalSlots) : null,
           is_fcfs: isFcfs, min_rank: minRank,
           project_id: projectId, creator_wallet: wallet, expires_at: expiresAt || null,
+          banner_position: `${bannerPos.x}% ${bannerPos.y}%`,
         }),
       })
       const data = await res.json()
@@ -400,46 +405,90 @@ export default function CreateCampaignPage() {
           <Card step="02" title="Campaign details" sub="The more context you give, the better feedback you'll get. Be specific about what stage you're at.">
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
 
-              {/* Campaign logo upload + live card preview */}
+              {/* Campaign banner upload + live card preview */}
               <div style={{ display: "flex", gap: 20, alignItems: "flex-start", flexWrap: "wrap" }}>
 
-                {/* Upload controls */}
-                <div style={{ flex: "0 0 auto" }}>
-                  <div style={{ fontSize: 12, fontWeight: 500, color: t1, marginBottom: 6 }}>Campaign image</div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                    <div
-                      onClick={() => logoInputRef.current?.click()}
-                      style={{
-                        width: 64, height: 64, borderRadius: 12, flexShrink: 0,
-                        background: campaignLogo ? "transparent" : surf2,
-                        border: `1px solid ${campaignLogo ? "rgba(0,184,122,0.3)" : bdr}`,
-                        cursor: "pointer", overflow: "hidden",
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                      }}
-                    >
-                      {logoPreview
-                        ? <img src={logoPreview} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                        : logoUploading
-                          ? <div style={{ width: 18, height: 18, borderRadius: "50%", border: "2px solid #1a56ff", borderTopColor: "transparent", animation: "spin 0.7s linear infinite" }} />
-                          : <span style={{ fontSize: 20, color: t3 }}>+</span>
-                      }
-                    </div>
-                    <div>
-                      <button type="button" onClick={() => logoInputRef.current?.click()} disabled={logoUploading}
-                        style={{ height: 32, padding: "0 14px", background: surf2, border: "1px solid " + bdr, borderRadius: 7, fontSize: 12, color: logoUploading ? t3 : t1, cursor: logoUploading ? "default" : "pointer", marginBottom: 6 }}>
-                        {logoUploading ? "Uploading..." : campaignLogo ? "Change image" : "Upload image"}
-                      </button>
-                      <div style={{ fontSize: 10, fontFamily: mono, color: t3 }}>PNG, JPG, GIF · max 5MB</div>
-                      {campaignLogo && (
-                        <button type="button" onClick={() => { setCampaignLogo(null); if (logoPreview) { URL.revokeObjectURL(logoPreview); setLogoPreview(null) } }}
-                          style={{ fontSize: 10, fontFamily: mono, color: "#e03348", background: "none", border: "none", cursor: "pointer", padding: 0, marginTop: 4 }}>
-                          Remove
-                        </button>
-                      )}
-                    </div>
-                    <input ref={logoInputRef} type="file" accept="image/*" style={{ display: "none" }}
-                      onChange={e => { const f = e.target.files?.[0]; if (f) uploadLogo(f) }} />
+                {/* Campaign banner upload — drag to reposition */}
+                <div style={{ flex: "1 1 280px" }}>
+                  <div style={{ fontSize: 12, fontWeight: 500, color: t1, marginBottom: 6 }}>
+                    Campaign banner
+                    <span style={{ fontSize: 10, fontFamily: mono, color: t3, fontWeight: 400, marginLeft: 6 }}>
+                      {logoPreview ? "· drag to reposition" : "· shown as full-width cover on the campaign page"}
+                    </span>
                   </div>
+                  {/* Banner preview — drag to reposition when image loaded */}
+                  <div
+                    ref={bannerRef}
+                    onClick={() => { if (!logoPreview) logoInputRef.current?.click() }}
+                    onMouseDown={logoPreview ? (e) => {
+                      e.preventDefault()
+                      dragStart.current = { mx: e.clientX, my: e.clientY, px: bannerPos.x, py: bannerPos.y }
+                      setIsDragging(true)
+                      const onMove = (ev: MouseEvent) => {
+                        if (!dragStart.current || !bannerRef.current) return
+                        const rect = bannerRef.current.getBoundingClientRect()
+                        const dx = ((ev.clientX - dragStart.current.mx) / rect.width) * 100
+                        const dy = ((ev.clientY - dragStart.current.my) / rect.height) * 100
+                        setBannerPos({
+                          x: Math.max(0, Math.min(100, dragStart.current.px - dx)),
+                          y: Math.max(0, Math.min(100, dragStart.current.py - dy)),
+                        })
+                      }
+                      const onUp = () => {
+                        dragStart.current = null
+                        setIsDragging(false)
+                        window.removeEventListener("mousemove", onMove)
+                        window.removeEventListener("mouseup", onUp)
+                      }
+                      window.addEventListener("mousemove", onMove)
+                      window.addEventListener("mouseup", onUp)
+                    } : undefined}
+                    style={{
+                      position: "relative", width: "100%", height: 130, borderRadius: 10, overflow: "hidden",
+                      background: `linear-gradient(135deg, ${selectedType.color}18 0%, ${selectedType.color}06 100%)`,
+                      border: `1px dashed ${logoPreview ? "rgba(0,184,122,0.35)" : selectedType.color + "40"}`,
+                      cursor: logoPreview ? (isDragging ? "grabbing" : "grab") : "pointer",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      userSelect: "none",
+                    }}
+                  >
+                    {logoPreview ? (
+                      <>
+                        <img
+                          src={logoPreview} alt="" draggable={false}
+                          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: `${bannerPos.x}% ${bannerPos.y}%`, pointerEvents: "none" }}
+                        />
+                        {/* Drag hint overlay */}
+                        {!isDragging && (
+                          <div style={{ position: "absolute", bottom: 8, left: "50%", transform: "translateX(-50%)", background: "rgba(0,0,0,0.55)", borderRadius: 6, padding: "3px 10px", fontSize: 10, color: "rgba(255,255,255,0.8)", fontFamily: mono, whiteSpace: "nowrap", pointerEvents: "none" }}>
+                            ⠿ drag to reposition
+                          </div>
+                        )}
+                      </>
+                    ) : logoUploading ? (
+                      <div style={{ width: 20, height: 20, borderRadius: "50%", border: "2px solid #1a56ff", borderTopColor: "transparent", animation: "spin 0.7s linear infinite" }} />
+                    ) : (
+                      <div style={{ textAlign: "center" }}>
+                        <div style={{ fontSize: 26, fontWeight: 900, fontFamily: mono, color: `${selectedType.color}35`, letterSpacing: "-0.04em", lineHeight: 1 }}>{selectedType.abbr}</div>
+                        <div style={{ fontSize: 10, color: t3, marginTop: 8 }}>Click to upload banner image</div>
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8 }}>
+                    <button type="button" onClick={() => logoInputRef.current?.click()} disabled={logoUploading}
+                      style={{ height: 30, padding: "0 14px", background: surf2, border: "1px solid " + bdr, borderRadius: 7, fontSize: 12, color: logoUploading ? t3 : t1, cursor: logoUploading ? "default" : "pointer" }}>
+                      {logoUploading ? "Uploading..." : campaignLogo ? "Change" : "Upload"}
+                    </button>
+                    <span style={{ fontSize: 10, fontFamily: mono, color: t3 }}>PNG, JPG, GIF · max 5MB</span>
+                    {campaignLogo && (
+                      <button type="button" onClick={() => { setCampaignLogo(null); if (logoPreview) { URL.revokeObjectURL(logoPreview); setLogoPreview(null) }; setBannerPos({ x: 50, y: 50 }) }}
+                        style={{ fontSize: 10, fontFamily: mono, color: "#e03348", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                  <input ref={logoInputRef} type="file" accept="image/*" style={{ display: "none" }}
+                    onChange={e => { const f = e.target.files?.[0]; if (f) uploadLogo(f) }} />
                 </div>
 
                 {/* Live card preview */}

@@ -99,6 +99,7 @@ export async function POST(req: NextRequest) {
       deposit_tx_hash,
       contract_address,
       campaign_logo,
+      banner_position,
       app_url,
       total_slots, is_fcfs, min_rank,
       project_id, creator_wallet,
@@ -161,11 +162,11 @@ export async function POST(req: NextRequest) {
           tasks, review_questions,
           reward_type, reward_description, reward_usdc_amount,
           deposit_tx_hash, contract_address,
-          campaign_logo, app_url, slug,
+          campaign_logo, banner_position, app_url, slug,
           total_slots, is_fcfs, min_rank,
           project_id, project_name, project_logo,
           creator_wallet, expires_at, status)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,'pending_approval')
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,'pending_approval')
        RETURNING id, slug`,
       [
         title.trim(),
@@ -180,6 +181,7 @@ export async function POST(req: NextRequest) {
         deposit_tx_hash || null,
         contract_address?.trim() || null,
         campaign_logo?.trim() || null,
+        banner_position?.trim() || "50% 50%",
         app_url?.trim() || null,
         slug,
         total_slots ? Number(total_slots) : null,

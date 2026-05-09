@@ -36,6 +36,7 @@ interface Campaign {
   project_name: string | null
   project_logo: string | null
   campaign_logo: string | null
+  banner_position: string | null
   creator_wallet: string
   tasks: Task[]
   review_questions: ReviewQuestion[]
@@ -364,28 +365,34 @@ export default function CampaignDetailPage() {
         )}
 
         {/* ── Hero Banner ── */}
-        <div style={{ background: "var(--surf,#0a0e1a)", border: "1px solid var(--bdr,rgba(255,255,255,0.06))", borderRadius: 14, marginBottom: 20, overflow: "hidden", borderTop: `2px solid ${tm.color}50` }}>
-          <div style={{ padding: "24px 24px 20px", background: `linear-gradient(180deg, ${tm.color}08 0%, transparent 80%)` }}>
-            <div style={{ display: "flex", gap: 20, alignItems: "flex-start" }}>
-              {/* Logo 88x88 — abbr always rendered as fallback underneath */}
-              <div style={{ position: "relative", width: 88, height: 88, borderRadius: 16, background: `${tm.color}12`, border: `1px solid ${tm.color}25`, flexShrink: 0, overflow: "hidden" }}>
-                <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, fontWeight: 800, fontFamily: "var(--font-mono,monospace)", color: tm.color, letterSpacing: "-0.02em" }}>{tm.abbr}</span>
-                {(campaign.campaign_logo || campaign.project_logo) && (
-                  <img src={`/api/image-proxy?url=${encodeURIComponent((campaign.campaign_logo || campaign.project_logo)!)}`} alt="" onError={e => (e.currentTarget.style.display = "none")} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
-                )}
-              </div>
-              {/* Content */}
-              <div style={{ flex: 1, minWidth: 0, paddingTop: 2 }}>
-                <h1 style={{ fontSize: 24, fontWeight: 700, color: "var(--t1,#e8ecff)", margin: "0 0 6px", letterSpacing: "-0.02em", lineHeight: 1.2 }}>{campaign.title}</h1>
-                {campaign.tagline && <p style={{ fontSize: 13, color: "var(--t2,#6b7da8)", margin: "0 0 12px", lineHeight: 1.6 }}>{campaign.tagline}</p>}
-                <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
-                  <span style={{ fontSize: 10, fontFamily: "var(--font-mono,monospace)", background: `${tm.color}15`, color: tm.color, border: `1px solid ${tm.color}25`, padding: "3px 9px", borderRadius: 4 }}>{tm.label}</span>
-                  <span style={{ fontSize: 10, fontFamily: "var(--font-mono,monospace)", background: `${rm.color}15`, color: rm.color, border: `1px solid ${rm.color}25`, padding: "3px 9px", borderRadius: 4 }}>{rm.label}</span>
-                  {campaign.project_name && (
-                    <span style={{ fontSize: 11, color: "var(--t3,#2e3a5c)", fontFamily: "var(--font-mono,monospace)" }}>{campaign.project_name}</span>
-                  )}
-                </div>
-              </div>
+        <div style={{ background: "var(--surf,#0a0e1a)", border: "1px solid var(--bdr,rgba(255,255,255,0.06))", borderRadius: 14, marginBottom: 20, overflow: "hidden" }}>
+          {/* Banner image — full width, 200px tall */}
+          <div style={{ position: "relative", width: "100%", height: 200, background: `linear-gradient(135deg, ${tm.color}22 0%, ${tm.color}08 50%, #0a0e1a 100%)`, overflow: "hidden" }}>
+            {/* Fallback: large abbr centered */}
+            <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 80, fontWeight: 900, fontFamily: "var(--font-mono,monospace)", color: `${tm.color}18`, letterSpacing: "-0.04em", userSelect: "none" }}>{tm.abbr}</span>
+            {/* Accent line at top */}
+            <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 3, background: `linear-gradient(90deg, ${tm.color}, ${tm.color}40)` }} />
+            {(campaign.campaign_logo || campaign.project_logo) && (
+              <img
+                src={`/api/image-proxy?url=${encodeURIComponent((campaign.campaign_logo || campaign.project_logo)!)}`}
+                alt=""
+                onError={e => (e.currentTarget.style.display = "none")}
+                style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: (campaign as any).banner_position || "50% 50%" }}
+              />
+            )}
+            {/* Gradient overlay so text below is always readable */}
+            <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 80, background: "linear-gradient(0deg, var(--surf,#0a0e1a) 0%, transparent 100%)" }} />
+          </div>
+          {/* Title + badges below banner */}
+          <div style={{ padding: "18px 24px 20px" }}>
+            <h1 style={{ fontSize: 22, fontWeight: 700, color: "var(--t1,#e8ecff)", margin: "0 0 6px", letterSpacing: "-0.02em", lineHeight: 1.25 }}>{campaign.title}</h1>
+            {campaign.tagline && <p style={{ fontSize: 13, color: "var(--t2,#6b7da8)", margin: "0 0 14px", lineHeight: 1.6 }}>{campaign.tagline}</p>}
+            <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 10, fontFamily: "var(--font-mono,monospace)", background: `${tm.color}15`, color: tm.color, border: `1px solid ${tm.color}25`, padding: "3px 9px", borderRadius: 4 }}>{tm.label}</span>
+              <span style={{ fontSize: 10, fontFamily: "var(--font-mono,monospace)", background: `${rm.color}15`, color: rm.color, border: `1px solid ${rm.color}25`, padding: "3px 9px", borderRadius: 4 }}>{rm.label}</span>
+              {campaign.project_name && (
+                <span style={{ fontSize: 11, color: "var(--t3,#2e3a5c)", fontFamily: "var(--font-mono,monospace)" }}>{campaign.project_name}</span>
+              )}
             </div>
           </div>
           {/* Stat bar */}
