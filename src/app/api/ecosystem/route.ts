@@ -14,8 +14,7 @@ export async function GET() {
               created_at
        FROM projects
        WHERE approved = true AND live = true
-       ORDER BY featured DESC, COALESCE(view_count, 0) DESC, created_at DESC
-       LIMIT 200`
+       ORDER BY featured DESC, COALESCE(view_count, 0) DESC, created_at DESC`
     )
 
     // Trending: purely by views — no external API calls
