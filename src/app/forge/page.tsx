@@ -369,7 +369,7 @@ export default function ForgePage() {
                         style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: (c as any).banner_position || "50% 50%" }} />
                     )}
                     {/* Gradient fade into card body */}
-                    <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 40, background: "linear-gradient(0deg, #0a0e1a 0%, transparent 100%)" }} />
+                    <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 40, background: "linear-gradient(0deg, var(--surf,#0a0e1a) 0%, transparent 100%)" }} />
                     {/* Status badges over banner */}
                     <div style={{ position: "absolute", top: 8, right: 8, display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-end" }}>
                       {isEnded && <span style={{ fontSize: 9, fontFamily: "monospace", background: "rgba(0,0,0,0.6)", color: "#6b7da8", border: "1px solid rgba(107,125,168,0.3)", padding: "2px 7px", borderRadius: 3, backdropFilter: "blur(4px)" }}>Ended</span>}
