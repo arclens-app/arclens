@@ -1,6 +1,7 @@
 "use client"
 import { useEffect, useState } from "react"
 import ArcLayout from "@/components/ArcLayout"
+import { useArcStore } from "@/store/arc"
 
 async function rpc(method: string, params: unknown[] = []) {
   const res = await fetch("/api/rpc", {
@@ -33,7 +34,7 @@ export default function DevPage() {
   useEffect(() => {
     if (!mounted) return
     // Load connected wallet
-    const saved = localStorage.getItem("arclens-wallet")
+    const saved = useArcStore.getState().walletAddr
     if (saved) setFaucetAddr(saved)
     // Load chain stats
     async function load() {
@@ -227,7 +228,7 @@ export default function DevPage() {
                     placeholder="0x..."
                     style={{ flex:1, height:"40px", background:"var(--surf2,#0e1224)", border:"1px solid "+bdr, borderRadius:"8px", padding:"0 12px", fontSize:"12px", fontFamily:mono, color:t1, outline:"none" }}
                   />
-                  <button onClick={() => { const w = localStorage.getItem("arclens-wallet"); if(w) setFaucetAddr(w) }}
+                  <button onClick={() => { const w = useArcStore.getState().walletAddr; if(w) setFaucetAddr(w) }}
                     style={{ height:"40px", padding:"0 12px", background:"transparent", color:"#8aaeff", fontSize:"11px", fontFamily:mono, border:"1px solid rgba(26,86,255,0.2)", borderRadius:"8px", cursor:"pointer", whiteSpace:"nowrap" }}>
                     My Wallet
                   </button>

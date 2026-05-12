@@ -3,6 +3,7 @@ import { useEffect, useState } from "react"
 import { useParams, useSearchParams } from "next/navigation"
 import ArcLayout from "@/components/ArcLayout"
 import { WalletAvatar } from "@/components/WalletAvatar"
+import { useArcStore } from "@/store/arc"
 
 interface Project {
   id: number; name: string; slug: string; tagline: string; description: string
@@ -83,6 +84,7 @@ export default function DashboardPage() {
             const match = data.projects?.[0]
             if (match) {
               localStorage.setItem("arclens-wallet", accounts[0].toLowerCase())
+              useArcStore.getState().setWallet(accounts[0].toLowerCase())
               await loadDashboardWithToken(null, accounts[0])
               return true
             }
@@ -202,7 +204,7 @@ export default function DashboardPage() {
       const adapter = await createAdapterFromProvider({ provider: (window as any).ethereum })
       const kit     = new AppKit()
       const result  = await kit.send({
-        from:   { adapter, chain: "Arc_Testnet" },
+        from:   { adapter: adapter as any, chain: "Arc_Testnet" },
         to:     payoutAddr,
         amount: totalAmount,
         token:  "USDC",

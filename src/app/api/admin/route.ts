@@ -428,15 +428,29 @@ export async function POST(req: NextRequest) {
         const c = camp.rows[0]
         if (c?.reward_type === "usdc" && c?.deposit_tx_hash && c?.creator_wallet) {
           try {
-            const payoutKey = process.env.PAYOUT_WALLET_PRIVATE_KEY
-            if (payoutKey) {
-              const { createAdapterFromPrivateKey } = await import("@circle-fin/adapter-viem-v2")
-              const { AppKit }                      = await import("@circle-fin/app-kit")
-              const adapter = await createAdapterFromPrivateKey({ privateKey: payoutKey as `0x${string}` } as any)
-              const kit     = new AppKit()
-              const total   = ((Number(c.reward_usdc_amount) || 0) * (Number(c.total_slots) || 10)).toFixed(2)
+            const { AppKit } = await import("@circle-fin/app-kit")
+            const kit   = new AppKit()
+            const total = ((Number(c.reward_usdc_amount) || 0) * (Number(c.total_slots) || 10)).toFixed(2)
+
+            const circleApiKey     = process.env.CIRCLE_API_KEY
+            const circleSecret     = process.env.CIRCLE_ENTITY_SECRET
+            const payoutWalletAddr = process.env.PAYOUT_WALLET_ADDRESS
+            const payoutPrivKey    = process.env.PAYOUT_WALLET_PRIVATE_KEY
+
+            if (circleApiKey && circleSecret && payoutWalletAddr) {
+              const { createCircleWalletsAdapter } = await import("@circle-fin/adapter-circle-wallets")
+              const adapter = createCircleWalletsAdapter({ apiKey: circleApiKey, entitySecret: circleSecret })
               await kit.send({
-                from:   { adapter, chain: "Arc_Testnet" },
+                from:   { adapter: adapter as any, chain: "Arc_Testnet", address: payoutWalletAddr as `0x${string}` },
+                to:     c.creator_wallet,
+                amount: total,
+                token:  "USDC",
+              })
+            } else if (payoutPrivKey) {
+              const { createAdapterFromPrivateKey } = await import("@circle-fin/adapter-viem-v2")
+              const adapter = await createAdapterFromPrivateKey({ privateKey: payoutPrivKey as `0x${string}` } as any)
+              await kit.send({
+                from:   { adapter: adapter as any, chain: "Arc_Testnet" },
                 to:     c.creator_wallet,
                 amount: total,
                 token:  "USDC",

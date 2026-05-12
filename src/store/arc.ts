@@ -59,6 +59,11 @@ export interface ArcStore {
   wsConnected:    boolean
   lastUpdated:    number    // timestamp
 
+  // Wallet state — single source of truth across all pages
+  walletAddr:  string | null
+  walletBal:   string | null
+  myProject:   { name: string; slug: string } | null
+
   // Actions (called by useArcSocket)
   addBlock:       (block: LiveBlock) => void
   addTx:          (tx: LiveTx) => void
@@ -67,6 +72,10 @@ export interface ArcStore {
   setMetrics:     (m: Partial<ArcStore>) => void
   setWsConnected: (connected: boolean) => void
   setFinality:    (f: number) => void
+
+  // Wallet actions
+  setWallet:   (addr: string, bal?: string | null, project?: { name: string; slug: string } | null) => void
+  clearWallet: () => void
 }
 
 // ─── STORE ────────────────────────────────────────────────────────────────────
@@ -93,6 +102,9 @@ export const useArcStore = create<ArcStore>()(
     newTxCount:     0,
     wsConnected:    false,
     lastUpdated:    Date.now(),
+    walletAddr:     typeof window !== "undefined" ? localStorage.getItem("arclens-wallet") : null,
+    walletBal:      null,
+    myProject:      null,
 
     // ── ACTIONS ──────────────────────────────────────────────────────────────
 
@@ -117,6 +129,11 @@ export const useArcStore = create<ArcStore>()(
     setWsConnected: (connected) => set({ wsConnected: connected }),
 
     setFinality: (f) => set({ finality: f }),
+
+    setWallet: (addr, bal = null, project = null) =>
+      set({ walletAddr: addr, walletBal: bal ?? null, myProject: project ?? null }),
+
+    clearWallet: () => set({ walletAddr: null, walletBal: null, myProject: null }),
   }))
 )
 
@@ -133,3 +150,6 @@ export const selectUsdcSettled     = (s: ArcStore) => s.usdcSettled24h
 export const selectActiveAddresses = (s: ArcStore) => s.activeAddresses
 export const selectNewTxCount      = (s: ArcStore) => s.newTxCount
 export const selectWsConnected     = (s: ArcStore) => s.wsConnected
+export const selectWalletAddr      = (s: ArcStore) => s.walletAddr
+export const selectWalletBal       = (s: ArcStore) => s.walletBal
+export const selectMyProject       = (s: ArcStore) => s.myProject
