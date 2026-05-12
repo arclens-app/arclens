@@ -3,6 +3,7 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import ArcLayout from "@/components/ArcLayout"
 import { WalletAvatar } from "@/components/WalletAvatar"
+import { useArcStore } from "@/store/arc"
 
 interface Campaign {
   id: number
@@ -106,13 +107,11 @@ export default function ForgePage() {
   const [loading, setLoading]         = useState(true)
   const [filter, setFilter]           = useState("all")
   const [statusFilter, setStatusFilter] = useState<"active" | "ended">("active")
-  const [wallet, setWallet]           = useState<string | null>(null)
+  const wallet = useArcStore(s => s.walletAddr)
   const [hoveredCard, setHoveredCard] = useState<number | null>(null)
 
   useEffect(() => {
     setMounted(true)
-    const w = localStorage.getItem("arclens-wallet")
-    if (w) setWallet(w)
   }, [])
 
   useEffect(() => {

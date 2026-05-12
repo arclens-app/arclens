@@ -1,5 +1,6 @@
 ﻿"use client"
 import { useEffect, useState, useRef } from "react"
+import { useArcStore } from "@/store/arc"
 
 const NAV = [
   { section: "EXPLORER", items: [
@@ -39,9 +40,11 @@ export default function ArcLayout({ children, active }: { children: React.ReactN
   const [searchQ, setSearchQ]       = useState("")
   // Sidebar hidden by default on all screens — toggled by hamburger
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [walletAddr, setWalletAddr] = useState<string|null>(null)
-  const [walletBal, setWalletBal]   = useState<string|null>(null)
-  const [myProject, setMyProject]   = useState<{ name: string; slug: string } | null>(null)
+  const walletAddr  = useArcStore(s => s.walletAddr)
+  const walletBal   = useArcStore(s => s.walletBal)
+  const myProject   = useArcStore(s => s.myProject)
+  const setWallet   = useArcStore(s => s.setWallet)
+  const clearWallet = useArcStore(s => s.clearWallet)
   const searchRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -55,9 +58,8 @@ export default function ArcLayout({ children, active }: { children: React.ReactN
     if (!mounted) return
     const saved = localStorage.getItem("arclens-wallet")
     if (saved) {
-      setWalletAddr(saved)
+      setWallet(saved)
       fetchWalletBal(saved)
-      // Check if saved wallet owns a project
       fetch("/api/claim", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -65,7 +67,7 @@ export default function ArcLayout({ children, active }: { children: React.ReactN
       }).then(r => r.json()).then(d => {
         if (d.projects?.length > 0) {
           const p = d.projects[0]
-          setMyProject({ name: p.name, slug: p.slug || String(p.id) })
+          useArcStore.setState({ myProject: { name: p.name, slug: p.slug || String(p.id) } })
         }
       }).catch(() => {})
     }
@@ -76,8 +78,9 @@ export default function ArcLayout({ children, active }: { children: React.ReactN
       const res  = await fetch("/api/blockscout?path=" + encodeURIComponent("v2/addresses/" + addr))
       const data = await res.json()
       const bal  = Number(data.coin_balance || 0) / 1e18
-      setWalletBal("$" + bal.toLocaleString(undefined, { maximumFractionDigits: 2 }))
-    } catch { setWalletBal(null) }
+      const balStr = "$" + bal.toLocaleString(undefined, { maximumFractionDigits: 2 })
+      useArcStore.setState(s => ({ walletBal: balStr, myProject: s.myProject }))
+    } catch { useArcStore.setState({ walletBal: null }) }
   }
 
   async function connectWallet() {
@@ -86,20 +89,15 @@ export default function ArcLayout({ children, active }: { children: React.ReactN
       const accounts = await (window as any).ethereum.request({ method: "eth_requestAccounts" })
       if (accounts[0]) {
         const addr = accounts[0]
-        setWalletAddr(addr)
         localStorage.setItem("arclens-wallet", addr)
+        setWallet(addr)
         fetchWalletBal(addr)
-        // Check if this wallet owns a project
         try {
-          const projRes = await fetch("/api/claim", {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ wallet: addr }),
-          })
+          const projRes  = await fetch("/api/claim", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ wallet: addr }) })
           const projData = await projRes.json()
           if (projData.projects?.length > 0) {
             const p = projData.projects[0]
-            setMyProject({ name: p.name, slug: p.slug || String(p.id) })
+            useArcStore.setState({ myProject: { name: p.name, slug: p.slug || String(p.id) } })
           }
         } catch { }
       }
@@ -107,8 +105,7 @@ export default function ArcLayout({ children, active }: { children: React.ReactN
   }
 
   function disconnectWallet() {
-    setWalletAddr(null)
-    setWalletBal(null)
+    clearWallet()
     localStorage.removeItem("arclens-wallet")
   }
 

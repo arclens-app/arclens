@@ -1,6 +1,7 @@
 "use client"
 import { useEffect, useState } from "react"
 import ArcLayout from "@/components/ArcLayout"
+import { useArcStore } from "@/store/arc"
 
 interface Approval {
   id: string
@@ -43,23 +44,25 @@ export default function ApprovalsPage() {
   const [scanned, setScanned]       = useState(false)
   const [loading, setLoading]       = useState(false)
   const [approvals, setApprovals]   = useState<Approval[]>([])
-  const [walletAddr, setWalletAddr] = useState<string | null>(null)
+  const walletAddr  = useArcStore(s => s.walletAddr)
+  const setWallet   = useArcStore(s => s.setWallet)
 
   useEffect(() => { setMounted(true) }, [])
 
   useEffect(() => {
     if (!mounted) return
-    const saved = localStorage.getItem("arclens-wallet")
-    if (saved) {
-      setWalletAddr(saved)
-      setAddress(saved)
-    }
+    const addr = useArcStore.getState().walletAddr
+    if (addr) setAddress(addr)
   }, [mounted])
 
   async function connectWallet() {
     if (!(window as any).ethereum) { alert("MetaMask not detected."); return }
     const accounts = await (window as any).ethereum.request({ method: "eth_requestAccounts" })
-    if (accounts[0]) { setWalletAddr(accounts[0]); setAddress(accounts[0]) }
+    if (accounts[0]) {
+      localStorage.setItem("arclens-wallet", accounts[0])
+      setWallet(accounts[0])
+      setAddress(accounts[0])
+    }
   }
 
   async function scan() {

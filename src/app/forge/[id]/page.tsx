@@ -3,6 +3,7 @@ import { useEffect, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import ArcLayout from "@/components/ArcLayout"
 import { WalletAvatar } from "@/components/WalletAvatar"
+import { useArcStore } from "@/store/arc"
 
 interface Task {
   id: string
@@ -98,7 +99,8 @@ export default function CampaignDetailPage() {
   const [campaign, setCampaign]       = useState<Campaign | null>(null)
   const [completions, setCompletions] = useState<Completion[]>([])
   const [loading, setLoading]         = useState(true)
-  const [wallet, setWallet]           = useState<string | null>(null)
+  const wallet    = useArcStore(s => s.walletAddr)
+  const setWallet = useArcStore(s => s.setWallet)
   const [isOwner, setIsOwner]         = useState(false)
 
   // Submission flow: 0..tasks.length-1 = task steps, tasks.length = review, tasks.length+1 = done
@@ -133,8 +135,6 @@ export default function CampaignDetailPage() {
   const [pendingUpdate, setPendingUpdate]   = useState<{ status: string; admin_note?: string; submitted_at: string } | null>(null)
 
   useEffect(() => {
-    const w = localStorage.getItem("arclens-wallet")
-    if (w) setWallet(w)
     load()
   }, [id])
 
@@ -158,7 +158,7 @@ export default function CampaignDetailPage() {
   async function load() {
     setLoading(true)
     try {
-      const w    = localStorage.getItem("arclens-wallet")
+      const w    = useArcStore.getState().walletAddr
       const qs   = w ? `?wallet=${encodeURIComponent(w)}` : ""
       const res  = await fetch(`/api/forge/${id}${qs}`)
       const data = await res.json()
@@ -257,7 +257,10 @@ export default function CampaignDetailPage() {
     try {
       if (!(window as any).ethereum) return
       const accounts = await (window as any).ethereum.request({ method: "eth_requestAccounts" })
-      if (accounts?.[0]) { setWallet(accounts[0]); localStorage.setItem("arclens-wallet", accounts[0].toLowerCase()) }
+      if (accounts?.[0]) {
+        localStorage.setItem("arclens-wallet", accounts[0].toLowerCase())
+        setWallet(accounts[0])
+      }
     } catch { }
   }
 

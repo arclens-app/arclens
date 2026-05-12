@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import ArcLayout from "@/components/ArcLayout"
 import { WalletAvatar } from "@/components/WalletAvatar"
+import { useArcStore } from "@/store/arc"
 
 interface Reputation {
   wallet: string
@@ -119,13 +120,7 @@ export default function TesterProfilePage() {
   const [pfpHover, setPfpHover]     = useState(false)
   const fileInputRef                = useRef<HTMLInputElement>(null)
 
-  // Is this the connected wallet?
-  const [connectedWallet, setConnectedWallet] = useState<string | null>(null)
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      setConnectedWallet(localStorage.getItem("arclens-wallet") || null)
-    }
-  }, [])
+  const connectedWallet = useArcStore(s => s.walletAddr)
   const isOwn = connectedWallet?.toLowerCase() === walletParam?.toLowerCase()
 
   useEffect(() => {

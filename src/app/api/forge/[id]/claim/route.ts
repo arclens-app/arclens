@@ -38,28 +38,41 @@ export async function POST(
     if (completion.reward_delivered) return NextResponse.json({ error: "Reward already claimed" }, { status: 400 })
     if (completion.auto_score < 1)   return NextResponse.json({ error: "Completion not scored yet" }, { status: 400 })
 
-    const payoutKey = process.env.PAYOUT_WALLET_PRIVATE_KEY
-    if (!payoutKey) {
+    const circleApiKey     = process.env.CIRCLE_API_KEY
+    const circleSecret     = process.env.CIRCLE_ENTITY_SECRET
+    const payoutWalletAddr = process.env.PAYOUT_WALLET_ADDRESS
+    const payoutPrivKey    = process.env.PAYOUT_WALLET_PRIVATE_KEY
+
+    if (!circleApiKey && !payoutPrivKey) {
       return NextResponse.json({ error: "USDC payouts not yet configured — contact the campaign builder directly" }, { status: 503 })
     }
 
-    // Arc App Kit — server-side USDC send on Arc Testnet
-    const { createAdapterFromPrivateKey } = await import("@circle-fin/adapter-viem-v2")
-    const { AppKit }                      = await import("@circle-fin/app-kit")
+    // Arc App Kit — server-side USDC send via Circle Developer-Controlled Wallet
+    const { AppKit } = await import("@circle-fin/app-kit")
+    const kit = new AppKit()
 
-    const adapter = await createAdapterFromPrivateKey({
-      privateKey: payoutKey as `0x${string}`,
-    } as any)
+    let result: unknown
+    if (circleApiKey && circleSecret && payoutWalletAddr) {
+      const { createCircleWalletsAdapter } = await import("@circle-fin/adapter-circle-wallets")
+      const adapter = createCircleWalletsAdapter({ apiKey: circleApiKey, entitySecret: circleSecret })
+      result = await kit.send({
+        from:  { adapter: adapter as any, chain: "Arc_Testnet", address: payoutWalletAddr as `0x${string}` },
+        to:    tester_wallet.toLowerCase(),
+        amount: String(campaign.reward_usdc_amount),
+        token: "USDC",
+      })
+    } else {
+      const { createAdapterFromPrivateKey } = await import("@circle-fin/adapter-viem-v2")
+      const adapter = await createAdapterFromPrivateKey({ privateKey: payoutPrivKey as `0x${string}` } as any)
+      result = await kit.send({
+        from:  { adapter: adapter as any, chain: "Arc_Testnet" },
+        to:    tester_wallet.toLowerCase(),
+        amount: String(campaign.reward_usdc_amount),
+        token: "USDC",
+      })
+    }
 
-    const kit    = new AppKit()
-    const result = await kit.send({
-      from:   { adapter, chain: "Arc_Testnet" },
-      to:     tester_wallet.toLowerCase(),
-      amount: String(campaign.reward_usdc_amount),
-      token:  "USDC",
-    })
-
-    const txHash = (result as any).txHash || (result as any).hash || ""
+    const txHash = (result as any)?.txHash || (result as any)?.hash || ""
 
     // Mark as delivered
     await pool.query(

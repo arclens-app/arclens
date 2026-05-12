@@ -1,7 +1,8 @@
 "use client"
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import ArcLayout from "@/components/ArcLayout"
+import { useArcStore } from "@/store/arc"
 
 interface Task { id: string; title: string; description: string; contract_address?: string }
 interface ReviewQuestion { id: string; label: string; placeholder: string; min_words: number; required: boolean }
@@ -126,9 +127,12 @@ const TEMPLATES: Record<string, { tasks: Task[]; questions: ReviewQuestion[] }> 
 
 function uid() { return Math.random().toString(36).slice(2, 8) }
 
+const DRAFT_KEY = "arclens-campaign-draft"
+
 export default function CreateCampaignPage() {
-  const router = useRouter()
-  const [wallet, setWallet]         = useState<string | null>(null)
+  const router    = useRouter()
+  const wallet    = useArcStore(s => s.walletAddr)
+  const setWallet = useArcStore(s => s.setWallet)
   const [projects, setProjects]     = useState<Project[]>([])
   const [hasProject, setHasProject] = useState<boolean | null>(null)
   const [mounted, setMounted]       = useState(false)
@@ -161,7 +165,9 @@ export default function CreateCampaignPage() {
   const [submitting, setSubmitting]             = useState(false)
   const [depositing, setDepositing]             = useState(false)
   const [error, setError]                       = useState("")
+  const [draftRestored, setDraftRestored]       = useState(false)
   const errorRef                                = useRef<HTMLDivElement>(null)
+  const saveTimer                               = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const mono  = "'DM Mono', monospace"
   const bdr   = "var(--bdr, rgba(255,255,255,0.06))"
@@ -175,18 +181,65 @@ export default function CreateCampaignPage() {
     if (error) errorRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })
   }, [error])
 
+  // Save draft to localStorage, debounced 600ms
+  const saveDraft = useCallback(() => {
+    if (saveTimer.current) clearTimeout(saveTimer.current)
+    saveTimer.current = setTimeout(() => {
+      try {
+        localStorage.setItem(DRAFT_KEY, JSON.stringify({
+          type, title, tagline, description, contractAddress, projectId,
+          tasks, questions, rewardType, rewardDesc, rewardUsdcAmount,
+          totalSlots, expiresAt, isFcfs, minRank, campaignLogo, bannerPos, appUrl,
+        }))
+      } catch { /* storage full — silent */ }
+    }, 600)
+  }, [type, title, tagline, description, contractAddress, projectId, tasks, questions,
+      rewardType, rewardDesc, rewardUsdcAmount, totalSlots, expiresAt, isFcfs, minRank,
+      campaignLogo, bannerPos, appUrl])
+
+  useEffect(() => {
+    if (mounted) saveDraft()
+  }, [mounted, saveDraft])
+
   useEffect(() => {
     setMounted(true)
-    const w = localStorage.getItem("arclens-wallet")
+    const w = useArcStore.getState().walletAddr || localStorage.getItem("arclens-wallet")
     if (!w) { setWalletMissing(true); return }
-    setWallet(w)
+    if (!useArcStore.getState().walletAddr) setWallet(w)
+
+    // Restore saved draft
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY)
+      if (raw) {
+        const d = JSON.parse(raw)
+        if (d.type)             setType(d.type)
+        if (d.title)            setTitle(d.title)
+        if (d.tagline)          setTagline(d.tagline)
+        if (d.description)      setDescription(d.description)
+        if (d.contractAddress)  setContractAddress(d.contractAddress)
+        if (d.tasks?.length)    setTasks(d.tasks)
+        if (d.questions?.length) setQuestions(d.questions)
+        if (d.rewardType)       setRewardType(d.rewardType)
+        if (d.rewardDesc)       setRewardDesc(d.rewardDesc)
+        if (d.rewardUsdcAmount) setRewardUsdcAmount(d.rewardUsdcAmount)
+        if (d.totalSlots)       setTotalSlots(d.totalSlots)
+        if (d.expiresAt)        setExpiresAt(d.expiresAt)
+        if (typeof d.isFcfs === "boolean") setIsFcfs(d.isFcfs)
+        if (typeof d.minRank === "number") setMinRank(d.minRank)
+        if (d.campaignLogo)     { setCampaignLogo(d.campaignLogo); setLogoPreview(d.campaignLogo) }
+        if (d.bannerPos)        setBannerPos(d.bannerPos)
+        if (d.appUrl)           setAppUrl(d.appUrl)
+        setDraftRestored(true)
+      }
+    } catch { /* corrupt draft — ignore */ }
+
     fetch("/api/claim", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ wallet: w }) })
       .then(r => r.json())
       .then(d => {
         if (d.projects?.length) {
           setProjects(d.projects)
           setHasProject(true)
-          if (d.projects.length === 1) setProjectId(d.projects[0].id)
+          if (d.projects.length === 1) setProjectId(prev => prev ?? d.projects[0].id)
         } else setHasProject(false)
       })
       .catch(() => setHasProject(false))
@@ -271,7 +324,7 @@ export default function CreateCampaignPage() {
         const { AppKit } = await import("@circle-fin/app-kit")
         const adapter = await createAdapterFromProvider({ provider: (window as any).ethereum })
         const kit = new AppKit()
-        const result = await kit.send({ from: { adapter, chain: "Arc_Testnet" }, to: payoutAddr, amount: total, token: "USDC" })
+        const result = await kit.send({ from: { adapter: adapter as any, chain: "Arc_Testnet" }, to: payoutAddr, amount: total, token: "USDC" })
         depositTxHash = (result as any).txHash || (result as any).hash || ""
       } catch (e: any) {
         setError(e?.code === 4001 || String(e).includes("user rejected") ? "Transaction cancelled" : "Deposit failed: " + (e?.message || "Unknown error"))
@@ -301,6 +354,7 @@ export default function CreateCampaignPage() {
       })
       const data = await res.json()
       if (!res.ok) { setError(data.error || "Failed to create campaign"); return }
+      localStorage.removeItem(DRAFT_KEY)
       router.push(`/forge/${data.slug || data.id}`)
     } finally { setSubmitting(false) }
   }
@@ -366,6 +420,31 @@ export default function CreateCampaignPage() {
             Define your tasks and questions. Arclens reviews it, then qualified testers on Arc Testnet complete the work and submit structured feedback — automatically verified on-chain.
           </p>
         </div>
+
+        {/* Draft restored banner */}
+        {draftRestored && (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "10px 16px", marginBottom: 8, background: "rgba(26,86,255,0.06)", border: "1px solid rgba(26,86,255,0.2)", borderRadius: 10 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#8aaeff", flexShrink: 0 }} />
+              <span style={{ fontSize: 12, fontFamily: mono, color: "#8aaeff" }}>Draft restored — continue where you left off</span>
+            </div>
+            <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+              <button onClick={() => {
+                localStorage.removeItem(DRAFT_KEY)
+                setDraftRestored(false)
+                setType("beta_test"); setTitle(""); setTagline(""); setDescription("")
+                setContractAddress(""); setProjectId(null)
+                setTasks(TEMPLATES.beta_test.tasks); setQuestions(TEMPLATES.beta_test.questions)
+                setRewardType("whitelist"); setRewardDesc(""); setRewardUsdcAmount("")
+                setTotalSlots(""); setExpiresAt(""); setIsFcfs(true); setMinRank(0)
+                setCampaignLogo(null); setLogoPreview(null); setBannerPos({ x: 50, y: 50 }); setAppUrl("")
+              }} style={{ fontSize: 11, fontFamily: mono, color: "var(--t3,#2e3a5c)", background: "none", border: "none", cursor: "pointer", padding: 0, textDecoration: "underline" }}>
+                Clear draft
+              </button>
+              <button onClick={() => setDraftRestored(false)} style={{ fontSize: 14, color: "var(--t3,#2e3a5c)", background: "none", border: "none", cursor: "pointer", padding: 0, lineHeight: 1 }}>×</button>
+            </div>
+          </div>
+        )}
 
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
 
