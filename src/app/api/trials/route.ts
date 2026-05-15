@@ -1,10 +1,10 @@
-import { NextRequest, NextResponse } from "next/server"
+﻿import { NextRequest, NextResponse } from "next/server"
 import { Pool } from "pg"
 import { rateLimit, getIp } from "@/lib/ratelimit"
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
 
-// GET /api/forge — list active campaigns + stats
+// GET /api/trials — list active campaigns + stats
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const type    = searchParams.get("type")    || ""
@@ -79,7 +79,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// POST /api/forge — create campaign
+// POST /api/trials — create campaign
 export async function POST(req: NextRequest) {
   // Rate limit: 5 campaigns per hour per IP
   const rl = rateLimit(`forge-create:${getIp(req)}`, 5, 3_600_000)

@@ -16,7 +16,7 @@ const sections = [
 
 • Block Explorer — real-time access to blocks, transactions, addresses, and gas analytics on the Arc network
 • Arc Ecosystem Directory — a curated public directory of projects building on Arc
-• Arc Trials (Forge) — a testing campaign platform where builders post tasks and reward community testers in USDC
+• Arc Trials — a testing campaign platform where builders post tasks and reward community testers in USDC
 • Events Hub — community events, hackathons, workshops, and announcements across the Arc ecosystem
 • Bridge Monitor — tracking of USDC cross-chain transfers via Circle's Cross-Chain Transfer Protocol (CCTP)
 • Contract Registry — verification and discovery of smart contracts deployed on Arc

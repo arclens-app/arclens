@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 import ArcLayout from "@/components/ArcLayout"
 
 const FEATURES = [
@@ -201,7 +201,7 @@ export default function AboutPage() {
               <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
                 {[
                   { label: "List your project", desc: "Submit your project to the Arc Ecosystem Directory.", href: "/ecosystem#submit", cta: "Submit project →" },
-                  { label: "Create a campaign", desc: "Post a testing campaign on Arc Trials and reward your community in USDC.", href: "/forge/create", cta: "Create campaign →" },
+                  { label: "Create a campaign", desc: "Post a testing campaign on Arc Trials and reward your community in USDC.", href: "/trials/create", cta: "Create campaign →" },
                   { label: "Legal", desc: "Read our Terms of Service and Privacy Policy.", href: "/terms", cta: "View terms →" },
                 ].map((card, i) => (
                   <a key={i} href={card.href} style={{ padding: "20px", borderRadius: "10px", border: "1px solid " + bdr, textDecoration: "none", display: "block", transition: "border-color .12s" }}

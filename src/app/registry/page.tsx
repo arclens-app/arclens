@@ -1,6 +1,7 @@
 "use client"
 import { useEffect, useState } from "react"
 import ArcLayout from "@/components/ArcLayout"
+import { circleSignMessage } from "@/lib/circleSign"
 
 const PROTECTED_NAMES = ["usdc","circle","arc bridge","arclens","uniswap","aave","compound","metamask","official","verified"]
 
@@ -123,10 +124,17 @@ export default function RegistryPage() {
         "This is a FREE signature. No transaction. No gas. No funds moved.",
       ].join("\n")
 
-      const sig = await (window as any).ethereum.request({
-        method: "personal_sign",
-        params: [message, walletAddr],
-      })
+      const walletType  = localStorage.getItem("arclens-wallet-type")
+      const circleEmail = localStorage.getItem("arclens-circle-email")
+      let sig: string
+
+      if (walletType === "circle" && circleEmail) {
+        sig = await circleSignMessage(circleEmail, message)
+      } else {
+        if (!(window as any).ethereum) { alert("Connect your wallet first"); return }
+        sig = await (window as any).ethereum.request({ method: "personal_sign", params: [message, walletAddr] })
+      }
+
       setSignature(sig)
       setSigned(true)
     } catch (e: unknown) {

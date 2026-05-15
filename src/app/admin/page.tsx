@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 import { useEffect, useState } from "react"
 import ArcLayout from "@/components/ArcLayout"
 
@@ -580,7 +580,7 @@ export default function AdminPage() {
                             <div style={{ display:"flex", gap:"8px" }}>
                               <ActionBtn onClick={() => act(u.id, "approve-campaign-update")} disabled={acting} color="green">Apply Changes</ActionBtn>
                               <ActionBtn onClick={() => act(u.id, "reject-campaign-update", "projects", { reason: (document.getElementById(`cu-reason-${u.id}`) as HTMLInputElement)?.value || "" })} disabled={acting} color="red">Reject</ActionBtn>
-                              <a href={`/forge/${u.campaign_id}`} target="_blank" rel="noopener noreferrer"
+                              <a href={`/trials/${u.campaign_id}`} target="_blank" rel="noopener noreferrer"
                                 style={{ height:"32px", padding:"0 14px", display:"flex", alignItems:"center", background:"transparent", color:"#8aaeff", fontSize:"12px", border:"1px solid rgba(26,86,255,0.2)", borderRadius:"6px", textDecoration:"none" }}>
                                 View Campaign ↗
                               </a>
@@ -1028,7 +1028,7 @@ export default function AdminPage() {
                                     {c.status} · {c.filled_slots}/{c.total_slots ?? "∞"} slots · {new Date(c.created_at).toLocaleDateString()}
                                   </div>
                                 </div>
-                                <a href={`/forge/${c.id}`} target="_blank" rel="noopener noreferrer"
+                                <a href={`/trials/${c.id}`} target="_blank" rel="noopener noreferrer"
                                   style={{ fontSize:10, fontFamily:mono, color:t3, textDecoration:"none", padding:"3px 8px", border:"1px solid "+bdr, borderRadius:4, flexShrink:0 }}>
                                   View
                                 </a>

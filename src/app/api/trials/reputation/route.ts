@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server"
+﻿import { NextRequest, NextResponse } from "next/server"
 import { Pool } from "pg"
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
@@ -13,7 +13,7 @@ const RANK_NEXT: Record<number, { campaigns: number; score: number } | null> = {
   4: null,
 }
 
-// GET /api/forge/reputation?wallet=0x...
+// GET /api/trials/reputation?wallet=0x...
 export async function GET(req: NextRequest) {
   const wallet = req.nextUrl.searchParams.get("wallet")
   if (!wallet) return NextResponse.json({ error: "Wallet required" }, { status: 400 })

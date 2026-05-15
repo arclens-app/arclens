@@ -46,23 +46,12 @@ function Globe3D({ projects }: { projects: Project[] }) {
     const container = mountRef.current
     let animId = 0, destroyed = false
 
-    function loadScript(src: string): Promise<void> {
-      return new Promise(res => {
-        if (document.querySelector(`script[src="${src}"]`)) { res(); return }
-        const s = document.createElement("script")
-        s.src = src; s.onload = () => res(); s.onerror = () => res()
-        document.head.appendChild(s)
-      })
-    }
-
     async function init(): Promise<() => void> {
-      if (!(window as any).THREE)
-        await loadScript("https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js")
-      if (!(window as any).topojson)
-        await loadScript("https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js")
-
-      const THREE = (window as any).THREE
-      if (!THREE || destroyed || !container.isConnected) return () => {}
+      const [THREE, topojson] = await Promise.all([
+        import("three"),
+        import("topojson-client"),
+      ])
+      if (destroyed || !container.isConnected) return () => {}
 
       const W = container.clientWidth  || 600
       const H = container.clientHeight || 600
@@ -119,26 +108,23 @@ function Globe3D({ projects }: { projects: Project[] }) {
       sg.setAttribute("position", new THREE.BufferAttribute(sa, 3))
       scene.add(new THREE.Points(sg, new THREE.PointsMaterial({ color: 0x223366, size: 0.02 })))
 
-      const topojson = (window as any).topojson
-      if (topojson) {
-        fetch("https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json")
-          .then(r => r.json())
-          .then(world => {
-            if (destroyed) return
-            const countries = topojson.feature(world, world.objects.countries)
-            const bMat = new THREE.LineBasicMaterial({ color: 0x1a56ff, transparent: true, opacity: 0.28 })
-            countries.features.forEach((feat: any) => {
-              const draw = (ring: number[][]) => {
-                const pts: any[] = ring.map(([lng, lat]) => llToV3(THREE, lat, lng, 1.003))
-                if (pts.length < 2) return
-                globe.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), bMat))
-              }
-              const g = feat.geometry; if (!g) return
-              if (g.type === "Polygon") g.coordinates.forEach(draw)
-              else if (g.type === "MultiPolygon") g.coordinates.forEach((p: any) => p.forEach(draw))
-            })
-          }).catch(() => {})
-      }
+      fetch("https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json")
+        .then(r => r.json())
+        .then(world => {
+          if (destroyed) return
+          const countries = topojson.feature(world, world.objects.countries)
+          const bMat = new THREE.LineBasicMaterial({ color: 0x1a56ff, transparent: true, opacity: 0.28 })
+          ;(countries as any).features.forEach((feat: any) => {
+            const draw = (ring: number[][]) => {
+              const pts: any[] = ring.map(([lng, lat]) => llToV3(THREE, lat, lng, 1.003))
+              if (pts.length < 2) return
+              globe.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), bMat))
+            }
+            const g = feat.geometry; if (!g) return
+            if (g.type === "Polygon") g.coordinates.forEach(draw)
+            else if (g.type === "MultiPolygon") g.coordinates.forEach((p: any) => p.forEach(draw))
+          })
+        }).catch(() => {})
 
       /* Builder dot sprites — logo circle or initials, clickable */
       let activeSprites: any[] = []

@@ -1,4 +1,4 @@
-import { MetadataRoute } from "next"
+﻿import { MetadataRoute } from "next"
 import { Pool } from "pg"
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
@@ -9,7 +9,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const staticRoutes: MetadataRoute.Sitemap = [
     { url: `${BASE}/`,            priority: 1.0,  changeFrequency: "daily"   },
     { url: `${BASE}/ecosystem`,   priority: 0.9,  changeFrequency: "daily"   },
-    { url: `${BASE}/forge`,       priority: 0.9,  changeFrequency: "daily"   },
+    { url: `${BASE}/trials`,      priority: 0.9,  changeFrequency: "daily"   },
     { url: `${BASE}/events`,      priority: 0.8,  changeFrequency: "weekly"  },
     { url: `${BASE}/overview`,    priority: 0.7,  changeFrequency: "hourly"  },
     { url: `${BASE}/blocks`,      priority: 0.6,  changeFrequency: "always"  },
@@ -43,7 +43,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       `SELECT slug, id, updated_at FROM campaigns WHERE status = 'active' ORDER BY created_at DESC`
     )
     campaignRoutes = campaigns.rows.map((c: any) => ({
-      url:             `${BASE}/forge/${c.slug || c.id}`,
+      url:             `${BASE}/trials/${c.slug || c.id}`,
       lastModified:    c.updated_at ? new Date(c.updated_at) : new Date(),
       priority:        0.7,
       changeFrequency: "daily" as const,

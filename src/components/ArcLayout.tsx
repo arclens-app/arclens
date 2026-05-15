@@ -1,6 +1,7 @@
 ﻿"use client"
 import { useEffect, useState, useRef } from "react"
 import { useArcStore } from "@/store/arc"
+import { detectWallets, EIP6963Provider } from "@/context/web3modal"
 
 const NAV = [
   { section: "EXPLORER", items: [
@@ -9,18 +10,19 @@ const NAV = [
     { id: "transactions", label: "Transactions",      icon: "⇄", href: "/transactions" },
   ]},
   { section: "ANALYTICS", items: [
-    { id: "wallets",      label: "Wallet Activity",   icon: "◉", href: "/wallets", tag: "NEW" },
+    { id: "wallets",      label: "Wallet Activity",   icon: "◉", href: "/wallets" },
   ]},
   { section: "TOOLS", items: [
     { id: "approvals",    label: "Approval Manager",  icon: "⚠", href: "/approvals", tag: "SAFETY" },
   ]},
   { section: "DISCOVER", items: [
     { id: "ecosystem",    label: "Arc Ecosystem",     icon: "◎", href: "/ecosystem" },
-    { id: "forge",        label: "Arc Trials",        icon: "✦", href: "/forge", tag: "NEW" },
+    { id: "trials",       label: "Arc Trials",        icon: "✦", href: "/trials" },
     { id: "events",       label: "Events",            icon: "◆", href: "/events" },
     { id: "start",        label: "Arc Beginners",     icon: "◈", href: "/start" },
   ]},
   { section: "DEVELOPERS", items: [
+    { id: "builders",     label: "Builder Profiles",  icon: "◎", href: "/builders" },
     { id: "registry",     label: "Contract Registry", icon: "✦", href: "/registry" },
     { id: "dev",          label: "Dev Console",       icon: "⌘", href: "/dev" },
   ]},
@@ -31,31 +33,68 @@ const TAG_STYLE: Record<string, { bg: string; color: string; border: string }> =
   SAFETY: { bg: "rgba(224,51,72,0.1)",   color: "#e03348", border: "rgba(224,51,72,0.2)" },
 }
 
+
 export default function ArcLayout({ children, active }: { children: React.ReactNode; active?: string }) {
-  const [mounted, setMounted]       = useState(false)
-  const [dark, setDark]             = useState(true)
-  const [blockNum, setBlockNum]     = useState("")
-  const [gas, setGas]               = useState("")
-  const [connected, setConnected]   = useState(false)
-  const [searchQ, setSearchQ]       = useState("")
-  // Sidebar hidden by default on all screens — toggled by hamburger
+  const [mounted, setMounted]         = useState(false)
+  const [dark, setDark]               = useState(true)
+  const [blockNum, setBlockNum]       = useState("")
+  const [gas, setGas]                 = useState("")
+  const [connected, setConnected]     = useState(false)
+  const [searchQ, setSearchQ]         = useState("")
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [copied, setCopied]           = useState(false)
+
+  // Connect modal state
+  const [showConnectModal, setShowConnectModal] = useState(false)
+  const [connectView, setConnectView]           = useState<"choose" | "wallets" | "email" | "circle">("choose")
+  const [walletType, setWalletType]             = useState<"metamask" | "circle" | null>(null)
+  const [detectedWallets, setDetectedWallets]   = useState<EIP6963Provider[]>([])
+  const [walletLoading, setWalletLoading]       = useState(false)
+  const [emailInput, setEmailInput]             = useState("")
+  const [emailLoading, setEmailLoading]         = useState(false)
+  const [emailError, setEmailError]             = useState("")
+
   const walletAddr  = useArcStore(s => s.walletAddr)
   const walletBal   = useArcStore(s => s.walletBal)
   const myProject   = useArcStore(s => s.myProject)
   const setWallet   = useArcStore(s => s.setWallet)
   const clearWallet = useArcStore(s => s.clearWallet)
   const searchRef = useRef<HTMLInputElement>(null)
+  const sdkRef    = useRef<any>(null)
+
+  // Builder profile mini-card
+  const [builderProfile, setBuilderProfile] = useState<{ display_name: string | null; avatar_url: string | null; claimed: boolean } | null>(null)
 
   useEffect(() => {
     setMounted(true)
     const saved = typeof window !== "undefined" ? localStorage.getItem("arclens-theme") : null
     if (saved === "light") setDark(false)
     else setDark(true)
+    const wt = typeof window !== "undefined" ? localStorage.getItem("arclens-wallet-type") : null
+    if (wt === "metamask" || wt === "circle") setWalletType(wt)
+  }, [])
+
+  // Silently preload Circle's iframe assets 3 seconds after page mount so the SDK's
+  // 10-second cold-start timeout never fires. Delayed so it doesn't compete with
+  // critical page resources. Goes browser→pw-auth.circle.com directly, no Vercel cost.
+  useEffect(() => {
+    if (!process.env.NEXT_PUBLIC_CIRCLE_APP_ID) return
+    const t = setTimeout(() => {
+      if (document.getElementById("circleWarmupFrame")) return
+      const frame = document.createElement("iframe")
+      frame.src = `https://pw-auth.circle.com/?origin=${encodeURIComponent(window.location.origin)}`
+      frame.style.cssText = "position:fixed;width:0;height:0;border:0;pointer-events:none;visibility:hidden;top:0;left:0"
+      frame.id = "circleWarmupFrame"
+      frame.onload = () => frame.remove()
+      document.body.appendChild(frame)
+    }, 3000)
+    return () => { clearTimeout(t); document.getElementById("circleWarmupFrame")?.remove() }
   }, [])
 
   useEffect(() => {
     if (!mounted) return
+
+    // Restore wallet from localStorage on page load
     const saved = localStorage.getItem("arclens-wallet")
     if (saved) {
       setWallet(saved)
@@ -70,7 +109,9 @@ export default function ArcLayout({ children, active }: { children: React.ReactN
           useArcStore.setState({ myProject: { name: p.name, slug: p.slug || String(p.id) } })
         }
       }).catch(() => {})
+      fetchBuilderProfile(saved)
     }
+
   }, [mounted])
 
   async function fetchWalletBal(addr: string) {
@@ -83,30 +124,185 @@ export default function ArcLayout({ children, active }: { children: React.ReactN
     } catch { useArcStore.setState({ walletBal: null }) }
   }
 
-  async function connectWallet() {
-    if (!(window as any).ethereum) { alert("No wallet detected. Install MetaMask or Rabby."); return }
+  function connect() {
+    setConnectView("choose")
+    setEmailInput("")
+    setEmailError("")
+    setShowConnectModal(true)
+  }
+
+  async function afterConnect(addr: string, type: "metamask" | "circle") {
+    localStorage.setItem("arclens-wallet", addr)
+    localStorage.setItem("arclens-wallet-type", type)
+    setWallet(addr)
+    setWalletType(type)
+    fetchWalletBal(addr)
     try {
-      const accounts = await (window as any).ethereum.request({ method: "eth_requestAccounts" })
-      if (accounts[0]) {
-        const addr = accounts[0]
-        localStorage.setItem("arclens-wallet", addr)
-        setWallet(addr)
-        fetchWalletBal(addr)
-        try {
-          const projRes  = await fetch("/api/claim", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ wallet: addr }) })
-          const projData = await projRes.json()
-          if (projData.projects?.length > 0) {
-            const p = projData.projects[0]
-            useArcStore.setState({ myProject: { name: p.name, slug: p.slug || String(p.id) } })
-          }
-        } catch { }
+      const r = await fetch("/api/claim", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ wallet: addr }) })
+      const d = await r.json()
+      if (d.projects?.length > 0) {
+        const p = d.projects[0]
+        useArcStore.setState({ myProject: { name: p.name, slug: p.slug || String(p.id) } })
       }
-    } catch { /* user rejected */ }
+    } catch {}
+    fetchBuilderProfile(addr)
+  }
+
+  async function fetchBuilderProfile(addr: string) {
+    try {
+      const r = await fetch(`/api/builder?address=${addr}`)
+      const d = await r.json()
+      setBuilderProfile({
+        display_name: d.profile?.display_name || null,
+        avatar_url:   d.profile?.avatar_url   || null,
+        claimed:      !!d.profile?.claimed_at,
+      })
+    } catch {}
+  }
+
+  async function openBrowserWallets() {
+    setWalletLoading(true)
+    setConnectView("wallets")
+    const wallets = await detectWallets()
+    setDetectedWallets(wallets)
+    setWalletLoading(false)
+  }
+
+  async function connectEIP6963(wallet: EIP6963Provider) {
+    try {
+      const accounts: string[] = await wallet.provider.request({ method: "eth_requestAccounts" })
+      if (!accounts?.[0]) return
+      setShowConnectModal(false)
+      await afterConnect(accounts[0].toLowerCase(), "metamask")
+    } catch (e: any) {
+      // user rejected or error — stay on wallets view
+      console.error("[eip6963] connect error", e)
+    }
+  }
+
+  async function connectCircle() {
+    if (!emailInput.includes("@")) { setEmailError("Enter a valid email address"); return }
+    setEmailLoading(true)
+    setEmailError("")
+    setConnectView("circle")
+    try {
+      const sessionRes = await fetch("/api/auth/circle/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: emailInput }),
+      })
+      const session = await sessionRes.json()
+      if (!sessionRes.ok) {
+        setEmailError(session.error || "Failed to create wallet session")
+        setConnectView("email")
+        return
+      }
+
+      const { userToken, encryptionKey, challengeId, address: resolvedAddr, isSignIn } = session
+      const email = emailInput  // capture before state clears
+      const appId = process.env.NEXT_PUBLIC_CIRCLE_APP_ID!
+
+      const { W3SSdk } = await import("@circle-fin/w3s-pw-web-sdk")
+
+      // Reset + run the Circle SDK as a Promise so we can auto-retry on first-attempt timeout.
+      // The 10s timeout (code 155706) fires on cold loads while the browser fetches Circle's
+      // iframe assets. A second attempt succeeds because the assets are now cached.
+      async function runSDK(): Promise<void> {
+        const prev = (W3SSdk as any).instance
+        if (prev) { try { prev.unSubscribeMessage() } catch {} }
+        ;(W3SSdk as any).instance = null
+        document.getElementById("circleWarmupFrame")?.remove()
+        document.getElementById("sdkIframe")?.remove()
+        const sdk = new W3SSdk()
+        sdkRef.current = sdk
+        sdk.setAppSettings({ appId })
+        sdk.setAuthentication({ userToken, encryptionKey })
+        return new Promise((resolve, reject) => {
+          sdk.execute(challengeId, (err: any) => {
+            sdkRef.current = null
+            if (err) reject(err)
+            else resolve()
+          })
+        })
+      }
+
+      try {
+        try {
+          await runSDK()
+        } catch (e: any) {
+          if (e?.code !== 155706) throw e
+          // Retry once — assets are cached now, iframe will respond in time
+          await runSDK()
+        }
+      } catch (e: any) {
+        setEmailError(
+          e?.code === 155706
+            ? "Circle wallet window failed to open. Make sure pop-ups and iframes are allowed for this site, then try again."
+            : (e?.message || "Setup failed. Try again.")
+        )
+        setConnectView("email")
+        setEmailLoading(false)
+        return
+      }
+
+      // Challenge completed — handle success
+      try {
+        if (isSignIn) {
+          localStorage.setItem("arclens-circle-email", email)
+          setShowConnectModal(false)
+          await afterConnect(resolvedAddr, "circle")
+        } else {
+          const walletRes = await fetch("/api/auth/circle/wallet", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email }),
+          })
+          const walletData = await walletRes.json()
+          if (!walletRes.ok || !walletData.address) {
+            setEmailError(walletData.error || "Wallet not ready. Try again.")
+            setConnectView("email")
+            return
+          }
+          localStorage.setItem("arclens-circle-email", email)
+          setShowConnectModal(false)
+          await afterConnect(walletData.address, "circle")
+        }
+      } catch {
+        setEmailError("Failed to get wallet address. Try again.")
+        setConnectView("email")
+      } finally { setEmailLoading(false) }
+    } catch {
+      setEmailError("Network error. Try again.")
+      setConnectView("email")
+      setEmailLoading(false)
+    }
+  }
+
+  function cancelCircle() {
+    if (sdkRef.current) {
+      try { sdkRef.current.unSubscribeMessage() } catch {}
+      sdkRef.current = null
+    }
+    document.getElementById("sdkIframe")?.remove()
+    setEmailLoading(false)
+    setConnectView("email")
+    setEmailError("")
   }
 
   function disconnectWallet() {
     clearWallet()
+    setWalletType(null)
     localStorage.removeItem("arclens-wallet")
+    localStorage.removeItem("arclens-wallet-type")
+    localStorage.removeItem("arclens-circle-email")
+  }
+
+  function copyAddress() {
+    if (!walletAddr) return
+    navigator.clipboard.writeText(walletAddr).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
   }
 
   useEffect(() => {
@@ -318,12 +514,22 @@ export default function ArcLayout({ children, active }: { children: React.ReactN
                 <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: usdc, flexShrink: 0 }}/>
                 <div style={{ fontSize: "9.5px", fontFamily: mono, color: usdc }}>Connected</div>
               </div>
-              <div onClick={() => { window.location.href = "/address/" + walletAddr; setSidebarOpen(false) }}
-                style={{ fontSize: "10.5px", fontFamily: mono, color: "#8aaeff", marginBottom: "4px", cursor: "pointer", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {walletAddr.slice(0,8)}...{walletAddr.slice(-6)}
+              <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "4px" }}>
+                <div onClick={() => { window.location.href = "/address/" + walletAddr; setSidebarOpen(false) }}
+                  style={{ fontSize: "10.5px", fontFamily: mono, color: "#8aaeff", cursor: "pointer", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>
+                  {walletAddr.slice(0,8)}...{walletAddr.slice(-6)}
+                </div>
+                <button onClick={copyAddress} title={copied ? "Copied!" : "Copy address"}
+                  style={{ flexShrink: 0, background: "none", border: "none", color: copied ? usdc : t3, cursor: "pointer", padding: "2px", display: "flex", alignItems: "center", transition: "color .15s", fontSize: "11px" }}>
+                  {copied ? "✓" : (
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                      <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                    </svg>
+                  )}
+                </button>
               </div>
               {walletBal && <div style={{ fontSize: "13px", fontWeight: 700, color: usdc, letterSpacing: "-0.02em", marginBottom: "6px" }}>{walletBal} USDC</div>}
-              <div style={{ display: "flex", gap: "6px" }}>
+              <div style={{ display: "flex", gap: "6px", marginBottom: "8px" }}>
                 <button onClick={() => { window.location.href = "/address/" + walletAddr; setSidebarOpen(false) }}
                   style={{ flex: 1, height: "26px", background: "rgba(0,184,122,0.08)", color: usdc, fontSize: "10px", fontFamily: mono, border: "1px solid rgba(0,184,122,0.2)", borderRadius: "5px", cursor: "pointer" }}>
                   My Wallet
@@ -333,9 +539,31 @@ export default function ArcLayout({ children, active }: { children: React.ReactN
                   ✕
                 </button>
               </div>
+              {/* BUILDER PROFILE MINI CARD */}
+              <div
+                onClick={() => { window.location.href = "/builder/" + walletAddr; setSidebarOpen(false) }}
+                style={{ cursor: "pointer", padding: "8px 10px", background: builderProfile?.claimed ? "rgba(0,184,122,0.05)" : "rgba(26,86,255,0.05)", border: "1px solid " + (builderProfile?.claimed ? "rgba(0,184,122,0.15)" : "rgba(26,86,255,0.12)"), borderRadius: "8px", display: "flex", alignItems: "center", gap: "8px", transition: "border-color .12s" }}
+                onMouseEnter={e => (e.currentTarget.style.borderColor = builderProfile?.claimed ? "rgba(0,184,122,0.35)" : "rgba(26,86,255,0.3)")}
+                onMouseLeave={e => (e.currentTarget.style.borderColor = builderProfile?.claimed ? "rgba(0,184,122,0.15)" : "rgba(26,86,255,0.12)")}
+              >
+                <img
+                  src={builderProfile?.avatar_url || `https://api.dicebear.com/9.x/identicon/svg?seed=${walletAddr}&backgroundColor=0e1224&radius=50`}
+                  onError={e => { (e.target as HTMLImageElement).src = `https://api.dicebear.com/9.x/identicon/svg?seed=${walletAddr}&backgroundColor=0e1224&radius=50` }}
+                  alt="avatar"
+                  style={{ width: "26px", height: "26px", borderRadius: "50%", border: "1px solid " + bdr, background: "var(--surf2,#0e1224)", flexShrink: 0 }}
+                />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: "11px", fontWeight: 600, color: builderProfile?.claimed ? usdc : "#8aaeff", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {builderProfile?.claimed ? (builderProfile.display_name || "Builder Profile") : "Claim Builder Profile"}
+                  </div>
+                  <div style={{ fontSize: "9px", fontFamily: mono, color: t3 }}>
+                    {builderProfile?.claimed ? "◎ Verified" : "Set up your identity →"}
+                  </div>
+                </div>
+              </div>
             </div>
           ) : (
-            <button onClick={connectWallet}
+            <button onClick={connect}
               style={{ width: "100%", height: "34px", background: "rgba(26,86,255,0.08)", color: "#8aaeff", fontSize: "11px", fontFamily: mono, border: "1px solid rgba(26,86,255,0.2)", borderRadius: "8px", cursor: "pointer" }}>
               Connect Wallet
             </button>
@@ -429,13 +657,21 @@ export default function ArcLayout({ children, active }: { children: React.ReactN
                 <div style={{ width: "5px", height: "5px", borderRadius: "50%", background: usdc, flexShrink: 0 }} />
                 {walletAddr.slice(0,6)}...{walletAddr.slice(-4)}
               </button>
+              <button onClick={copyAddress} title={copied ? "Copied!" : "Copy address"}
+                style={{ height: "30px", padding: "0 7px", background: "rgba(0,184,122,0.08)", color: copied ? usdc : t3, fontSize: "11px", border: "1px solid rgba(0,184,122,0.2)", borderLeft: "none", cursor: "pointer", display: "flex", alignItems: "center", transition: "color .15s" }}>
+                {copied ? "✓" : (
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                    <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                  </svg>
+                )}
+              </button>
               <button onClick={disconnectWallet}
-                style={{ height: "30px", padding: "0 8px", background: "rgba(0,184,122,0.08)", color: usdc, fontSize: "13px", fontFamily: mono, border: "1px solid rgba(0,184,122,0.2)", borderLeft: "none", borderRadius: "0 6px 6px 0", cursor: "pointer" }}>
+                style={{ height: "30px", padding: "0 8px", background: "rgba(0,184,122,0.08)", color: t3, fontSize: "13px", fontFamily: mono, border: "1px solid rgba(0,184,122,0.2)", borderLeft: "none", borderRadius: "0 6px 6px 0", cursor: "pointer" }}>
                 ×
               </button>
             </div>
           ) : (
-            <button onClick={connectWallet}
+            <button onClick={connect}
               style={{ height: "30px", padding: "0 10px", background: "rgba(26,86,255,0.08)", color: "#8aaeff", fontSize: "11px", fontFamily: mono, border: "1px solid rgba(26,86,255,0.2)", borderRadius: "6px", cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0, display: "flex", alignItems: "center", gap: "5px" }}>
               <div style={{ width: "5px", height: "5px", borderRadius: "50%", background: "#8aaeff", flexShrink: 0 }} />
               Connect
@@ -494,9 +730,183 @@ export default function ArcLayout({ children, active }: { children: React.ReactN
 
       </div>
 
+      {/* CONNECT MODAL */}
+      {showConnectModal && (
+        <div
+          onClick={() => { if (connectView === "circle") { cancelCircle() } else if (!emailLoading) { setShowConnectModal(false) } }}
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(4px)" }}>
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{ width: "100%", maxWidth: "360px", margin: "0 16px", background: "var(--surf, #0a0e1a)", border: "1px solid var(--bdr, rgba(255,255,255,0.06))", borderRadius: "14px", padding: "28px", boxShadow: "0 24px 64px rgba(0,0,0,0.6)" }}>
+
+            {/* Header */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "24px" }}>
+              <div>
+                <div style={{ fontSize: "9px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: "4px" }}>
+                  {connectView === "choose" ? "Connect" : connectView === "wallets" ? "Browser Wallets" : connectView === "email" ? "Email Wallet" : "Circle Wallet"}
+                </div>
+                <div style={{ fontSize: "16px", fontWeight: 700, letterSpacing: "-0.03em", color: t1 }}>
+                  {connectView === "choose" ? "Connect to ArcLens" : connectView === "wallets" ? "Choose a wallet" : connectView === "email" ? "Enter your email" : "Setting up wallet…"}
+                </div>
+              </div>
+              <button
+                onClick={() => { if (connectView === "circle") cancelCircle(); else if (!emailLoading) setShowConnectModal(false) }}
+                style={{ background: "none", border: "none", color: t3, cursor: "pointer", fontSize: "20px", lineHeight: 1, padding: "4px" }}>×</button>
+            </div>
+
+            {/* Choose view */}
+            {connectView === "choose" && (
+              <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                <button onClick={openBrowserWallets}
+                  style={{ width: "100%", height: "48px", background: "rgba(255,255,255,0.03)", border: "1px solid var(--bdr)", borderRadius: "9px", color: t1, fontSize: "13px", fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", gap: "10px", padding: "0 16px", transition: "border-color .12s, background .12s" }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.15)"; e.currentTarget.style.background = "rgba(255,255,255,0.05)" }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = "var(--bdr)"; e.currentTarget.style.background = "rgba(255,255,255,0.03)" }}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                    <rect x="2" y="5" width="20" height="14" rx="2"/><path d="M16 12h.01"/>
+                  </svg>
+                  Browser Wallet
+                  <span style={{ marginLeft: "auto", fontSize: "9px", fontFamily: mono, color: t3 }}>Rabby, MetaMask…</span>
+                </button>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                  <div style={{ flex: 1, height: "1px", background: "var(--bdr)" }} />
+                  <span style={{ fontSize: "10px", fontFamily: mono, color: t3 }}>or</span>
+                  <div style={{ flex: 1, height: "1px", background: "var(--bdr)" }} />
+                </div>
+                <button onClick={() => setConnectView("email")}
+                  style={{ width: "100%", height: "48px", background: "rgba(26,86,255,0.06)", border: "1px solid rgba(26,86,255,0.2)", borderRadius: "9px", color: "#8aaeff", fontSize: "13px", fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", gap: "10px", padding: "0 16px", transition: "border-color .12s, background .12s" }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(26,86,255,0.4)"; e.currentTarget.style.background = "rgba(26,86,255,0.1)" }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(26,86,255,0.2)"; e.currentTarget.style.background = "rgba(26,86,255,0.06)" }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                    <rect x="2" y="4" width="20" height="16" rx="2"/><path d="m2 7 10 7 10-7"/>
+                  </svg>
+                  Continue with Email
+                  <span style={{ marginLeft: "auto", fontSize: "9px", fontFamily: mono, padding: "2px 7px", borderRadius: "4px", background: "rgba(26,86,255,0.15)", color: "#8aaeff", border: "1px solid rgba(26,86,255,0.2)" }}>Circle</span>
+                </button>
+              </div>
+            )}
+
+            {/* Wallets view — EIP-6963 detected wallets */}
+            {connectView === "wallets" && (
+              <div>
+                {walletLoading ? (
+                  <div style={{ textAlign: "center", padding: "24px 0", color: t3, fontSize: "12px", fontFamily: mono }}>
+                    Detecting wallets…
+                  </div>
+                ) : detectedWallets.length === 0 ? (
+                  <div style={{ textAlign: "center", padding: "24px 0" }}>
+                    <div style={{ fontSize: "12px", color: t2, marginBottom: "14px", lineHeight: 1.6 }}>
+                      No browser wallets detected.<br />Install Rabby or MetaMask to continue.
+                    </div>
+                    <div style={{ display: "flex", gap: "8px", justifyContent: "center" }}>
+                      <a href="https://rabby.io" target="_blank" rel="noopener noreferrer"
+                        style={{ fontSize: "11px", fontFamily: mono, color: "#8aaeff", textDecoration: "none", padding: "6px 12px", border: "1px solid rgba(26,86,255,0.25)", borderRadius: "6px" }}>
+                        Get Rabby
+                      </a>
+                      <a href="https://metamask.io/download" target="_blank" rel="noopener noreferrer"
+                        style={{ fontSize: "11px", fontFamily: mono, color: t2, textDecoration: "none", padding: "6px 12px", border: "1px solid var(--bdr)", borderRadius: "6px" }}>
+                        Get MetaMask
+                      </a>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                    {detectedWallets.map(w => (
+                      <button key={w.info.uuid} onClick={() => connectEIP6963(w)}
+                        style={{ width: "100%", height: "52px", background: "rgba(255,255,255,0.03)", border: "1px solid var(--bdr)", borderRadius: "9px", color: t1, fontSize: "13px", fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", gap: "12px", padding: "0 16px", transition: "border-color .12s, background .12s" }}
+                        onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.18)"; e.currentTarget.style.background = "rgba(255,255,255,0.06)" }}
+                        onMouseLeave={e => { e.currentTarget.style.borderColor = "var(--bdr)"; e.currentTarget.style.background = "rgba(255,255,255,0.03)" }}>
+                        {w.info.icon ? (
+                          <img src={w.info.icon} alt={w.info.name} width={28} height={28} style={{ borderRadius: "6px", flexShrink: 0, objectFit: "contain" }} />
+                        ) : (
+                          <div style={{ width: 28, height: 28, borderRadius: "6px", background: "rgba(255,255,255,0.06)", flexShrink: 0 }} />
+                        )}
+                        <span style={{ flex: 1, textAlign: "left" }}>{w.info.name}</span>
+                        {w.info.rdns === "io.rabby" && (
+                          <span style={{ fontSize: "8px", fontFamily: mono, padding: "2px 6px", borderRadius: "4px", background: "rgba(0,184,122,0.12)", color: "#00b87a", border: "1px solid rgba(0,184,122,0.2)" }}>
+                            Recommended
+                          </span>
+                        )}
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={t3} strokeWidth="2" strokeLinecap="round">
+                          <path d="M9 18l6-6-6-6"/>
+                        </svg>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <button onClick={() => setConnectView("choose")}
+                  style={{ marginTop: "14px", height: "34px", padding: "0 14px", background: "transparent", border: "1px solid var(--bdr)", borderRadius: "7px", color: t3, fontSize: "12px", cursor: "pointer" }}>
+                  ← Back
+                </button>
+              </div>
+            )}
+
+
+            {/* Email input view */}
+            {connectView === "email" && (
+              <div>
+                <div style={{ fontSize: "11px", color: t2, marginBottom: "12px", lineHeight: 1.6 }}>
+                  Enter your email to create or access your Circle wallet. You'll set a PIN in the window that appears.
+                </div>
+                <input
+                  type="email"
+                  value={emailInput}
+                  onChange={e => setEmailInput(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && connectCircle()}
+                  placeholder="you@example.com"
+                  autoFocus
+                  style={{ width: "100%", height: "40px", background: "var(--surf2, #0e1224)", border: "1px solid var(--bdr)", borderRadius: "8px", padding: "0 12px", fontSize: "13px", fontFamily: mono, color: t1, outline: "none", marginBottom: "10px" }}
+                />
+                {emailError && <div style={{ fontSize: "11px", color: "#e03348", marginBottom: "10px" }}>{emailError}</div>}
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <button onClick={() => setConnectView("choose")}
+                    style={{ height: "38px", padding: "0 14px", background: "transparent", border: "1px solid var(--bdr)", borderRadius: "8px", color: t3, fontSize: "12px", cursor: "pointer" }}>
+                    Back
+                  </button>
+                  <button onClick={connectCircle} disabled={emailLoading}
+                    style={{ flex: 1, height: "38px", background: arc, border: "none", borderRadius: "8px", color: "#fff", fontSize: "13px", fontWeight: 600, cursor: emailLoading ? "not-allowed" : "pointer", opacity: emailLoading ? 0.6 : 1 }}>
+                    {emailLoading ? "Connecting…" : "Continue →"}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Circle loading view */}
+            {connectView === "circle" && (
+              <div style={{ textAlign: "center", padding: "8px 0 4px" }}>
+                {emailError ? (
+                  <>
+                    <div style={{ fontSize: "11px", color: "#e03348", marginBottom: "14px", lineHeight: 1.6 }}>{emailError}</div>
+                    <button onClick={() => { setConnectView("email"); setEmailError("") }}
+                      style={{ height: "36px", padding: "0 20px", background: "transparent", border: "1px solid var(--bdr)", borderRadius: "8px", color: t2, fontSize: "12px", cursor: "pointer" }}>
+                      Try again
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    {/* Spinner */}
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "18px" }}>
+                      <div style={{ width: "36px", height: "36px", borderRadius: "50%", border: "2px solid rgba(26,86,255,0.15)", borderTopColor: "#1a56ff", animation: "circleSpinAnim 0.8s linear infinite" }} />
+                    </div>
+                    <div style={{ fontSize: "14px", fontWeight: 600, color: t1, marginBottom: "6px" }}>Opening secure window</div>
+                    <div style={{ fontSize: "12px", color: t3, lineHeight: 1.6, fontFamily: mono }}>
+                      Set your PIN in the Circle window.<br />It may appear behind this tab.
+                    </div>
+                    <button onClick={cancelCircle}
+                      style={{ marginTop: "20px", height: "32px", padding: "0 18px", background: "transparent", border: "1px solid var(--bdr)", borderRadius: "7px", color: t3, fontSize: "11px", cursor: "pointer", fontFamily: mono }}>
+                      Cancel
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       <style>{`
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
         @keyframes shimmer { 0%,100%{opacity:1} 50%{opacity:.35} }
+        @keyframes circleSpinAnim { to { transform: rotate(360deg) } }
         * { box-sizing: border-box; margin: 0; padding: 0; }
         ::-webkit-scrollbar { width: 4px; }
         ::-webkit-scrollbar-track { background: transparent; }

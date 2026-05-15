@@ -1,9 +1,9 @@
-import { NextRequest, NextResponse } from "next/server"
+﻿import { NextRequest, NextResponse } from "next/server"
 import { Pool } from "pg"
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
 
-// PATCH /api/forge/tester/[wallet] — update pfp_url
+// PATCH /api/trials/tester/[wallet] — update pfp_url
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ wallet: string }> }) {
   const { wallet } = await params
   const w = wallet.toLowerCase()
