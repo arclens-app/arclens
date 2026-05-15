@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server"
+﻿import { NextRequest, NextResponse } from "next/server"
 import { Pool } from "pg"
 import { getProvider } from "@/lib/arc"
 import { rateLimit, getIp } from "@/lib/ratelimit"
@@ -92,7 +92,7 @@ function computeAutoScore(
   return Math.min(100, Math.round(score))
 }
 
-// POST /api/forge/[id]/complete — tester submits campaign completion
+// POST /api/trials/[id]/complete — tester submits campaign completion
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
 

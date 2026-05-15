@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 import { useEffect, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import ArcLayout from "@/components/ArcLayout"
@@ -144,7 +144,7 @@ export default function CampaignDetailPage() {
       checkAlreadyDone(wallet)
       // Fetch rank only if campaign has a rank requirement
       if (campaign.min_rank > 0) {
-        fetch(`/api/forge/reputation?wallet=${encodeURIComponent(wallet)}`)
+        fetch(`/api/trials/reputation?wallet=${encodeURIComponent(wallet)}`)
           .then(r => r.json())
           .then(d => {
             setTesterRank(d.reputation?.rank ?? 0)
@@ -160,7 +160,7 @@ export default function CampaignDetailPage() {
     try {
       const w    = useArcStore.getState().walletAddr
       const qs   = w ? `?wallet=${encodeURIComponent(w)}` : ""
-      const res  = await fetch(`/api/forge/${id}${qs}`)
+      const res  = await fetch(`/api/trials/${id}${qs}`)
       const data = await res.json()
       if (data.campaign) {
         setCampaign(data.campaign)
@@ -186,7 +186,7 @@ export default function CampaignDetailPage() {
     setClaiming(true)
     setClaimError("")
     try {
-      const res  = await fetch(`/api/forge/${id}/claim`, {
+      const res  = await fetch(`/api/trials/${id}/claim`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tester_wallet: wallet }),
@@ -204,7 +204,7 @@ export default function CampaignDetailPage() {
     setSubmitting(true)
     setSubmitError("")
     try {
-      const res  = await fetch(`/api/forge/${id}/complete`, {
+      const res  = await fetch(`/api/trials/${id}/complete`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -234,7 +234,7 @@ export default function CampaignDetailPage() {
     if (!wallet || !ratingVal) return
     setRatingLoading(true)
     try {
-      await fetch(`/api/forge/${id}/rate`, {
+      await fetch(`/api/trials/${id}/rate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -278,7 +278,7 @@ export default function CampaignDetailPage() {
     if (!Object.keys(changes).length) { setEditError("No changes entered"); return }
     setEditSubmitting(true)
     try {
-      const res  = await fetch(`/api/forge/${id}`, {
+      const res  = await fetch(`/api/trials/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ creator_wallet: wallet, changes }),
@@ -292,7 +292,7 @@ export default function CampaignDetailPage() {
 
   if (loading) {
     return (
-      <ArcLayout active="forge">
+      <ArcLayout active="trials">
         <div style={{ padding: "60px 28px", textAlign: "center", color: "var(--t2,#6b7da8)" }}>
           <div style={{ fontSize: 13, fontFamily: "var(--font-mono,monospace)" }}>Loading campaign...</div>
         </div>
@@ -302,10 +302,10 @@ export default function CampaignDetailPage() {
 
   if (!campaign) {
     return (
-      <ArcLayout active="forge">
+      <ArcLayout active="trials">
         <div style={{ padding: "60px 28px", textAlign: "center", color: "var(--t2,#6b7da8)" }}>
           <div style={{ fontSize: 18, marginBottom: 8 }}>Campaign not found</div>
-          <button onClick={() => router.push("/forge")} style={{ fontSize: 13, color: "#1a56ff", background: "none", border: "none", cursor: "pointer" }}>← Back to Forge</button>
+          <button onClick={() => router.push("/trials")} style={{ fontSize: 13, color: "#1a56ff", background: "none", border: "none", cursor: "pointer" }}>← Back to Trials</button>
         </div>
       </ArcLayout>
     )
@@ -323,11 +323,11 @@ export default function CampaignDetailPage() {
   const reviewComplete = requiredQs.every(q => wordCount(answers[q.id] || "") >= (q.min_words || 20))
 
   return (
-    <ArcLayout active="forge">
+    <ArcLayout active="trials">
       <div style={{ padding: "24px 16px", maxWidth: 860, margin: "0 auto" }}>
 
         {/* ── Back ── */}
-        <button onClick={() => router.push("/forge")} style={{ fontSize: 12, color: "var(--t2,#6b7da8)", background: "none", border: "none", cursor: "pointer", marginBottom: 20, padding: 0 }}>
+        <button onClick={() => router.push("/trials")} style={{ fontSize: 12, color: "var(--t2,#6b7da8)", background: "none", border: "none", cursor: "pointer", marginBottom: 20, padding: 0 }}>
           ← Arc Trials
         </button>
 
@@ -534,7 +534,7 @@ export default function CampaignDetailPage() {
                       </div>
                     )}
 
-                    <button onClick={() => router.push("/forge")}
+                    <button onClick={() => router.push("/trials")}
                       style={{ width: "100%", height: 42, background: "rgba(26,86,255,0.08)", color: "#8aaeff", border: "1px solid rgba(26,86,255,0.2)", borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: "pointer", letterSpacing: "-0.01em" }}>
                       Browse open campaigns →
                     </button>

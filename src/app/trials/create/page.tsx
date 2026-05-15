@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import ArcLayout from "@/components/ArcLayout"
@@ -335,7 +335,7 @@ export default function CreateCampaignPage() {
 
     setSubmitting(true)
     try {
-      const res = await fetch("/api/forge", {
+      const res = await fetch("/api/trials", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title: title.trim(), tagline: tagline.trim() || null, description: description.trim(), type,
@@ -355,7 +355,7 @@ export default function CreateCampaignPage() {
       const data = await res.json()
       if (!res.ok) { setError(data.error || "Failed to create campaign"); return }
       localStorage.removeItem(DRAFT_KEY)
-      router.push(`/forge/${data.slug || data.id}`)
+      router.push(`/trials/${data.slug || data.id}`)
     } finally { setSubmitting(false) }
   }
 
@@ -367,7 +367,7 @@ export default function CreateCampaignPage() {
   if (!mounted) return <div style={{ minHeight: "100vh", background: "#060812" }} />
 
   if (walletMissing) return (
-    <ArcLayout active="forge">
+    <ArcLayout active="trials">
       <div style={{ padding: "80px 28px", maxWidth: 480, margin: "0 auto", textAlign: "center" }}>
         <div style={{ width: 48, height: 48, borderRadius: 12, background: "rgba(26,86,255,0.1)", border: "1px solid rgba(26,86,255,0.2)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px", fontSize: 20, fontFamily: mono, fontWeight: 700, color: "#8aaeff" }}>⬡</div>
         <div style={{ fontSize: 20, fontWeight: 700, color: t1, marginBottom: 8, letterSpacing: "-0.03em" }}>Connect your wallet</div>
@@ -377,7 +377,7 @@ export default function CreateCampaignPage() {
         {error && <div style={{ fontSize: 12, color: "#e03348", marginBottom: 16, padding: "10px 14px", background: "rgba(224,51,72,0.08)", borderRadius: 8, border: "1px solid rgba(224,51,72,0.2)" }}>{error}</div>}
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           <button onClick={connectWallet} style={{ height: 44, background: "#1a56ff", color: "#fff", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: "pointer", letterSpacing: "-0.01em" }}>Connect Wallet</button>
-          <button onClick={() => router.push("/forge")} style={{ height: 40, background: "transparent", color: t2, border: "1px solid " + bdr, borderRadius: 10, fontSize: 13, cursor: "pointer" }}>Back to Arc Trials</button>
+          <button onClick={() => router.push("/trials")} style={{ height: 40, background: "transparent", color: t2, border: "1px solid " + bdr, borderRadius: 10, fontSize: 13, cursor: "pointer" }}>Back to Arc Trials</button>
         </div>
         <div style={{ fontSize: 11, fontFamily: mono, color: t3, marginTop: 16 }}>Works with MetaMask, Rabby, and any injected wallet</div>
       </div>
@@ -387,7 +387,7 @@ export default function CreateCampaignPage() {
   if (hasProject === null) return <div style={{ minHeight: "100vh", background: "#060812", display: "flex", alignItems: "center", justifyContent: "center" }}><div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: "var(--t3, #2e3a5c)", letterSpacing: "0.08em" }}>Checking projects...</div></div>
 
   if (hasProject === false) return (
-    <ArcLayout active="forge">
+    <ArcLayout active="trials">
       <div style={{ padding: "80px 28px", maxWidth: 480, margin: "0 auto", textAlign: "center" }}>
         <div style={{ width: 48, height: 48, borderRadius: 12, background: "rgba(26,86,255,0.1)", border: "1px solid rgba(26,86,255,0.2)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px", fontSize: 20, fontFamily: mono, fontWeight: 700, color: "#8aaeff" }}>!</div>
         <div style={{ fontSize: 20, fontWeight: 700, color: t1, marginBottom: 8, letterSpacing: "-0.03em" }}>Project Required</div>
@@ -399,18 +399,18 @@ export default function CreateCampaignPage() {
         </p>
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           <button onClick={() => router.push("/ecosystem")} style={{ height: 44, background: "#1a56ff", color: "#fff", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: "pointer", letterSpacing: "-0.01em" }}>Browse Arc Ecosystem →</button>
-          <button onClick={() => router.push("/forge")} style={{ height: 40, background: "transparent", color: t2, border: "1px solid " + bdr, borderRadius: 10, fontSize: 13, cursor: "pointer" }}>Back to Arc Trials</button>
+          <button onClick={() => router.push("/trials")} style={{ height: 40, background: "transparent", color: t2, border: "1px solid " + bdr, borderRadius: 10, fontSize: 13, cursor: "pointer" }}>Back to Arc Trials</button>
         </div>
       </div>
     </ArcLayout>
   )
 
   return (
-    <ArcLayout active="forge">
+    <ArcLayout active="trials">
       <div style={{ padding: "28px 24px 64px", maxWidth: 800, margin: "0 auto" }}>
 
         {/* Header */}
-        <button onClick={() => router.push("/forge")} style={{ fontSize: 12, color: t3, background: "none", border: "none", cursor: "pointer", padding: 0, marginBottom: 24, fontFamily: mono, display: "flex", alignItems: "center", gap: 6 }}>
+        <button onClick={() => router.push("/trials")} style={{ fontSize: 12, color: t3, background: "none", border: "none", cursor: "pointer", padding: 0, marginBottom: 24, fontFamily: mono, display: "flex", alignItems: "center", gap: 6 }}>
           ← Arc Trials
         </button>
         <div style={{ marginBottom: 36 }}>

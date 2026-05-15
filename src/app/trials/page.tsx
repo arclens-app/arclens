@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import ArcLayout from "@/components/ArcLayout"
@@ -126,7 +126,7 @@ export default function ForgePage() {
       if (filter !== "all") qs.set("type", filter)
       if (wallet) qs.set("wallet", wallet)
       qs.set("status", statusFilter)
-      const res  = await fetch(`/api/forge?${qs}`)
+      const res  = await fetch(`/api/trials?${qs}`)
       const data = await res.json()
       setCampaigns(data.campaigns || [])
       setStats(data.stats || null)
@@ -146,7 +146,7 @@ export default function ForgePage() {
   ]
 
   return (
-    <ArcLayout active="forge">
+    <ArcLayout active="trials">
       <style>{`
         @keyframes pulse {
           0%, 100% { opacity: 0.4; }
@@ -174,7 +174,7 @@ export default function ForgePage() {
           <div style={{ display: "flex", gap: 10, flexShrink: 0, alignItems: "flex-start" }}>
             {wallet ? (
               <button
-                onClick={() => router.push("/forge/create")}
+                onClick={() => router.push("/trials/create")}
                 style={{ height: 38, padding: "0 18px", background: "#1a56ff", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}
               >
                 + Create Campaign
@@ -240,7 +240,7 @@ export default function ForgePage() {
                 View Profile →
               </button>
               <button
-                onClick={() => router.push("/forge/create")}
+                onClick={() => router.push("/trials/create")}
                 style={{ height: 34, padding: "0 14px", background: "#0e1224", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8, fontSize: 12, color: "#6b7da8", cursor: "pointer" }}
               >
                 Host a Campaign →
@@ -323,7 +323,7 @@ export default function ForgePage() {
               }
             </div>
             {wallet && statusFilter === "active" && (
-              <button onClick={() => router.push("/forge/create")} style={{ height: 38, padding: "0 20px", background: "#1a56ff", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+              <button onClick={() => router.push("/trials/create")} style={{ height: 38, padding: "0 20px", background: "#1a56ff", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
                 Create Campaign
               </button>
             )}
@@ -345,7 +345,7 @@ export default function ForgePage() {
               return (
                 <div
                   key={c.id}
-                  onClick={() => router.push(`/forge/${c.slug || c.id}`)}
+                  onClick={() => router.push(`/trials/${c.slug || c.id}`)}
                   onMouseEnter={() => setHoveredCard(c.id)}
                   onMouseLeave={() => setHoveredCard(null)}
                   style={{

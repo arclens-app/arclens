@@ -14,10 +14,11 @@ export function middleware(request: NextRequest) {
     // Inline styles used throughout the UI via style={{}} props
     "style-src 'self' 'unsafe-inline'",
     "font-src 'self' data:",
-    "img-src 'self' data: blob:",
-    // Client-side direct connections — RPC called from browser to avoid Vercel invocation costs,
-    // CDN for world-atlas map data, Circle faucet for the dev/faucet page
-    "connect-src 'self' https://rpc.testnet.arc.network https://cdn.jsdelivr.net https://faucet.circle.com",
+    "img-src 'self' data: blob: https:",
+    // Client-side direct connections — RPC, CDN, Circle faucet, Circle SDK API
+    "connect-src 'self' https://rpc.testnet.arc.network https://cdn.jsdelivr.net https://faucet.circle.com https://api.circle.com https://pw-auth.circle.com",
+    // Circle UCW SDK renders its PIN/challenge UI inside an iframe served from pw-auth.circle.com
+    "frame-src 'self' https://pw-auth.circle.com",
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'",

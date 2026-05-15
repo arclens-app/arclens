@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 import { useEffect, useState } from "react"
 import { useParams, useSearchParams } from "next/navigation"
 import ArcLayout from "@/components/ArcLayout"
@@ -74,6 +74,17 @@ export default function DashboardPage() {
 
     async function tryWalletAuth() {
       await new Promise(r => setTimeout(r, 500))
+
+      // Circle UCW wallet — address already in localStorage after activation
+      const savedType = localStorage.getItem("arclens-wallet-type")
+      const savedAddr = localStorage.getItem("arclens-wallet")
+      if (savedType === "circle" && savedAddr) {
+        setConnectedWallet(savedAddr)
+        useArcStore.getState().setWallet(savedAddr)
+        await loadDashboardWithToken(null, savedAddr)
+        return true
+      }
+
       try {
         if (typeof window !== "undefined" && (window as any).ethereum) {
           const accounts = await (window as any).ethereum.request({ method: "eth_accounts" })
@@ -108,7 +119,7 @@ export default function DashboardPage() {
         setWeekViews(data.weekViews || 0)
         setHasWallet(data.hasWallet || false)
         if (wallet) {
-          fetch(`/api/forge?creator=${wallet}`)
+          fetch(`/api/trials?creator=${wallet}`)
             .then(r => r.json())
             .then(d => setForgeCampaigns(d.campaigns || []))
             .catch(() => {})
@@ -153,7 +164,7 @@ export default function DashboardPage() {
     setExpandedTesters(new Set())
     setFundMsg(null)
     try {
-      const res  = await fetch(`/api/forge/${id}`)
+      const res  = await fetch(`/api/trials/${id}`)
       const data = await res.json()
       if (data.campaign) setCampaignDetail(data)
     } finally { setCampaignDetailLoading(false) }
@@ -172,7 +183,7 @@ export default function DashboardPage() {
     setDashRatingLoading(true)
     setDashRatingMsg(null)
     try {
-      const res = await fetch(`/api/forge/${selectedCampaignId}/rate`, {
+      const res = await fetch(`/api/trials/${selectedCampaignId}/rate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tester_wallet: dashRatingWallet, rating: dashRatingVal, founder_wallet: connectedWallet, impact_credited: dashRatingImpact }),
@@ -184,7 +195,7 @@ export default function DashboardPage() {
         setDashRatingImpact(false)
         openCampaign(selectedCampaignId)
         if (connectedWallet) {
-          fetch(`/api/forge?creator=${connectedWallet}`).then(r => r.json()).then(d => setForgeCampaigns(d.campaigns || [])).catch(() => {})
+          fetch(`/api/trials?creator=${connectedWallet}`).then(r => r.json()).then(d => setForgeCampaigns(d.campaigns || [])).catch(() => {})
         }
       }
     } finally { setDashRatingLoading(false) }
@@ -210,14 +221,14 @@ export default function DashboardPage() {
         token:  "USDC",
       })
       const txHash = (result as any).txHash || (result as any).hash || ""
-      await fetch(`/api/forge/${campaign.id}`, {
+      await fetch(`/api/trials/${campaign.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ deposit_tx_hash: txHash, creator_wallet: connectedWallet }),
       })
       setFundMsg(`✓ $${totalAmount} USDC deposited — testers can claim immediately after completing`)
       if (connectedWallet) {
-        fetch(`/api/forge?creator=${connectedWallet}`).then(r => r.json()).then(d => setForgeCampaigns(d.campaigns || [])).catch(() => {})
+        fetch(`/api/trials?creator=${connectedWallet}`).then(r => r.json()).then(d => setForgeCampaigns(d.campaigns || [])).catch(() => {})
       }
       openCampaign(campaign.id)
     } catch (e: any) {
@@ -479,7 +490,7 @@ export default function DashboardPage() {
                       <div style={{ fontSize: "14px", fontWeight: 600, color: t1 }}>Arc Trials</div>
                       <div style={{ fontSize: "11px", fontFamily: mono, color: t3, marginTop: "2px" }}>Collect verified feedback from real Arc testers</div>
                     </div>
-                    <button onClick={() => window.location.href = "/forge/create"}
+                    <button onClick={() => window.location.href = "/trials/create"}
                       style={{ height: "32px", padding: "0 14px", background: "#1a56ff", color: "#fff", fontSize: "11px", fontFamily: mono, border: "none", borderRadius: "6px", cursor: "pointer" }}>
                       + New Campaign
                     </button>
@@ -490,7 +501,7 @@ export default function DashboardPage() {
                       <div style={{ fontSize: "28px", marginBottom: "12px" }}>✦</div>
                       <div style={{ fontSize: "13px", fontWeight: 600, color: t1, marginBottom: "6px" }}>No campaigns yet</div>
                       <div style={{ fontSize: "11px", fontFamily: mono, color: t3, marginBottom: "20px", lineHeight: 1.6 }}>Create a campaign to get structured, scored feedback from the Arc community</div>
-                      <button onClick={() => window.location.href = "/forge/create"}
+                      <button onClick={() => window.location.href = "/trials/create"}
                         style={{ height: "36px", padding: "0 20px", background: "#1a56ff", color: "#fff", fontSize: "12px", fontFamily: mono, border: "none", borderRadius: "7px", cursor: "pointer" }}>
                         Create your first campaign
                       </button>

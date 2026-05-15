@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react"
 import ArcLayout from "@/components/ArcLayout"
 import { useArcStore } from "@/store/arc"
+import { circleSendTransaction } from "@/lib/circleSign"
 
 interface Approval {
   id: string
@@ -155,32 +156,42 @@ export default function ApprovalsPage() {
   }
 
   async function revoke(approval: Approval) {
-    if (!(window as any).ethereum) { alert("MetaMask not detected."); return }
     setApprovals(prev => prev.map(a => a.id === approval.id ? { ...a, status: "revoking" } : a))
+    const walletType  = localStorage.getItem("arclens-wallet-type")
+    const circleEmail = localStorage.getItem("arclens-circle-email")
+
     try {
-      const accounts = await (window as any).ethereum.request({ method: "eth_requestAccounts" })
-      const txHash   = await (window as any).ethereum.request({
-        method: "eth_sendTransaction",
-        params: [{
-          from: accounts[0],
-          to:   approval.tokenAddress,
-          data: encodeApproveZero(approval.spender),
-        }],
-      })
+      let txHash: string
+
+      if (walletType === "circle" && circleEmail) {
+        // Circle UCW path — contract execution challenge, PIN required
+        txHash = await circleSendTransaction(
+          circleEmail,
+          approval.tokenAddress,
+          "approve(address,uint256)",
+          [approval.spender, "0"],
+        )
+      } else {
+        // Browser wallet path
+        if (!(window as any).ethereum) { alert("No wallet detected."); setApprovals(prev => prev.map(a => a.id === approval.id ? { ...a, status: "active" } : a)); return }
+        const accounts = await (window as any).ethereum.request({ method: "eth_requestAccounts" })
+        txHash = await (window as any).ethereum.request({
+          method: "eth_sendTransaction",
+          params: [{ from: accounts[0], to: approval.tokenAddress, data: encodeApproveZero(approval.spender) }],
+        })
+      }
+
       for (let i = 0; i < 15; i++) {
         await new Promise(r => setTimeout(r, 1000))
         const receipt = await rpcCall("eth_getTransactionReceipt", [txHash])
-        if (receipt?.status === "0x1") {
-          setApprovals(prev => prev.map(a => a.id === approval.id ? { ...a, status: "revoked" } : a))
-          return
-        }
+        if (receipt?.status === "0x1") { setApprovals(prev => prev.map(a => a.id === approval.id ? { ...a, status: "revoked" } : a)); return }
         if (receipt?.status === "0x0") break
       }
       setApprovals(prev => prev.map(a => a.id === approval.id ? { ...a, status: "failed" } : a))
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
       setApprovals(prev => prev.map(a =>
-        a.id === approval.id ? { ...a, status: msg.includes("rejected") ? "active" : "failed" } : a
+        a.id === approval.id ? { ...a, status: msg.includes("rejected") || msg.includes("cancelled") ? "active" : "failed" } : a
       ))
     }
   }

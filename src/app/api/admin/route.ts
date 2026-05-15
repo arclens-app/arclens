@@ -59,9 +59,9 @@ async function sendCampaignEmail(campaignId: number, status: "approved" | "rejec
     if (!row?.email) return  // no email on file — silently skip
     if (await isUnsubscribed(row.email)) return
 
-    const campaignUrl   = `${BASE_URL}/forge/${row.campaign_slug || campaignId}`
+    const campaignUrl   = `${BASE_URL}/trials/${row.campaign_slug || campaignId}`
     const dashboardUrl  = `${BASE_URL}/dashboard/${row.project_slug || row.project_name?.toLowerCase().replace(/\s+/g, "-") || ""}`
-    const forgeUrl      = `${BASE_URL}/forge`
+    const forgeUrl      = `${BASE_URL}/trials`
     const base = `font-family:Arial,sans-serif;max-width:560px;margin:0 auto;padding:40px 24px;background:#060c20;color:#e8ecff;`
     const label = `font-size:11px;font-family:monospace;text-transform:uppercase;letter-spacing:0.1em;`
 
@@ -208,7 +208,7 @@ async function sendCampaignUpdateEmail(campaignId: number, campaignTitle: string
     if (!row?.email) return
     if (await isUnsubscribed(row.email)) return
 
-    const campaignUrl = `${BASE_URL}/forge/${row.campaign_slug || campaignId}`
+    const campaignUrl = `${BASE_URL}/trials/${row.campaign_slug || campaignId}`
     const base  = `font-family:Arial,sans-serif;max-width:560px;margin:0 auto;padding:40px 24px;background:#060c20;color:#e8ecff;`
     const label = `font-size:11px;font-family:monospace;text-transform:uppercase;letter-spacing:0.1em;`
 

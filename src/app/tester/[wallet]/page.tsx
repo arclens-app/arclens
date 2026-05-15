@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 import { useEffect, useRef, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import ArcLayout from "@/components/ArcLayout"
@@ -128,7 +128,7 @@ export default function TesterProfilePage() {
     async function load() {
       setLoading(true)
       try {
-        const res  = await fetch(`/api/forge/tester/${walletParam}`)
+        const res  = await fetch(`/api/trials/tester/${walletParam}`)
         const data = await res.json()
         setReputation(data.reputation || null)
         setHistory(data.history || [])
@@ -155,7 +155,7 @@ export default function TesterProfilePage() {
       const { url } = await up.json()
       if (!url) return
       // Save to DB
-      await fetch(`/api/forge/tester/${walletParam}`, {
+      await fetch(`/api/trials/tester/${walletParam}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ pfp_url: url }),
@@ -175,12 +175,12 @@ export default function TesterProfilePage() {
   const verifyRate    = history.length > 0 ? Math.round((verifiedCount / history.length) * 100) : 0
 
   return (
-    <ArcLayout active="forge">
+    <ArcLayout active="trials">
       <div style={{ padding: "32px 24px", maxWidth: 720, margin: "0 auto" }}>
 
         {/* Back button */}
         <button
-          onClick={() => router.push("/forge")}
+          onClick={() => router.push("/trials")}
           style={{ background: "none", border: "none", color: "#6b7da8", fontSize: 13, cursor: "pointer", padding: 0, marginBottom: 24, display: "flex", alignItems: "center", gap: 6 }}
         >
           ← Arc Trials
