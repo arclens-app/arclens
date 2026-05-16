@@ -2,6 +2,8 @@ export const runtime = "nodejs"
 import { NextRequest, NextResponse } from "next/server"
 import { Pool } from "pg"
 import { verifyMessage } from "viem"
+import { enforce } from "@/lib/ratelimit"
+import { getSession } from "@/lib/session"
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
 
@@ -186,6 +188,9 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const blocked = await enforce(req, "builder-save", { limit: 20, windowMs: 60_000 })
+    if (blocked) return blocked
+
     await ensureTable()
     const body = await req.json()
     const { address, display_name, bio, avatar_url, twitter, github, website, telegram, email, auth } = body
@@ -196,10 +201,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid wallet address" }, { status: 400 })
     }
 
-    // Tamper-proof: every save (claim or edit) must prove ownership of the wallet
-    const authResult = await verifyClaimAuth(addr, auth)
-    if (!authResult.ok) {
-      return NextResponse.json({ error: authResult.error || "Wallet verification failed" }, { status: 401 })
+    // Tamper-proof: must prove ownership of the wallet — session cookie OR per-request auth proof
+    const sess = getSession(req)
+    if (!sess || sess.addr !== addr) {
+      const authResult = await verifyClaimAuth(addr, auth)
+      if (!authResult.ok) {
+        return NextResponse.json({ error: authResult.error || "Wallet verification failed" }, { status: 401 })
+      }
     }
 
     // Hard validation: server-side, can't be bypassed by hitting the API directly

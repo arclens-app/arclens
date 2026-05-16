@@ -1,61 +1,107 @@
 /**
- * Simple sliding-window rate limiter.
- * Works per-instance (fine for Vercel at this scale).
- * Each key tracks a list of request timestamps within the window.
+ * Postgres-backed fixed-window rate limiter.
+ *
+ * One small table tracks per-key counters bucketed by epoch-second / windowSec.
+ * Survives across Vercel function instances (in-memory wouldn't — each cold
+ * function gets a fresh Map). Each call is one UPSERT round-trip.
+ *
+ * Fails open: if the limiter table is unreachable, requests are allowed
+ * through. Better to let traffic flow than to take real users offline because
+ * of a limiter outage.
  */
+import { Pool } from "pg"
+import { NextResponse } from "next/server"
 
-interface Window {
-  timestamps: number[]
+const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
+
+const tableReady = pool.query(`
+  CREATE TABLE IF NOT EXISTS rate_limits (
+    key          TEXT PRIMARY KEY,
+    count        INTEGER     NOT NULL DEFAULT 0,
+    window_start TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )
+`).catch(e => console.error("[ratelimit] init:", e))
+
+export interface RateLimitResult {
+  allowed:   boolean
+  remaining: number
+  resetIn:   number   // ms until the current window rolls over
 }
-
-const store = new Map<string, Window>()
-
-// Clean up old entries every 10 minutes to prevent unbounded memory growth
-setInterval(() => {
-  const now = Date.now()
-  for (const [key, win] of store.entries()) {
-    if (win.timestamps.length === 0 || now - win.timestamps[win.timestamps.length - 1] > 3_600_000) {
-      store.delete(key)
-    }
-  }
-}, 600_000)
 
 /**
- * Check and record a request.
- * @param key      — unique identifier, e.g. `"complete:1.2.3.4"` or `"complete:0xabc"`
- * @param limit    — max requests allowed in the window
- * @param windowMs — window size in milliseconds
- * @returns { allowed: boolean, remaining: number, resetIn: number (ms) }
+ * Check + record a single request against `key`.
+ *
+ * @param key      unique caller identifier, e.g. `"otp-send:1.2.3.4"`
+ * @param limit    max requests allowed per window
+ * @param windowMs window length in ms
  */
-export function rateLimit(
-  key: string,
-  limit: number,
+export async function rateLimit(
+  key:      string,
+  limit:    number,
   windowMs: number
-): { allowed: boolean; remaining: number; resetIn: number } {
-  const now = Date.now()
-  const win = store.get(key) ?? { timestamps: [] }
+): Promise<RateLimitResult> {
+  try {
+    await tableReady
+    const windowSec = Math.max(1, Math.floor(windowMs / 1000))
+    const bucket    = Math.floor(Date.now() / 1000 / windowSec)
+    const bucketKey = `${key}:${bucket}`
 
-  // Drop timestamps outside the window
-  win.timestamps = win.timestamps.filter(t => now - t < windowMs)
+    const res = await pool.query(
+      `INSERT INTO rate_limits (key, count, window_start)
+       VALUES ($1, 1, NOW())
+       ON CONFLICT (key) DO UPDATE SET count = rate_limits.count + 1
+       RETURNING count`,
+      [bucketKey]
+    )
+    const count = res.rows[0].count as number
 
-  if (win.timestamps.length >= limit) {
-    const oldest  = win.timestamps[0]
-    const resetIn = windowMs - (now - oldest)
-    store.set(key, win)
-    return { allowed: false, remaining: 0, resetIn }
+    const elapsedInWindowMs = (Math.floor(Date.now() / 1000) % windowSec) * 1000
+    const resetIn = windowMs - elapsedInWindowMs
+
+    if (count > limit) return { allowed: false, remaining: 0, resetIn }
+    return { allowed: true, remaining: Math.max(0, limit - count), resetIn }
+  } catch (e) {
+    console.error("[ratelimit] enforce:", e)
+    return { allowed: true, remaining: limit, resetIn: windowMs }
   }
-
-  win.timestamps.push(now)
-  store.set(key, win)
-  return { allowed: true, remaining: limit - win.timestamps.length, resetIn: windowMs }
 }
 
-/** Extract the real IP from a Next.js request */
+/** Extract the caller's IP from a Next.js Request. */
 export function getIp(req: Request): string {
   const h = (req as any).headers
-  return (
-    (typeof h.get === "function"
-      ? h.get("x-forwarded-for") ?? h.get("x-real-ip")
-      : h["x-forwarded-for"] ?? h["x-real-ip"]) || "unknown"
-  ).split(",")[0].trim()
+  const get = (k: string) =>
+    typeof h.get === "function" ? h.get(k) : (h[k] ?? null)
+  const raw =
+    get("x-forwarded-for") ??
+    get("x-real-ip") ??
+    "unknown"
+  return String(raw).split(",")[0].trim() || "unknown"
+}
+
+/**
+ * Convenience wrapper: returns null on pass or a 429 response on block.
+ * Adds standard RateLimit headers for client visibility.
+ */
+export async function enforce(
+  req: Request,
+  name: string,
+  opts: { limit: number; windowMs: number; extra?: string }
+): Promise<NextResponse | null> {
+  const ip   = getIp(req)
+  const key  = `${name}:${ip}${opts.extra ? `:${opts.extra}` : ""}`
+  const res  = await rateLimit(key, opts.limit, opts.windowMs)
+  if (res.allowed) return null
+  const retryAfter = Math.ceil(res.resetIn / 1000)
+  return NextResponse.json(
+    { error: `Too many requests. Try again in ${retryAfter}s.` },
+    {
+      status: 429,
+      headers: {
+        "Retry-After":          String(retryAfter),
+        "X-RateLimit-Limit":    String(opts.limit),
+        "X-RateLimit-Remaining": "0",
+        "X-RateLimit-Reset":    String(Math.floor(Date.now() / 1000) + retryAfter),
+      },
+    }
+  )
 }

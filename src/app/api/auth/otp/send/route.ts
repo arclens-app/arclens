@@ -2,6 +2,7 @@ export const runtime = "nodejs"
 import { NextRequest, NextResponse } from "next/server"
 import { Pool } from "pg"
 import crypto from "crypto"
+import { enforce } from "@/lib/ratelimit"
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
 
@@ -39,6 +40,10 @@ function brandedHTML(code: string): string {
 
 export async function POST(req: NextRequest) {
   try {
+    // Global IP rate limit — defends against Resend bill spikes from spam
+    const blocked = await enforce(req, "otp-send", { limit: 10, windowMs: 60_000 })
+    if (blocked) return blocked
+
     const { email } = await req.json()
     if (!email || typeof email !== "string" || !email.includes("@")) {
       return NextResponse.json({ error: "Invalid email" }, { status: 400 })

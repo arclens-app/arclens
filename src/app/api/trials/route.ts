@@ -82,7 +82,7 @@ export async function GET(req: NextRequest) {
 // POST /api/trials — create campaign
 export async function POST(req: NextRequest) {
   // Rate limit: 5 campaigns per hour per IP
-  const rl = rateLimit(`forge-create:${getIp(req)}`, 5, 3_600_000)
+  const rl = await rateLimit(`forge-create:${getIp(req)}`, 5, 3_600_000)
   if (!rl.allowed) {
     return NextResponse.json(
       { error: "Too many campaigns created. Try again later." },

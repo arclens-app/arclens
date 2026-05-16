@@ -111,6 +111,11 @@ export default function ArcLayout({ children, active }: { children: React.ReactN
     if (saved) {
       setWallet(saved)
       fetchWalletBal(saved)
+      // Circle users have no popup, so silently keep the session warm.
+      // Browser wallets defer to next protected action so we never surprise
+      // the user with a "sign this" popup just from refreshing the page.
+      const savedType = localStorage.getItem("arclens-wallet-type") as "metamask" | "circle" | null
+      if (savedType === "circle") establishSession(saved.toLowerCase(), savedType).catch(() => {})
       fetch("/api/claim", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -153,6 +158,11 @@ export default function ArcLayout({ children, active }: { children: React.ReactN
     setWallet(addr)
     setWalletType(type)
     fetchWalletBal(addr)
+
+    // Establish a signed session cookie so subsequent protected edits
+    // (builder profile, founder claim) don't need another wallet popup.
+    establishSession(addr.toLowerCase(), type).catch(() => {})
+
     try {
       const r = await fetch("/api/claim", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ wallet: addr }) })
       const d = await r.json()
@@ -162,6 +172,54 @@ export default function ArcLayout({ children, active }: { children: React.ReactN
       }
     } catch {}
     fetchBuilderProfile(addr)
+  }
+
+  // Establish session cookie so the user signs in once per week instead of
+  // per edit. Browser wallets do one personal_sign; Circle is friction-free
+  // because the backend can verify the email/wallet mapping in the DB.
+  async function establishSession(addr: string, type: "metamask" | "circle") {
+    try {
+      const existing = await fetch("/api/auth/session", { credentials: "include" }).then(r => r.json()).catch(() => null)
+      if (existing?.signedIn && existing.address?.toLowerCase() === addr) return
+
+      if (type === "circle") {
+        const email = localStorage.getItem("arclens-circle-email")
+        if (!email) return
+        await fetch("/api/auth/session", {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ type: "circle", address: addr, email }),
+        })
+        return
+      }
+
+      // Browser wallet — one personal_sign establishes the session
+      const wallets = await detectWallets()
+      let provider: any = null
+      for (const w of wallets) {
+        try {
+          const accs: string[] = await w.provider.request({ method: "eth_accounts" })
+          if (accs?.some(a => a.toLowerCase() === addr)) { provider = w.provider; break }
+        } catch {}
+      }
+      if (!provider) provider = (window as any).ethereum
+      if (!provider) return
+
+      const timestamp = Date.now()
+      const nonce     = crypto.randomUUID()
+      const message   = `Sign in to ArcLens\nWallet: ${addr}\nTimestamp: ${timestamp}\nNonce: ${nonce}`
+      const signature: string = await provider.request({ method: "personal_sign", params: [message, addr] })
+      if (!signature) return
+      await fetch("/api/auth/session", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ type: "wallet", address: addr, signature, timestamp, nonce }),
+      })
+    } catch {
+      // Session is opt-in — silent failure means user just signs per request, no UX break
+    }
   }
 
   async function fetchBuilderProfile(addr: string) {
@@ -455,6 +513,8 @@ export default function ArcLayout({ children, active }: { children: React.ReactN
     localStorage.removeItem("arclens-wallet")
     localStorage.removeItem("arclens-wallet-type")
     localStorage.removeItem("arclens-circle-email")
+    // Best-effort: clear the server-side session cookie
+    fetch("/api/auth/session", { method: "DELETE", credentials: "include" }).catch(() => {})
   }
 
   function copyAddress() {

@@ -133,6 +133,10 @@ async function verifyFounderAuth(
 
 export async function PUT(req: NextRequest) {
   try {
+    const { enforce } = await import("@/lib/ratelimit")
+    const blocked = await enforce(req, "claim-activate", { limit: 10, windowMs: 60_000 })
+    if (blocked) return blocked
+
     const { token, slug, wallet, auth } = await req.json()
     if (!token || !slug || !wallet) return NextResponse.json({ error: "Missing fields" }, { status: 400 })
 
@@ -150,11 +154,15 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ error: "Token expired" }, { status: 403 })
     }
 
-    // Tamper-proof: the activation token alone is no longer enough — the requester
-    // must prove they actually hold the wallet they're trying to assign.
-    const authResult = await verifyFounderAuth(result.rows[0].name, addr, auth)
-    if (!authResult.ok) {
-      return NextResponse.json({ error: authResult.error || "Wallet verification failed" }, { status: 401 })
+    // Tamper-proof: token alone is no longer enough — must prove wallet ownership.
+    // Accept either a valid session cookie for this address or a fresh signature.
+    const { getSession } = await import("@/lib/session")
+    const sess = getSession(req)
+    if (!sess || sess.addr !== addr) {
+      const authResult = await verifyFounderAuth(result.rows[0].name, addr, auth)
+      if (!authResult.ok) {
+        return NextResponse.json({ error: authResult.error || "Wallet verification failed" }, { status: 401 })
+      }
     }
 
     await pool.query(`UPDATE projects SET owner_wallet = $1 WHERE id = $2`, [addr, result.rows[0].id])

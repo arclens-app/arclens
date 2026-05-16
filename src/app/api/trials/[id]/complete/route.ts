@@ -97,7 +97,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const { id } = await params
 
   // Rate limit: 10 submissions per hour per IP
-  const rl = rateLimit(`complete:${getIp(req)}`, 10, 3_600_000)
+  const rl = await rateLimit(`complete:${getIp(req)}`, 10, 3_600_000)
   if (!rl.allowed) {
     return NextResponse.json(
       { error: "Too many submissions. Try again later." },
