@@ -81,14 +81,83 @@ export async function GET(req: NextRequest) {
   } catch (err) { console.error("[Claim GET]", err); return NextResponse.json({ error: "Server error" }, { status: 500 }) }
 }
 
+const SIG_MAX_AGE_MS = 5 * 60 * 1000
+
+function buildActivationMessage(projectName: string, wallet: string, timestamp: number): string {
+  return `ArcLens Founder Dashboard Activation\nProject: ${projectName}\nWallet: ${wallet}\nTimestamp: ${timestamp}`
+}
+
+async function verifyFounderAuth(
+  projectName: string,
+  wallet: string,
+  auth: any
+): Promise<{ ok: boolean; error?: string }> {
+  if (!auth || typeof auth !== "object") return { ok: false, error: "Missing wallet proof" }
+  const addr = wallet.toLowerCase()
+
+  if (auth.type === "wallet") {
+    const { signature, timestamp } = auth
+    if (!signature || !timestamp) return { ok: false, error: "Missing signature" }
+    const ts = Number(timestamp)
+    if (!Number.isFinite(ts) || Math.abs(Date.now() - ts) > SIG_MAX_AGE_MS) {
+      return { ok: false, error: "Signature expired — please try again" }
+    }
+    const message = buildActivationMessage(projectName, addr, ts)
+    try {
+      const { verifyMessage } = await import("viem")
+      const valid = await verifyMessage({
+        address:   addr as `0x${string}`,
+        message,
+        signature: signature as `0x${string}`,
+      })
+      if (!valid) return { ok: false, error: "Signature does not match wallet" }
+      return { ok: true }
+    } catch {
+      return { ok: false, error: "Invalid signature" }
+    }
+  }
+
+  if (auth.type === "circle") {
+    const email = String(auth.email || "").toLowerCase().trim()
+    if (!email) return { ok: false, error: "Circle session missing email" }
+    const row = await pool.query(
+      "SELECT 1 FROM circle_wallet_users WHERE email = $1 AND LOWER(wallet_address) = $2",
+      [email, addr]
+    )
+    if (!row.rows.length) return { ok: false, error: "This Circle account doesn't own that wallet" }
+    return { ok: true }
+  }
+
+  return { ok: false, error: "Unknown auth type" }
+}
+
 export async function PUT(req: NextRequest) {
   try {
-    const { token, slug, wallet } = await req.json()
+    const { token, slug, wallet, auth } = await req.json()
     if (!token || !slug || !wallet) return NextResponse.json({ error: "Missing fields" }, { status: 400 })
-    const result = await pool.query(`SELECT id, claim_token_expires FROM projects WHERE (slug = $1 OR id::text = $1) AND claim_token = $2`, [slug, token])
+
+    const addr = String(wallet).toLowerCase().trim()
+    if (!/^0x[a-f0-9]{40}$/.test(addr)) {
+      return NextResponse.json({ error: "Invalid wallet address" }, { status: 400 })
+    }
+
+    const result = await pool.query(
+      `SELECT id, name, claim_token_expires FROM projects WHERE (slug = $1 OR id::text = $1) AND claim_token = $2`,
+      [slug, token]
+    )
     if (result.rows.length === 0) return NextResponse.json({ error: "Invalid token" }, { status: 403 })
-    if (new Date(result.rows[0].claim_token_expires) < new Date()) return NextResponse.json({ error: "Token expired" }, { status: 403 })
-    await pool.query(`UPDATE projects SET owner_wallet = $1 WHERE id = $2`, [wallet.toLowerCase(), result.rows[0].id])
+    if (new Date(result.rows[0].claim_token_expires) < new Date()) {
+      return NextResponse.json({ error: "Token expired" }, { status: 403 })
+    }
+
+    // Tamper-proof: the activation token alone is no longer enough — the requester
+    // must prove they actually hold the wallet they're trying to assign.
+    const authResult = await verifyFounderAuth(result.rows[0].name, addr, auth)
+    if (!authResult.ok) {
+      return NextResponse.json({ error: authResult.error || "Wallet verification failed" }, { status: 401 })
+    }
+
+    await pool.query(`UPDATE projects SET owner_wallet = $1 WHERE id = $2`, [addr, result.rows[0].id])
     return NextResponse.json({ success: true })
   } catch (err) { console.error("[Claim PUT]", err); return NextResponse.json({ error: "Server error" }, { status: 500 }) }
 }

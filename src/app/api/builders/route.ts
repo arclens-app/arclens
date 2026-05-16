@@ -24,6 +24,8 @@ export async function GET() {
     `)
     await pool.query(`ALTER TABLE builder_profiles ADD COLUMN IF NOT EXISTS email TEXT`)
 
+    // Public directory excludes incomplete profiles so spam/empty claims don't pollute the list.
+    // Requirements: display_name + bio (≥30 chars) + avatar + at least one social link.
     const res = await pool.query(`
       SELECT
         b.address,
@@ -46,7 +48,16 @@ export async function GET() {
         ON p.owner_wallet = b.address
        AND p.approved = true
        AND p.live = true
-      WHERE b.claimed_at IS NOT NULL
+      WHERE b.claimed_at  IS NOT NULL
+        AND b.display_name IS NOT NULL AND LENGTH(TRIM(b.display_name)) >= 2
+        AND b.bio          IS NOT NULL AND LENGTH(TRIM(b.bio))          >= 30
+        AND b.avatar_url   IS NOT NULL AND LENGTH(TRIM(b.avatar_url))   > 0
+        AND (
+              (b.twitter  IS NOT NULL AND LENGTH(TRIM(b.twitter))  > 0)
+           OR (b.github   IS NOT NULL AND LENGTH(TRIM(b.github))   > 0)
+           OR (b.website  IS NOT NULL AND LENGTH(TRIM(b.website))  > 0)
+           OR (b.telegram IS NOT NULL AND LENGTH(TRIM(b.telegram)) > 0)
+        )
       GROUP BY
         b.address, b.display_name, b.bio, b.avatar_url,
         b.twitter, b.github, b.website, b.verified, b.claimed_at

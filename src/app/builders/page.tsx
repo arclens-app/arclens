@@ -109,15 +109,15 @@ export default function BuildersPage() {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "12px" }}>
             {filtered.map(b => (
               <a key={b.address} href={`/builder/${b.address}`}
-                style={{ display: "flex", flexDirection: "column", gap: "12px", padding: "18px", background: surf, border: "1px solid " + bdr, borderRadius: "14px", textDecoration: "none", transition: "border-color .12s, transform .1s" }}
+                style={{ display: "flex", flexDirection: "column", padding: "18px", background: surf, border: "1px solid " + bdr, borderRadius: "14px", textDecoration: "none", transition: "border-color .12s, transform .1s", minHeight: "180px" }}
                 onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(26,86,255,0.3)"; e.currentTarget.style.transform = "translateY(-1px)" }}
                 onMouseLeave={e => { e.currentTarget.style.borderColor = bdr; e.currentTarget.style.transform = "translateY(0)" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "12px" }}>
                   <img
                     src={b.avatar_url || dicebear(b.address)}
                     alt={b.display_name || b.address}
                     onError={e => { (e.target as HTMLImageElement).src = dicebear(b.address) }}
-                    style={{ width: "44px", height: "44px", borderRadius: "50%", border: "1px solid " + bdr, background: surf2, flexShrink: 0 }}
+                    style={{ width: "44px", height: "44px", borderRadius: "50%", border: "1px solid " + bdr, background: surf2, flexShrink: 0, objectFit: "cover" }}
                   />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
@@ -131,13 +131,12 @@ export default function BuildersPage() {
                   </div>
                 </div>
 
-                {b.bio && (
-                  <p style={{ margin: 0, fontSize: "12px", color: t2, lineHeight: 1.6, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
-                    {b.bio}
-                  </p>
-                )}
+                {/* Bio area always reserves space — keeps every card the same height regardless of content */}
+                <p style={{ margin: "0 0 12px", fontSize: "12px", color: b.bio ? t2 : "transparent", lineHeight: 1.6, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", flex: 1, minHeight: "38px" }}>
+                  {b.bio || "—"}
+                </p>
 
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "auto" }}>
                   <div style={{ display: "flex", gap: "6px" }}>
                     {b.twitter && (
                       <span style={{ fontSize: "9px", fontFamily: mono, color: t3, padding: "2px 6px", background: surf2, border: "1px solid " + bdr, borderRadius: "4px" }}>

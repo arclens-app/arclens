@@ -185,7 +185,8 @@ export default function ActivatePage() {
 
       setWallet(addr)
       setStep("linking")
-      await linkWallet(addr)
+      // Circle path: backend verifies emailInput owns this wallet via circle_wallet_users
+      await linkWallet(addr.toLowerCase(), { type: "circle", email: emailInput })
     } catch {
       setActionError("Something went wrong. Try again.")
       setStep("connect")
@@ -193,11 +194,17 @@ export default function ActivatePage() {
     }
   }
 
-  async function linkWallet(addr: string) {
+  // Must mirror the format in /api/claim PUT — both sides build the SAME string,
+  // backend recovers the signer and confirms it matches the claimed wallet.
+  function buildActivationMessage(projectName: string, addr: string, ts: number): string {
+    return `ArcLens Founder Dashboard Activation\nProject: ${projectName}\nWallet: ${addr}\nTimestamp: ${ts}`
+  }
+
+  async function linkWallet(addr: string, auth: any) {
     const res  = await fetch("/api/claim", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token, slug, wallet: addr }),
+      body: JSON.stringify({ token, slug, wallet: addr, auth }),
     })
     const data = await res.json()
     if (!res.ok) {
@@ -211,37 +218,41 @@ export default function ActivatePage() {
   }
 
   async function signAndActivate() {
-    if (!wallet) return
+    if (!wallet || !project?.name) return
     setActionError("")
     setStep("linking")
     try {
-      const message = [
-        "ArcLens — Founder Dashboard Activation",
-        "",
-        `Project: ${project?.name}`,
-        `Wallet:  ${wallet}`,
-        "",
-        "This signature verifies you own this wallet.",
-        "No transaction will be submitted and no funds will move.",
-      ].join("\n")
-
       const walletType  = localStorage.getItem("arclens-wallet-type")
       const circleEmail = localStorage.getItem("arclens-circle-email")
-      let signature: string
+      const timestamp   = Date.now()
+      const addr        = wallet.toLowerCase()
+      const message     = buildActivationMessage(project.name, addr, timestamp)
 
+      // Circle UCW: PIN entry in iframe proves wallet ownership client-side;
+      // backend trust comes from email→wallet mapping in circle_wallet_users.
       if (walletType === "circle" && circleEmail) {
-        signature = await circleSignMessage(circleEmail, message)
-      } else {
-        if (!(window as any).ethereum) { setActionError("No wallet detected."); setStep("sign"); return }
-        signature = await (window as any).ethereum.request({ method: "personal_sign", params: [message, wallet] })
+        const sig = await circleSignMessage(circleEmail, message)
+        if (!sig) { setActionError("Signature cancelled. Try again."); setStep("sign"); return }
+        await linkWallet(addr, { type: "circle", email: circleEmail })
+        return
       }
 
+      // Browser wallet: personal_sign returns a real ECDSA signature
+      if (!(window as any).ethereum) {
+        setActionError("No wallet detected.")
+        setStep("sign")
+        return
+      }
+      const signature: string = await (window as any).ethereum.request({
+        method: "personal_sign",
+        params: [message, addr],
+      })
       if (!signature) { setActionError("Signature cancelled. Try again."); setStep("sign"); return }
 
-      await linkWallet(wallet)
+      await linkWallet(addr, { type: "wallet", signature, timestamp })
     } catch (e: any) {
       if (e?.code === 4001) setActionError("Signature rejected. Try again.")
-      else setActionError("Something went wrong. Try again.")
+      else setActionError(e?.message || "Something went wrong. Try again.")
       setStep("sign")
     }
   }
