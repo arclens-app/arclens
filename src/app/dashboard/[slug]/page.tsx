@@ -75,16 +75,21 @@ export default function DashboardPage() {
     async function tryWalletAuth() {
       await new Promise(r => setTimeout(r, 500))
 
-      // Circle UCW wallet — address already in localStorage after activation
-      const savedType = localStorage.getItem("arclens-wallet-type")
+      // Source of truth is localStorage — ArcLayout sets it on connect for
+      // both Circle and browser wallets. If a wallet is saved, the backend
+      // will accept/reject it; we don't need MetaMask to be unlocked to
+      // authenticate (that was the old bug — locked extension → claim form).
       const savedAddr = localStorage.getItem("arclens-wallet")
-      if (savedType === "circle" && savedAddr) {
+      if (savedAddr) {
         setConnectedWallet(savedAddr)
         useArcStore.getState().setWallet(savedAddr)
         await loadDashboardWithToken(null, savedAddr)
         return true
       }
 
+      // No saved wallet — last-ditch attempt via window.ethereum (covers
+      // first-time visitors who connected MetaMask elsewhere and arrived
+      // here cold). PATCH first to confirm ownership before showing data.
       try {
         if (typeof window !== "undefined" && (window as any).ethereum) {
           const accounts = await (window as any).ethereum.request({ method: "eth_accounts" })
