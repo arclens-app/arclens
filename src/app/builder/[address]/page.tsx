@@ -3,6 +3,14 @@ import { useEffect, useState, useRef } from "react"
 import { useParams } from "next/navigation"
 import ArcLayout from "@/components/ArcLayout"
 import { useArcStore } from "@/store/arc"
+import { detectWallets } from "@/context/web3modal"
+
+// Must mirror the format on the server in src/app/api/builder/route.ts
+function buildClaimMessage(address: string, timestamp: number): string {
+  return `ArcLens Builder Profile Claim\nWallet: ${address}\nTimestamp: ${timestamp}`
+}
+
+const MIN_BIO_LEN = 30
 
 interface BuilderProfile {
   address: string
@@ -141,9 +149,76 @@ export default function BuilderPage() {
     }
   }
 
+  // Local validation mirrors the server — keeps the Save button disabled
+  // and shows inline guidance before the user even submits.
+  function getValidationError(): string | null {
+    const name = (form.display_name || "").trim()
+    const bio  = (form.bio          || "").trim()
+    const socials = [form.twitter, form.github, form.website, form.telegram]
+      .map(s => (s || "").trim()).filter(Boolean)
+    if (name.length < 2)             return "Display name is required"
+    if (bio.length  < MIN_BIO_LEN)   return `Bio must be at least ${MIN_BIO_LEN} characters (${bio.length}/${MIN_BIO_LEN})`
+    if (!avatarUrl)                  return "Upload a profile photo to continue"
+    if (socials.length === 0)        return "Add at least one social link (X, GitHub, website, or Telegram)"
+    return null
+  }
+
+  const [saveError, setSaveError] = useState("")
+
+  // Build the auth proof — either a wallet signature or a Circle session match
+  async function buildAuthProof(): Promise<{ ok: boolean; auth?: any; error?: string }> {
+    const walletType = typeof window !== "undefined" ? localStorage.getItem("arclens-wallet-type") : null
+
+    if (walletType === "circle") {
+      const email = localStorage.getItem("arclens-circle-email")
+      if (!email) return { ok: false, error: "Sign in with Circle again to verify your wallet" }
+      return { ok: true, auth: { type: "circle", email } }
+    }
+
+    // Browser wallet path: request a personal_sign from whichever EIP-6963 provider holds this address
+    try {
+      const wallets = await detectWallets()
+      let provider: any = null
+      for (const w of wallets) {
+        try {
+          const accs: string[] = await w.provider.request({ method: "eth_accounts" })
+          if (accs?.some(a => a.toLowerCase() === address.toLowerCase())) { provider = w.provider; break }
+        } catch {}
+      }
+      if (!provider) {
+        try {
+          const accs: string[] = await (window as any).ethereum?.request({ method: "eth_accounts" })
+          if (accs?.some((a: string) => a.toLowerCase() === address.toLowerCase())) provider = (window as any).ethereum
+        } catch {}
+      }
+      if (!provider) return { ok: false, error: "Wallet not connected. Reconnect and try again." }
+
+      const timestamp = Date.now()
+      const message = buildClaimMessage(address, timestamp)
+      const signature: string = await provider.request({
+        method: "personal_sign",
+        params: [message, address],
+      })
+      return { ok: true, auth: { type: "wallet", signature, timestamp } }
+    } catch (e: any) {
+      if (e?.code === 4001) return { ok: false, error: "You rejected the signature request" }
+      return { ok: false, error: e?.message || "Could not get wallet signature" }
+    }
+  }
+
   async function saveProfile() {
+    setSaveError("")
+    const err = getValidationError()
+    if (err) { setSaveError(err); return }
+
     setSaving(true)
     try {
+      const proof = await buildAuthProof()
+      if (!proof.ok || !proof.auth) {
+        setSaveError(proof.error || "Could not verify wallet ownership")
+        return
+      }
+
       const res = await fetch("/api/builder", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
@@ -155,28 +230,33 @@ export default function BuilderPage() {
           github:     cleanHandle(form.github),
           telegram:   cleanHandle(form.telegram),
           email:      form.email.trim() || "",
+          auth:       proof.auth,
         }),
       })
-      if (res.ok) {
-        const updated: BuilderProfile = {
-          address,
-          display_name: form.display_name || null,
-          bio:          form.bio          || null,
-          avatar_url:   avatarUrl         || null,
-          twitter:      cleanHandle(form.twitter)  || null,
-          github:       cleanHandle(form.github)   || null,
-          website:      form.website               || null,
-          telegram:     cleanHandle(form.telegram) || null,
-          verified:     profile?.verified || false,
-          claimed_at:   profile?.claimed_at || new Date().toISOString(),
-          updated_at:   new Date().toISOString(),
-        }
-        setProfile(updated)
-        setAvatarErr(false)
-        setEditing(false)
-        setSaved(true)
-        setTimeout(() => setSaved(false), 3000)
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setSaveError(data?.error || "Failed to save profile")
+        return
       }
+
+      const updated: BuilderProfile = {
+        address,
+        display_name: form.display_name || null,
+        bio:          form.bio          || null,
+        avatar_url:   avatarUrl         || null,
+        twitter:      cleanHandle(form.twitter)  || null,
+        github:       cleanHandle(form.github)   || null,
+        website:      form.website               || null,
+        telegram:     cleanHandle(form.telegram) || null,
+        verified:     profile?.verified || false,
+        claimed_at:   profile?.claimed_at || new Date().toISOString(),
+        updated_at:   new Date().toISOString(),
+      }
+      setProfile(updated)
+      setAvatarErr(false)
+      setEditing(false)
+      setSaved(true)
+      setTimeout(() => setSaved(false), 3000)
     } finally {
       setSaving(false)
     }
@@ -362,11 +442,12 @@ export default function BuilderPage() {
                     </>
                   ) : (
                     <>
-                      <button onClick={saveProfile} disabled={saving || uploading}
-                        style={{ height: "32px", padding: "0 16px", background: arc, color: "#fff", fontSize: "12px", fontFamily: mono, border: "none", borderRadius: "7px", cursor: (saving || uploading) ? "wait" : "pointer", opacity: (saving || uploading) ? .7 : 1 }}>
-                        {saving ? "Saving…" : uploading ? "Uploading photo…" : "Save Profile"}
+                      <button onClick={saveProfile} disabled={saving || uploading || !!getValidationError()}
+                        title={getValidationError() || ""}
+                        style={{ height: "32px", padding: "0 16px", background: getValidationError() ? "rgba(26,86,255,0.25)" : arc, color: "#fff", fontSize: "12px", fontFamily: mono, border: "none", borderRadius: "7px", cursor: (saving || uploading || getValidationError()) ? "not-allowed" : "pointer", opacity: (saving || uploading) ? .7 : 1 }}>
+                        {saving ? "Saving…" : uploading ? "Uploading photo…" : profile?.claimed_at ? "Save Profile" : "Sign & Claim"}
                       </button>
-                      <button onClick={() => { setEditing(false); setAvatarPreview(profile?.avatar_url || null); setAvatarUrl(profile?.avatar_url || null) }}
+                      <button onClick={() => { setEditing(false); setSaveError(""); setAvatarPreview(profile?.avatar_url || null); setAvatarUrl(profile?.avatar_url || null) }}
                         style={{ height: "32px", padding: "0 12px", background: "transparent", color: t3, fontSize: "12px", fontFamily: mono, border: "1px solid " + bdr, borderRadius: "7px", cursor: "pointer" }}>
                         Cancel
                       </button>
@@ -377,10 +458,34 @@ export default function BuilderPage() {
             </div>
 
             {/* EDIT FORM */}
-            {editing && isOwner && (
+            {editing && isOwner && (() => {
+              const nameOk    = (form.display_name || "").trim().length >= 2
+              const bioOk     = (form.bio          || "").trim().length >= MIN_BIO_LEN
+              const avatarOk  = !!avatarUrl
+              const socialsOk = [form.twitter, form.github, form.website, form.telegram]
+                .map(s => (s || "").trim()).some(Boolean)
+              const reqItem = (label: string, done: boolean) => (
+                <span key={label} style={{ display: "inline-flex", alignItems: "center", gap: "5px", padding: "3px 9px", borderRadius: "999px", background: done ? "rgba(0,184,122,0.08)" : "rgba(255,255,255,0.03)", border: `1px solid ${done ? "rgba(0,184,122,0.25)" : bdr}`, fontSize: "10px", fontFamily: mono, color: done ? usdc : t3 }}>
+                  <span style={{ fontSize: "9px" }}>{done ? "✓" : "○"}</span> {label}
+                </span>
+              )
+              return (
               <div style={{ background: surf, border: "1px solid rgba(26,86,255,0.15)", borderRadius: "16px", padding: "28px", marginBottom: "20px" }}>
-                <div style={{ fontSize: "11px", fontFamily: mono, color: "#8aaeff", letterSpacing: "0.08em", marginBottom: "20px" }}>
+                <div style={{ fontSize: "11px", fontFamily: mono, color: "#8aaeff", letterSpacing: "0.08em", marginBottom: "12px" }}>
                   EDIT PROFILE
+                </div>
+
+                {/* Requirements checklist — updates live as user fills the form */}
+                <div style={{ marginBottom: "20px", padding: "12px 14px", background: "rgba(26,86,255,0.04)", border: "1px solid rgba(26,86,255,0.1)", borderRadius: "10px" }}>
+                  <div style={{ fontSize: "10px", fontFamily: mono, color: t3, letterSpacing: "0.06em", marginBottom: "8px" }}>
+                    {profile?.claimed_at ? "REQUIRED TO STAY IN THE DIRECTORY" : "REQUIRED TO CLAIM"}
+                  </div>
+                  <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                    {reqItem("Display name", nameOk)}
+                    {reqItem(`Bio (${MIN_BIO_LEN}+ chars)`, bioOk)}
+                    {reqItem("Profile photo", avatarOk)}
+                    {reqItem("At least one social link", socialsOk)}
+                  </div>
                 </div>
 
                 {/* PHOTO UPLOAD */}
@@ -465,18 +570,38 @@ export default function BuilderPage() {
                   </div>
                 </div>
 
-                <div style={{ marginTop: "20px", display: "flex", gap: "8px" }}>
-                  <button onClick={saveProfile} disabled={saving || uploading}
-                    style={{ height: "36px", padding: "0 20px", background: arc, color: "#fff", fontSize: "13px", fontFamily: mono, border: "none", borderRadius: "8px", cursor: (saving || uploading) ? "wait" : "pointer", opacity: (saving || uploading) ? .7 : 1, fontWeight: 600 }}>
-                    {saving ? "Saving…" : uploading ? "Upload in progress…" : "Save Profile"}
-                  </button>
-                  <button onClick={() => { setEditing(false); setAvatarPreview(profile?.avatar_url || null); setAvatarUrl(profile?.avatar_url || null) }}
-                    style={{ height: "36px", padding: "0 16px", background: "transparent", color: t3, fontSize: "13px", fontFamily: mono, border: "1px solid " + bdr, borderRadius: "8px", cursor: "pointer" }}>
-                    Cancel
-                  </button>
-                </div>
+                {(() => {
+                  const liveErr  = getValidationError()
+                  const blocking = !!liveErr
+                  return (
+                    <>
+                      {(saveError || liveErr) && (
+                        <div style={{ marginTop: "16px", padding: "10px 14px", background: saveError ? "rgba(224,51,72,0.08)" : "rgba(255,200,0,0.06)", border: `1px solid ${saveError ? "rgba(224,51,72,0.25)" : "rgba(255,200,0,0.18)"}`, borderRadius: "8px", fontSize: "12px", fontFamily: mono, color: saveError ? "#ff8e9c" : "#d7c160", lineHeight: 1.5 }}>
+                          {saveError || liveErr}
+                        </div>
+                      )}
+                      <div style={{ marginTop: "16px", display: "flex", gap: "8px", alignItems: "center" }}>
+                        <button onClick={saveProfile} disabled={saving || uploading || blocking}
+                          title={blocking ? (liveErr || "") : ""}
+                          style={{ height: "36px", padding: "0 20px", background: blocking ? "rgba(26,86,255,0.25)" : arc, color: "#fff", fontSize: "13px", fontFamily: mono, border: "none", borderRadius: "8px", cursor: (saving || uploading || blocking) ? "not-allowed" : "pointer", opacity: (saving || uploading) ? .7 : 1, fontWeight: 600 }}>
+                          {saving ? "Saving…" : uploading ? "Upload in progress…" : profile?.claimed_at ? "Save Profile" : "Sign & Claim Profile"}
+                        </button>
+                        <button onClick={() => { setEditing(false); setSaveError(""); setAvatarPreview(profile?.avatar_url || null); setAvatarUrl(profile?.avatar_url || null) }}
+                          style={{ height: "36px", padding: "0 16px", background: "transparent", color: t3, fontSize: "13px", fontFamily: mono, border: "1px solid " + bdr, borderRadius: "8px", cursor: "pointer" }}>
+                          Cancel
+                        </button>
+                        {!profile?.claimed_at && (
+                          <span style={{ fontSize: "10px", fontFamily: mono, color: t3, marginLeft: "4px" }}>
+                            One quick wallet signature confirms ownership
+                          </span>
+                        )}
+                      </div>
+                    </>
+                  )
+                })()}
               </div>
-            )}
+              )
+            })()}
 
             {/* BUILDER STATS */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px", marginBottom: "20px" }}>

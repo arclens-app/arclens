@@ -1,8 +1,72 @@
 export const runtime = "nodejs"
 import { NextRequest, NextResponse } from "next/server"
 import { Pool } from "pg"
+import { verifyMessage } from "viem"
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
+
+// Anti-spam minimums — server-side, so no client bypass
+const MIN_NAME_LEN   = 2
+const MIN_BIO_LEN    = 30
+const SIG_MAX_AGE_MS = 5 * 60 * 1000
+
+function buildClaimMessage(address: string, timestamp: number): string {
+  return `ArcLens Builder Profile Claim\nWallet: ${address}\nTimestamp: ${timestamp}`
+}
+
+async function verifyClaimAuth(addr: string, auth: any): Promise<{ ok: boolean; error?: string }> {
+  if (!auth || typeof auth !== "object") return { ok: false, error: "Missing wallet proof" }
+
+  if (auth.type === "wallet") {
+    const { signature, timestamp } = auth
+    if (!signature || !timestamp) return { ok: false, error: "Missing signature" }
+    const ts = Number(timestamp)
+    if (!Number.isFinite(ts) || Math.abs(Date.now() - ts) > SIG_MAX_AGE_MS) {
+      return { ok: false, error: "Signature expired — please try again" }
+    }
+    const message = buildClaimMessage(addr, ts)
+    try {
+      const valid = await verifyMessage({
+        address:   addr as `0x${string}`,
+        message,
+        signature: signature as `0x${string}`,
+      })
+      if (!valid) return { ok: false, error: "Signature does not match wallet" }
+      return { ok: true }
+    } catch {
+      return { ok: false, error: "Invalid signature" }
+    }
+  }
+
+  if (auth.type === "circle") {
+    const email = String(auth.email || "").toLowerCase().trim()
+    if (!email) return { ok: false, error: "Circle session missing email" }
+    const row = await pool.query(
+      "SELECT 1 FROM circle_wallet_users WHERE email = $1 AND LOWER(wallet_address) = $2",
+      [email, addr]
+    )
+    if (!row.rows.length) return { ok: false, error: "This Circle account doesn't own that wallet" }
+    return { ok: true }
+  }
+
+  return { ok: false, error: "Unknown auth type" }
+}
+
+function validateProfileFields(b: {
+  display_name?: string, bio?: string, avatar_url?: string,
+  twitter?: string, github?: string, website?: string, telegram?: string,
+}): string | null {
+  const name = (b.display_name || "").trim()
+  const bio  = (b.bio          || "").trim()
+  const av   = (b.avatar_url   || "").trim()
+  const socials = [b.twitter, b.github, b.website, b.telegram].map(s => (s || "").trim()).filter(Boolean)
+
+  if (name.length < MIN_NAME_LEN) return `Display name must be at least ${MIN_NAME_LEN} characters`
+  if (bio.length  < MIN_BIO_LEN)  return `Bio must be at least ${MIN_BIO_LEN} characters`
+  if (!av)                        return "Profile photo is required"
+  if (socials.length === 0)       return "Add at least one social link (X, GitHub, website, or Telegram)"
+  return null
+}
 
 async function ensureTable() {
   await pool.query(`
@@ -124,10 +188,25 @@ export async function POST(req: NextRequest) {
   try {
     await ensureTable()
     const body = await req.json()
-    const { address, display_name, bio, avatar_url, twitter, github, website, telegram, email } = body
+    const { address, display_name, bio, avatar_url, twitter, github, website, telegram, email, auth } = body
 
     if (!address?.trim()) return NextResponse.json({ error: "Missing address" }, { status: 400 })
     const addr = address.toLowerCase().trim()
+    if (!/^0x[a-f0-9]{40}$/.test(addr)) {
+      return NextResponse.json({ error: "Invalid wallet address" }, { status: 400 })
+    }
+
+    // Tamper-proof: every save (claim or edit) must prove ownership of the wallet
+    const authResult = await verifyClaimAuth(addr, auth)
+    if (!authResult.ok) {
+      return NextResponse.json({ error: authResult.error || "Wallet verification failed" }, { status: 401 })
+    }
+
+    // Hard validation: server-side, can't be bypassed by hitting the API directly
+    const validationError = validateProfileFields({ display_name, bio, avatar_url, twitter, github, website, telegram })
+    if (validationError) {
+      return NextResponse.json({ error: validationError }, { status: 400 })
+    }
 
     await pool.query(
       `INSERT INTO builder_profiles (address, display_name, bio, avatar_url, twitter, github, website, telegram, email, claimed_at, updated_at)
