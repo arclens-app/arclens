@@ -2,6 +2,7 @@
 import { Pool } from "pg"
 import { getProvider } from "@/lib/arc"
 import { rateLimit, getIp } from "@/lib/ratelimit"
+import { getSession } from "@/lib/session"
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
 
@@ -114,6 +115,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
 
     const wallet = tester_wallet.toLowerCase()
+
+    // Session check: only the actual tester can submit their own completion.
+    // Without this anyone could spoof completions to inflate (or trash) a
+    // wallet's reputation and block legitimate users via the duplicate check.
+    const sess = getSession(req)
+    if (!sess || sess.addr !== wallet) {
+      return NextResponse.json({ error: "Sign in with the tester wallet to submit this completion" }, { status: 401 })
+    }
 
     // Resolve slug or numeric id
     const isNumeric = /^\d+$/.test(id)

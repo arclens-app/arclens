@@ -7,6 +7,11 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejec
 
 export async function POST(req: NextRequest) {
   try {
+    // Rate limit the magic-link email so a script can't burn through Resend quota
+    const { enforce } = await import("@/lib/ratelimit")
+    const blocked = await enforce(req, "claim-email", { limit: 10, windowMs: 60_000 })
+    if (blocked) return blocked
+
     const { email, slug } = await req.json()
     if (!email?.trim() || !slug?.trim()) {
       return NextResponse.json({ error: "Email and project required" }, { status: 400 })

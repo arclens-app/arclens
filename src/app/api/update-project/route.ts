@@ -1,5 +1,7 @@
 ﻿import { NextRequest, NextResponse } from "next/server"
 import { Pool } from "pg"
+import { enforce } from "@/lib/ratelimit"
+import { getSession } from "@/lib/session"
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
 
@@ -7,6 +9,9 @@ const ALLOWED = ["tagline", "description", "website", "twitter", "github", "disc
 const ALLOWED_ARRAY = ["contracts"]
 
 export async function POST(req: NextRequest) {
+  const blocked = await enforce(req, "project-update", { limit: 20, windowMs: 60_000 })
+  if (blocked) return blocked
+
   try {
     const { token, slug, wallet, updates } = await req.json()
 
@@ -17,7 +22,7 @@ export async function POST(req: NextRequest) {
     let projectId: number | null = null
     let projectRow: any = null
 
-    // Auth by token
+    // Auth path A: magic-link token from the founder activation email
     if (token) {
       const result = await pool.query(
         `SELECT id, claim_token_expires FROM projects
@@ -29,11 +34,18 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Auth by wallet
+    // Auth path B: signed-in wallet that actually owns this project.
+    // Session cookie required — previously a bare wallet param was enough,
+    // which let anyone with the owner address spam pending_updates.
     if (!projectId && wallet) {
+      const sess = getSession(req)
+      const lower = wallet.toLowerCase()
+      if (!sess || sess.addr !== lower) {
+        return NextResponse.json({ error: "Sign in with the project owner wallet to edit" }, { status: 401 })
+      }
       const result = await pool.query(
         `SELECT id FROM projects WHERE (slug = $1 OR id::text = $1) AND owner_wallet = $2`,
-        [slug, wallet.toLowerCase()]
+        [slug, lower]
       )
       if (result.rows.length > 0) {
         projectId = result.rows[0].id
