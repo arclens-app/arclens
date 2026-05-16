@@ -3,7 +3,7 @@ import { rateLimit, getIp } from "@/lib/ratelimit"
 
 export async function POST(req: NextRequest) {
   // Rate limit: 20 uploads per hour per IP
-  const rl = rateLimit(`upload:${getIp(req)}`, 20, 3_600_000)
+  const rl = await rateLimit(`upload:${getIp(req)}`, 20, 3_600_000)
   if (!rl.allowed) {
     return NextResponse.json(
       { error: "Too many uploads. Try again later." },

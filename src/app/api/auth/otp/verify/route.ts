@@ -2,6 +2,7 @@ export const runtime = "nodejs"
 import { NextRequest, NextResponse } from "next/server"
 import { Pool } from "pg"
 import crypto from "crypto"
+import { enforce } from "@/lib/ratelimit"
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
 const BASE = "https://api.circle.com"
@@ -32,6 +33,10 @@ function apiHeaders(userToken?: string) {
 
 export async function POST(req: NextRequest) {
   try {
+    // Burst protection against brute-force code guessing per IP
+    const blocked = await enforce(req, "otp-verify", { limit: 30, windowMs: 60_000 })
+    if (blocked) return blocked
+
     const { email, code } = await req.json()
     if (!email || !code) return NextResponse.json({ error: "Email and code required" }, { status: 400 })
 
