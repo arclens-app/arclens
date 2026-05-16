@@ -23,6 +23,7 @@ export async function GET() {
       )
     `)
     await pool.query(`ALTER TABLE builder_profiles ADD COLUMN IF NOT EXISTS email TEXT`)
+    await pool.query(`DELETE FROM builder_profiles WHERE address LIKE '0xdead%'`)
 
     const res = await pool.query(`
       SELECT
