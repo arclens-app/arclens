@@ -48,6 +48,15 @@ export default function AdminPage() {
   const [tab, setTab]                 = useState<"pending"|"updates"|"campaign-updates"|"projects"|"contracts"|"events"|"locations"|"campaigns">("pending")
   const [submissions, setSubmissions] = useState<Project[]>([])
   const [projects, setProjects]       = useState<Project[]>([])
+  const [payoutBal, setPayoutBal]     = useState<null | {
+    address:    string
+    usdc:       number   // total USDC in the DCW (covers both gas and pending payouts)
+    committed:  number   // USDC promised to active campaigns but not yet paid out
+    free:       number   // usdc - committed; if negative the wallet is underwater
+    alerts:     { critical: boolean; low: boolean; underwater: boolean }
+    thresholds: { low: number; crit: number }
+  }>(null)
+  const [copiedAddr, setCopiedAddr] = useState(false)
   const [contracts, setContracts]     = useState<Contract[]>([])
   const [pendingUpdates, setPendingUpdates] = useState<PendingUpdate[]>([])
   const [events, setEvents]           = useState<Event[]>([])
@@ -113,6 +122,13 @@ export default function AdminPage() {
       setPendingCampaigns(data.pendingCampaigns || [])
       setPendingCampaignUpdates(data.pendingCampaignUpdates || [])
       setAllCampaigns(data.allCampaigns || [])
+
+      // Fire-and-forget — surface payout wallet balance so the operator
+      // knows before the gas tank runs dry and breaks live payouts.
+      fetch("/api/admin/payout-balance", { headers: { Authorization: `Bearer ${p}` }, cache: "no-store" })
+        .then(r => r.ok ? r.json() : null)
+        .then(b => b && !b.error && setPayoutBal(b))
+        .catch(() => {})
     } finally { setLoading(false) }
   }
 
@@ -121,8 +137,8 @@ export default function AdminPage() {
     try {
       const res  = await fetch("/api/admin", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, action, password, table, data: extraData }),
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${password}` },
+        body: JSON.stringify({ id, action, table, data: extraData }),
       })
       const data = await res.json()
       if (data.success || data.ok) {
@@ -147,8 +163,8 @@ export default function AdminPage() {
     try {
       const res  = await fetch("/api/admin", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: editing.id, action: "update", password, data: editForm }),
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${password}` },
+        body: JSON.stringify({ id: editing.id, action: "update", data: editForm }),
       })
       const data = await res.json()
       if (data.success) {
@@ -175,8 +191,8 @@ export default function AdminPage() {
     try {
       const res  = await fetch("/api/admin", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, action: "geocode", password, data: { city: inp.city, country: inp.country } }),
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${password}` },
+        body: JSON.stringify({ id, action: "geocode", data: { city: inp.city, country: inp.country } }),
       })
       const data = await res.json()
       if (data.success) {
@@ -221,8 +237,8 @@ export default function AdminPage() {
       const data = await res.json()
       if (data.success && data.id) {
         await Promise.all([
-          fetch("/api/admin", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: data.id, action: "approve",      password, table: "events" }) }),
-          fetch("/api/admin", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: data.id, action: "badge-event", password, table: "events", data: { badge: "official" } }) }),
+          fetch("/api/admin", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${password}` }, body: JSON.stringify({ id: data.id, action: "approve",      table: "events" }) }),
+          fetch("/api/admin", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${password}` }, body: JSON.stringify({ id: data.id, action: "badge-event", table: "events", data: { badge: "official" } }) }),
         ])
         showToast(true, "Official event created and live")
         setShowEventForm(false)
@@ -384,6 +400,75 @@ export default function AdminPage() {
               <span>{toast.text}</span>
             </div>
           )}
+
+          {/* Circle DCW payout wallet — USDC is the native gas + payout token on Arc,
+              so one balance covers both. Free = total - committed-but-unpaid liabilities. */}
+          {payoutBal && (() => {
+            const crit = payoutBal.alerts.critical
+            const low  = payoutBal.alerts.low
+            const underwater = payoutBal.alerts.underwater
+            const status = crit ? "critical" : underwater ? "underwater" : low ? "low" : "healthy"
+            const tone = (crit || underwater) ? "#e03348" : low ? "#d7c160" : "#00b87a"
+            const bg   = (crit || underwater) ? "rgba(224,51,72,0.08)" : low ? "rgba(255,200,0,0.06)" : "rgba(0,184,122,0.04)"
+            const bd   = (crit || underwater) ? "rgba(224,51,72,0.3)"  : low ? "rgba(255,200,0,0.2)"  : "rgba(0,184,122,0.15)"
+            const explorerUrl = `https://testnet.arcscan.app/address/${payoutBal.address}`
+            const fmt = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+            return (
+              <div style={{ marginBottom:"16px", padding:"16px 20px", background:bg, border:`1px solid ${bd}`, borderRadius:"12px" }}>
+                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:"12px", flexWrap:"wrap", marginBottom:"12px" }}>
+                  <div style={{ fontSize:"10px", fontFamily:mono, color:tone, letterSpacing:"0.1em", textTransform:"uppercase", fontWeight:600 }}>
+                    Circle DCW Payout Wallet · {status}
+                  </div>
+                  <a href={explorerUrl} target="_blank" rel="noopener noreferrer"
+                     style={{ fontSize:"10px", fontFamily:mono, color:t3, textDecoration:"none" }}>
+                    open on arcscan ↗
+                  </a>
+                </div>
+
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(140px, 1fr))", gap:"16px", marginBottom:"12px" }}>
+                  <div>
+                    <div style={{ fontSize:"10px", fontFamily:mono, color:t3, marginBottom:"4px" }}>USDC on hand</div>
+                    <div style={{ fontSize:"22px", fontWeight:700, color:t1, fontFamily:mono }}>${fmt(payoutBal.usdc)}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize:"10px", fontFamily:mono, color:t3, marginBottom:"4px" }}>Committed to campaigns</div>
+                    <div style={{ fontSize:"22px", fontWeight:700, color:t2, fontFamily:mono }}>${fmt(payoutBal.committed)}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize:"10px", fontFamily:mono, color:t3, marginBottom:"4px" }}>Free buffer</div>
+                    <div style={{ fontSize:"22px", fontWeight:700, color: underwater ? "#e03348" : payoutBal.free < 10 ? "#d7c160" : "#00b87a", fontFamily:mono }}>
+                      {underwater ? "−" : ""}${fmt(Math.abs(payoutBal.free))}
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ display:"flex", alignItems:"center", gap:"8px", padding:"8px 12px", background:surf2, border:"1px solid "+bdr, borderRadius:"8px", marginBottom:(crit||low||underwater) ? "12px" : 0 }}>
+                  <span style={{ fontSize:"10px", fontFamily:mono, color:t3 }}>SEND USDC TO →</span>
+                  <code style={{ fontSize:"11px", fontFamily:mono, color:t1, flex:1, overflow:"hidden", textOverflow:"ellipsis" }}>{payoutBal.address}</code>
+                  <button onClick={async () => { await navigator.clipboard.writeText(payoutBal.address); setCopiedAddr(true); setTimeout(() => setCopiedAddr(false), 1500) }}
+                    style={{ height:"26px", padding:"0 12px", background:"transparent", border:"1px solid "+bdr, borderRadius:"6px", color:t2, fontSize:"10px", fontFamily:mono, cursor:"pointer" }}>
+                    {copiedAddr ? "✓ copied" : "copy"}
+                  </button>
+                </div>
+
+                {underwater && (
+                  <div style={{ fontSize:"11px", color:tone, lineHeight:1.5 }}>
+                    Wallet is underwater. Committed payouts (${fmt(payoutBal.committed)}) exceed the on-hand balance (${fmt(payoutBal.usdc)}). Top up USDC now or some testers won't be able to claim.
+                  </div>
+                )}
+                {!underwater && crit && (
+                  <div style={{ fontSize:"11px", color:tone, lineHeight:1.5 }}>
+                    USDC balance is below ${payoutBal.thresholds.crit}. Both reward payouts and gas come out of this balance, so payouts will start failing soon. Top up the address above.
+                  </div>
+                )}
+                {!underwater && !crit && low && (
+                  <div style={{ fontSize:"11px", color:tone, lineHeight:1.5 }}>
+                    USDC balance is below ${payoutBal.thresholds.low}. Top up soon to keep gas + payouts comfortable.
+                  </div>
+                )}
+              </div>
+            )
+          })()}
 
           {loading ? (
             <div style={{ padding:"60px", textAlign:"center", fontFamily:mono, fontSize:"11px", color:t3 }}>Loading...</div>

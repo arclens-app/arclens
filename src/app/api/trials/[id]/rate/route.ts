@@ -1,11 +1,16 @@
 ﻿import { NextRequest, NextResponse } from "next/server"
 import { Pool } from "pg"
+import { enforce } from "@/lib/ratelimit"
+import { getSession } from "@/lib/session"
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
 
 // POST /api/trials/[id]/rate — founder rates a tester's submission
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
+
+  const blocked = await enforce(req, "trial-rate", { limit: 30, windowMs: 60_000 })
+  if (blocked) return blocked
 
   try {
     const body = await req.json()
@@ -16,6 +21,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
     if (!rating || rating < 1 || rating > 5) {
       return NextResponse.json({ error: "Rating must be 1-5" }, { status: 400 })
+    }
+
+    // Session check FIRST — before we leak any campaign existence info.
+    // Only someone signed in as the founder can submit ratings as them.
+    const sess = getSession(req)
+    if (!sess || sess.addr !== founder_wallet.toLowerCase()) {
+      return NextResponse.json({ error: "Sign in with the founder wallet to rate testers" }, { status: 401 })
     }
 
     // Resolve slug or numeric id → numeric campaign id

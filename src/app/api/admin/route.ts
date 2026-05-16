@@ -1,16 +1,27 @@
 ﻿import { NextRequest, NextResponse } from "next/server"
 import { Pool } from "pg"
 import { Resend } from "resend"
+import { timingSafeEqual } from "crypto"
+import { enforce } from "@/lib/ratelimit"
+
 const pool   = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
 const resend = new Resend(process.env.RESEND_API_KEY || "")
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || ""
-function checkAuth(pw: string) { return !!ADMIN_PASSWORD && pw === ADMIN_PASSWORD }
 
-// Read password from Authorization: Bearer <pw> header first; fall back to query/body param
-function resolvePassword(req: NextRequest, fallback?: string): string {
+function checkAuth(pw: string): boolean {
+  if (!ADMIN_PASSWORD || !pw) return false
+  const a = Buffer.from(pw)
+  const b = Buffer.from(ADMIN_PASSWORD)
+  if (a.length !== b.length) return false
+  // Constant-time compare so password length/prefix can't be timing-leaked
+  return timingSafeEqual(a, b)
+}
+
+// Password MUST come from the Authorization header — never query string or body.
+// Query strings land in access logs and Referer headers, leaking the secret.
+function resolvePassword(req: NextRequest): string {
   const auth = req.headers.get("authorization") || ""
-  if (auth.startsWith("Bearer ")) return auth.slice(7)
-  return fallback || ""
+  return auth.startsWith("Bearer ") ? auth.slice(7) : ""
 }
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_APP_URL || "https://arclenz.xyz"
@@ -330,8 +341,13 @@ async function sendProjectEmail(projectId: number, status: "approved" | "rejecte
 }
 
 export async function GET(req: NextRequest) {
+  // Tight limit: admin should never hit this endpoint 30 times in a minute
+  // organically. Aggressive throttle frustrates password brute-force.
+  const blocked = await enforce(req, "admin-auth", { limit: 30, windowMs: 60_000 })
+  if (blocked) return blocked
+
   const action   = req.nextUrl.searchParams.get("action")
-  const password = resolvePassword(req, req.nextUrl.searchParams.get("password") || "")
+  const password = resolvePassword(req)
   if (!checkAuth(password)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   if (action === "auth") return NextResponse.json({ ok: true })
   if (action === "list") {
@@ -409,9 +425,12 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const blocked = await enforce(req, "admin-auth", { limit: 30, windowMs: 60_000 })
+  if (blocked) return blocked
+
   const body = await req.json()
-  const { id, action, password, table, data } = body
-  if (!checkAuth(resolvePassword(req, password))) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  const { id, action, table, data } = body
+  if (!checkAuth(resolvePassword(req))) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   if (!id || !action) return NextResponse.json({ error: "Missing fields" }, { status: 400 })
   try {
     if (table === "campaigns") {
