@@ -239,16 +239,40 @@ export default function DashboardPage() {
   }
 
   async function saveWallet() {
-    if (!connectedWallet || !token) return
+    if (!connectedWallet || !token || !project?.name) return
     setSavingWallet(true)
     try {
+      const addr        = connectedWallet.toLowerCase()
+      const walletType  = localStorage.getItem("arclens-wallet-type")
+      const circleEmail = localStorage.getItem("arclens-circle-email")
+      let auth: any = null
+
+      if (walletType === "circle" && circleEmail) {
+        // Circle: backend verifies email→wallet mapping in circle_wallet_users
+        auth = { type: "circle", email: circleEmail }
+      } else if ((window as any).ethereum) {
+        // Browser wallet: sign canonical activation message (mirrors /api/claim PUT)
+        const timestamp = Date.now()
+        const message   = `ArcLens Founder Dashboard Activation\nProject: ${project.name}\nWallet: ${addr}\nTimestamp: ${timestamp}`
+        const signature: string = await (window as any).ethereum.request({
+          method: "personal_sign",
+          params: [message, addr],
+        })
+        if (!signature) { setSavingWallet(false); return }
+        auth = { type: "wallet", signature, timestamp }
+      } else {
+        setSavingWallet(false)
+        return
+      }
+
       const res = await fetch("/api/claim", {
-        method: "PUT",
+        method:  "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token, slug, wallet: connectedWallet }),
+        credentials: "include",
+        body: JSON.stringify({ token, slug, wallet: addr, auth }),
       })
       if (res.ok) { setWalletSaved(true); setHasWallet(true) }
-    } catch { }
+    } catch {}
     finally { setSavingWallet(false) }
   }
 
