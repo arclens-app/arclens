@@ -46,13 +46,26 @@ export default function ArcLayout({ children, active }: { children: React.ReactN
 
   // Connect modal state
   const [showConnectModal, setShowConnectModal] = useState(false)
-  const [connectView, setConnectView]           = useState<"choose" | "wallets" | "email" | "circle">("choose")
+  const [connectView, setConnectView]           = useState<"choose" | "wallets" | "email" | "otp" | "pin">("choose")
   const [walletType, setWalletType]             = useState<"metamask" | "circle" | null>(null)
   const [detectedWallets, setDetectedWallets]   = useState<EIP6963Provider[]>([])
   const [walletLoading, setWalletLoading]       = useState(false)
   const [emailInput, setEmailInput]             = useState("")
   const [emailLoading, setEmailLoading]         = useState(false)
   const [emailError, setEmailError]             = useState("")
+  const [savedCircleEmail, setSavedCircleEmail] = useState("")
+  const [isSignInFlow, setIsSignInFlow]         = useState(false)
+  const prefetchedSession = useRef<{ email: string; data: any } | null>(null)
+  const prefetchTimer     = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Custom OTP flow state
+  const [otpDigits,    setOtpDigits]    = useState<string[]>(["", "", "", "", "", ""])
+  const [otpVerifying, setOtpVerifying] = useState(false)
+  const [otpError,     setOtpError]     = useState("")
+  const [otpExpiresAt, setOtpExpiresAt] = useState<number | null>(null)
+  const [now,          setNow]          = useState(Date.now())
+  const [pinPhase,     setPinPhase]     = useState<"pin" | "finalizing">("pin")
+  const otpRefs = useRef<(HTMLInputElement | null)[]>([])
 
   const walletAddr  = useArcStore(s => s.walletAddr)
   const walletBal   = useArcStore(s => s.walletBal)
@@ -74,15 +87,14 @@ export default function ArcLayout({ children, active }: { children: React.ReactN
     if (wt === "metamask" || wt === "circle") setWalletType(wt)
   }, [])
 
-  // Silently preload Circle's iframe assets 3 seconds after page mount so the SDK's
-  // 10-second cold-start timeout never fires. Delayed so it doesn't compete with
-  // critical page resources. Goes browser→pw-auth.circle.com directly, no Vercel cost.
+  // Preload Circle SDK + iframe at mount so the popup opens instantly when user connects
   useEffect(() => {
     if (!process.env.NEXT_PUBLIC_CIRCLE_APP_ID) return
+    import("@circle-fin/w3s-pw-web-sdk").catch(() => {})
     const t = setTimeout(() => {
       if (document.getElementById("circleWarmupFrame")) return
       const frame = document.createElement("iframe")
-      frame.src = `https://pw-auth.circle.com/?origin=${encodeURIComponent(window.location.origin)}`
+      frame.src = `https://pw-auth.circle.com/social/verify-email?origin=${encodeURIComponent(window.location.origin)}`
       frame.style.cssText = "position:fixed;width:0;height:0;border:0;pointer-events:none;visibility:hidden;top:0;left:0"
       frame.id = "circleWarmupFrame"
       frame.onload = () => frame.remove()
@@ -125,9 +137,13 @@ export default function ArcLayout({ children, active }: { children: React.ReactN
   }
 
   function connect() {
-    setConnectView("choose")
-    setEmailInput("")
+    const saved = typeof window !== "undefined" ? localStorage.getItem("arclens-circle-email") || "" : ""
+    setSavedCircleEmail(saved)
+    // Returning Circle user → skip directly to email view with one-click sign-in
+    setConnectView(saved ? "email" : "choose")
+    setEmailInput(saved)
     setEmailError("")
+    setIsSignInFlow(!!saved)
     setShowConnectModal(true)
   }
 
@@ -180,101 +196,177 @@ export default function ArcLayout({ children, active }: { children: React.ReactN
     }
   }
 
+  function onEmailChange(val: string) {
+    setEmailInput(val)
+    setEmailError("")
+  }
+
+  // 1-second tick — drives the live countdown on resend cooldown + expiry
+  useEffect(() => {
+    if (connectView !== "otp") return
+    const id = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [connectView])
+
+  const [resendAvailableAt, setResendAvailableAt] = useState<number>(0)
+  const [resentToast,       setResentToast]       = useState(false)
+
+  const resendSecondsLeft = Math.max(0, Math.ceil((resendAvailableAt - now) / 1000))
+  const codeSecondsLeft   = otpExpiresAt ? Math.max(0, Math.ceil((otpExpiresAt - now) / 1000)) : 0
+
   async function connectCircle() {
     if (!emailInput.includes("@")) { setEmailError("Enter a valid email address"); return }
+    const email = emailInput.toLowerCase().trim()
     setEmailLoading(true)
     setEmailError("")
-    setConnectView("circle")
+    setOtpError("")
+    setOtpDigits(["", "", "", "", "", ""])
+
     try {
-      const sessionRes = await fetch("/api/auth/circle/session", {
-        method: "POST",
+      const res = await fetch("/api/auth/otp/send", {
+        method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: emailInput }),
+        body:    JSON.stringify({ email }),
       })
-      const session = await sessionRes.json()
-      if (!sessionRes.ok) {
-        setEmailError(session.error || "Failed to create wallet session")
-        setConnectView("email")
-        return
-      }
-
-      const { userToken, encryptionKey, challengeId, address: resolvedAddr, isSignIn } = session
-      const email = emailInput  // capture before state clears
-      const appId = process.env.NEXT_PUBLIC_CIRCLE_APP_ID!
-
-      const { W3SSdk } = await import("@circle-fin/w3s-pw-web-sdk")
-
-      // Reset + run the Circle SDK as a Promise so we can auto-retry on first-attempt timeout.
-      // The 10s timeout (code 155706) fires on cold loads while the browser fetches Circle's
-      // iframe assets. A second attempt succeeds because the assets are now cached.
-      async function runSDK(): Promise<void> {
-        const prev = (W3SSdk as any).instance
-        if (prev) { try { prev.unSubscribeMessage() } catch {} }
-        ;(W3SSdk as any).instance = null
-        document.getElementById("circleWarmupFrame")?.remove()
-        document.getElementById("sdkIframe")?.remove()
-        const sdk = new W3SSdk()
-        sdkRef.current = sdk
-        sdk.setAppSettings({ appId })
-        sdk.setAuthentication({ userToken, encryptionKey })
-        return new Promise((resolve, reject) => {
-          sdk.execute(challengeId, (err: any) => {
-            sdkRef.current = null
-            if (err) reject(err)
-            else resolve()
-          })
-        })
-      }
-
-      try {
-        try {
-          await runSDK()
-        } catch (e: any) {
-          if (e?.code !== 155706) throw e
-          // Retry once — assets are cached now, iframe will respond in time
-          await runSDK()
-        }
-      } catch (e: any) {
-        setEmailError(
-          e?.code === 155706
-            ? "Circle wallet window failed to open. Make sure pop-ups and iframes are allowed for this site, then try again."
-            : (e?.message || "Setup failed. Try again.")
-        )
-        setConnectView("email")
+      const data = await res.json()
+      if (!res.ok) {
+        setEmailError(data.error || "Failed to send verification code")
         setEmailLoading(false)
         return
       }
-
-      // Challenge completed — handle success
-      try {
-        if (isSignIn) {
-          localStorage.setItem("arclens-circle-email", email)
-          setShowConnectModal(false)
-          await afterConnect(resolvedAddr, "circle")
-        } else {
-          const walletRes = await fetch("/api/auth/circle/wallet", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email }),
-          })
-          const walletData = await walletRes.json()
-          if (!walletRes.ok || !walletData.address) {
-            setEmailError(walletData.error || "Wallet not ready. Try again.")
-            setConnectView("email")
-            return
-          }
-          localStorage.setItem("arclens-circle-email", email)
-          setShowConnectModal(false)
-          await afterConnect(walletData.address, "circle")
-        }
-      } catch {
-        setEmailError("Failed to get wallet address. Try again.")
-        setConnectView("email")
-      } finally { setEmailLoading(false) }
-    } catch {
-      setEmailError("Network error. Try again.")
-      setConnectView("email")
+      setOtpExpiresAt(Date.now() + 10 * 60 * 1000)
+      setResendAvailableAt(Date.now() + 30 * 1000)
+      setNow(Date.now())
+      setConnectView("otp")
       setEmailLoading(false)
+      setTimeout(() => otpRefs.current[0]?.focus(), 60)
+    } catch (e: any) {
+      setEmailError(e?.message || "Network error. Try again.")
+      setEmailLoading(false)
+    }
+  }
+
+  async function verifyOTP(fullCode: string) {
+    if (otpVerifying) return
+    const email = emailInput.toLowerCase().trim()
+    setOtpVerifying(true)
+    setOtpError("")
+    try {
+      const res = await fetch("/api/auth/otp/verify", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ email, code: fullCode }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.success) {
+        setOtpError(data.error || "Verification failed")
+        setOtpVerifying(false)
+        // Clear the boxes and refocus on first one for retry
+        setOtpDigits(["", "", "", "", "", ""])
+        setTimeout(() => otpRefs.current[0]?.focus(), 50)
+        return
+      }
+
+      // Returning user — wallet already known, complete login
+      if (data.address && !data.needsPinSetup) {
+        localStorage.setItem("arclens-circle-email", email)
+        setSavedCircleEmail(email)
+        setShowConnectModal(false)
+        setOtpVerifying(false)
+        await afterConnect(data.address, "circle")
+        return
+      }
+
+      // First-time user — needs PIN setup via Circle iframe (UCW security requirement)
+      if (data.needsPinSetup && data.challengeId) {
+        setPinPhase("pin")
+        setConnectView("pin")
+        await runPinSetup(email, data.challengeId, data.userToken, data.encryptionKey)
+      }
+    } catch (e: any) {
+      setOtpError(e?.message || "Network error. Try again.")
+      setOtpVerifying(false)
+    }
+  }
+
+  async function runPinSetup(email: string, challengeId: string, userToken: string, encryptionKey: string) {
+    const appId = process.env.NEXT_PUBLIC_CIRCLE_APP_ID!
+    try {
+      const { W3SSdk } = await import("@circle-fin/w3s-pw-web-sdk")
+      const prev = (W3SSdk as any).instance
+      if (prev) { try { prev.unSubscribeMessage() } catch {} }
+      ;(W3SSdk as any).instance = null
+      document.getElementById("sdkIframe")?.remove()
+
+      const sdk = new W3SSdk()
+      sdk.setAppSettings({ appId })
+      sdk.setAuthentication({ userToken, encryptionKey })
+      sdk.setThemeColor({
+        backdrop:        "#04091a",
+        backdropOpacity: 0.85,
+        bg:              "#0a0e1a",
+        divider:         "rgba(255,255,255,0.06)",
+        textMain:        "#e8ecff",
+        textAuxiliary:   "#6b7da8",
+        textSummary:     "#4e6091",
+        inputBg:         "#0e1224",
+        dropdownBg:      "#0a0e1a",
+        dropdownBorder:  "rgba(255,255,255,0.06)",
+        primary:         "#1a56ff",
+        primaryText:     "#ffffff",
+        success:         "#00b87a",
+        error:           "#e03348",
+        iconColor:       "#1a56ff",
+      } as any)
+      sdkRef.current = sdk
+
+      sdk.execute(challengeId, async (error: any) => {
+        sdkRef.current = null
+        if (error) {
+          setOtpError(error.message || "PIN setup was cancelled or failed. Sign in again to retry.")
+          setOtpVerifying(false)
+          setOtpDigits(["", "", "", "", "", ""])
+          setConnectView("email")
+          return
+        }
+
+        // PIN created. Circle provisions the wallet asynchronously —
+        // poll with backoff so we don't show a false "not ready" error.
+        setPinPhase("finalizing")
+        const delays = [600, 800, 1000, 1200, 1500, 1800, 2200, 2600]
+        for (let i = 0; i < delays.length; i++) {
+          try {
+            const walletRes  = await fetch("/api/auth/circle/wallet", {
+              method:  "POST",
+              headers: { "Content-Type": "application/json" },
+              body:    JSON.stringify({ email }),
+            })
+            const walletData = await walletRes.json()
+            if (walletRes.ok && walletData.address) {
+              localStorage.setItem("arclens-circle-email", email)
+              setSavedCircleEmail(email)
+              setShowConnectModal(false)
+              setOtpVerifying(false)
+              setPinPhase("pin")
+              await afterConnect(walletData.address, "circle")
+              return
+            }
+          } catch {
+            // network blip — keep retrying
+          }
+          await new Promise(r => setTimeout(r, delays[i]))
+        }
+
+        setOtpError("Your wallet is still being created. Please sign in again in a moment.")
+        setOtpVerifying(false)
+        setOtpDigits(["", "", "", "", "", ""])
+        setPinPhase("pin")
+        setConnectView("email")
+      })
+    } catch (e: any) {
+      setOtpError(e?.message || "PIN setup failed. Try again.")
+      setOtpVerifying(false)
+      setConnectView("otp")
     }
   }
 
@@ -285,8 +377,76 @@ export default function ArcLayout({ children, active }: { children: React.ReactN
     }
     document.getElementById("sdkIframe")?.remove()
     setEmailLoading(false)
+    setOtpVerifying(false)
+    setOtpDigits(["", "", "", "", "", ""])
+    setOtpError("")
     setConnectView("email")
     setEmailError("")
+  }
+
+  async function resendOTP() {
+    if (resendSecondsLeft > 0 || !emailInput) return
+    const email = emailInput.toLowerCase().trim()
+    setOtpError("")
+    setOtpDigits(["", "", "", "", "", ""])
+    try {
+      const res = await fetch("/api/auth/otp/send", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ email }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setOtpError(data.error || "Failed to resend code")
+        return
+      }
+      setOtpExpiresAt(Date.now() + 10 * 60 * 1000)
+      setResendAvailableAt(Date.now() + 30 * 1000)
+      setNow(Date.now())
+      setResentToast(true)
+      setTimeout(() => setResentToast(false), 2500)
+      setTimeout(() => otpRefs.current[0]?.focus(), 50)
+    } catch (e: any) {
+      setOtpError(e?.message || "Network error. Try again.")
+    }
+  }
+
+  function setOtpDigitAt(idx: number, raw: string) {
+    const digit = raw.replace(/\D/g, "").slice(-1)
+    setOtpDigits(prev => {
+      const next = [...prev]
+      next[idx] = digit
+      // Auto-advance focus
+      if (digit && idx < 5) setTimeout(() => otpRefs.current[idx + 1]?.focus(), 0)
+      // Auto-submit when complete
+      if (next.every(d => d !== "")) {
+        const code = next.join("")
+        setTimeout(() => verifyOTP(code), 50)
+      }
+      return next
+    })
+    setOtpError("")
+  }
+
+  function handleOtpKeyDown(idx: number, e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Backspace" && !otpDigits[idx] && idx > 0) {
+      otpRefs.current[idx - 1]?.focus()
+    } else if (e.key === "ArrowLeft" && idx > 0) {
+      otpRefs.current[idx - 1]?.focus()
+    } else if (e.key === "ArrowRight" && idx < 5) {
+      otpRefs.current[idx + 1]?.focus()
+    }
+  }
+
+  function handleOtpPaste(e: React.ClipboardEvent<HTMLInputElement>) {
+    const pasted = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6)
+    if (pasted.length === 0) return
+    e.preventDefault()
+    const next = ["", "", "", "", "", ""]
+    for (let i = 0; i < pasted.length; i++) next[i] = pasted[i]
+    setOtpDigits(next)
+    otpRefs.current[Math.min(pasted.length, 5)]?.focus()
+    if (pasted.length === 6) setTimeout(() => verifyOTP(pasted), 50)
   }
 
   function disconnectWallet() {
@@ -733,7 +893,7 @@ export default function ArcLayout({ children, active }: { children: React.ReactN
       {/* CONNECT MODAL */}
       {showConnectModal && (
         <div
-          onClick={() => { if (connectView === "circle") { cancelCircle() } else if (!emailLoading) { setShowConnectModal(false) } }}
+          onClick={() => { if (connectView === "pin") { cancelCircle() } else if (!emailLoading && !otpVerifying) { setShowConnectModal(false) } }}
           style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(4px)" }}>
           <div
             onClick={e => e.stopPropagation()}
@@ -743,14 +903,14 @@ export default function ArcLayout({ children, active }: { children: React.ReactN
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "24px" }}>
               <div>
                 <div style={{ fontSize: "9px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: "4px" }}>
-                  {connectView === "choose" ? "Connect" : connectView === "wallets" ? "Browser Wallets" : connectView === "email" ? "Email Wallet" : "Circle Wallet"}
+                  {connectView === "choose" ? "Connect" : connectView === "wallets" ? "Browser Wallets" : connectView === "email" ? "Email Wallet" : connectView === "otp" ? "Verify Email" : "Secure Setup"}
                 </div>
                 <div style={{ fontSize: "16px", fontWeight: 700, letterSpacing: "-0.03em", color: t1 }}>
-                  {connectView === "choose" ? "Connect to ArcLens" : connectView === "wallets" ? "Choose a wallet" : connectView === "email" ? "Enter your email" : "Setting up wallet…"}
+                  {connectView === "choose" ? "Connect to ArcLens" : connectView === "wallets" ? "Choose a wallet" : connectView === "email" ? "Enter your email" : connectView === "otp" ? "Enter your code" : "Set your PIN"}
                 </div>
               </div>
               <button
-                onClick={() => { if (connectView === "circle") cancelCircle(); else if (!emailLoading) setShowConnectModal(false) }}
+                onClick={() => { if (connectView === "pin") cancelCircle(); else if (!emailLoading && !otpVerifying) setShowConnectModal(false) }}
                 style={{ background: "none", border: "none", color: t3, cursor: "pointer", fontSize: "20px", lineHeight: 1, padding: "4px" }}>×</button>
             </div>
 
@@ -845,12 +1005,14 @@ export default function ArcLayout({ children, active }: { children: React.ReactN
             {connectView === "email" && (
               <div>
                 <div style={{ fontSize: "11px", color: t2, marginBottom: "12px", lineHeight: 1.6 }}>
-                  Enter your email to create or access your Circle wallet. You'll set a PIN in the window that appears.
+                  {isSignInFlow
+                    ? "Welcome back. We'll send a fresh code to your inbox."
+                    : "Enter your email and we'll send you a verification code to access your wallet."}
                 </div>
                 <input
                   type="email"
                   value={emailInput}
-                  onChange={e => setEmailInput(e.target.value)}
+                  onChange={e => onEmailChange(e.target.value)}
                   onKeyDown={e => e.key === "Enter" && connectCircle()}
                   placeholder="you@example.com"
                   autoFocus
@@ -858,43 +1020,137 @@ export default function ArcLayout({ children, active }: { children: React.ReactN
                 />
                 {emailError && <div style={{ fontSize: "11px", color: "#e03348", marginBottom: "10px" }}>{emailError}</div>}
                 <div style={{ display: "flex", gap: "8px" }}>
-                  <button onClick={() => setConnectView("choose")}
+                  <button onClick={() => { setIsSignInFlow(false); setConnectView("choose") }}
                     style={{ height: "38px", padding: "0 14px", background: "transparent", border: "1px solid var(--bdr)", borderRadius: "8px", color: t3, fontSize: "12px", cursor: "pointer" }}>
                     Back
                   </button>
                   <button onClick={connectCircle} disabled={emailLoading}
                     style={{ flex: 1, height: "38px", background: arc, border: "none", borderRadius: "8px", color: "#fff", fontSize: "13px", fontWeight: 600, cursor: emailLoading ? "not-allowed" : "pointer", opacity: emailLoading ? 0.6 : 1 }}>
-                    {emailLoading ? "Connecting…" : "Continue →"}
+                    {emailLoading ? "Sending code…" : isSignInFlow ? "Send sign-in code →" : "Continue →"}
                   </button>
                 </div>
               </div>
             )}
 
-            {/* Circle loading view */}
-            {connectView === "circle" && (
+            {/* Custom OTP input view */}
+            {connectView === "otp" && (
+              <div>
+                <div style={{ fontSize: "12px", color: t2, lineHeight: 1.6, marginBottom: "20px" }}>
+                  We sent a 6-digit code to <span style={{ color: t1, fontWeight: 600 }}>{emailInput}</span>
+                </div>
+
+                <div style={{ display: "flex", gap: "8px", justifyContent: "space-between", marginBottom: "14px" }}>
+                  {otpDigits.map((digit, idx) => (
+                    <input
+                      key={idx}
+                      ref={el => { otpRefs.current[idx] = el }}
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      maxLength={1}
+                      value={digit}
+                      disabled={otpVerifying}
+                      onChange={e => setOtpDigitAt(idx, e.target.value)}
+                      onKeyDown={e => handleOtpKeyDown(idx, e)}
+                      onPaste={handleOtpPaste}
+                      style={{
+                        width: "44px",
+                        height: "52px",
+                        textAlign: "center",
+                        fontSize: "22px",
+                        fontWeight: 700,
+                        fontFamily: mono,
+                        color: t1,
+                        background: "var(--surf2, #0e1224)",
+                        border: `1.5px solid ${otpError ? "rgba(224,51,72,0.6)" : digit ? "rgba(26,86,255,0.5)" : "var(--bdr)"}`,
+                        borderRadius: "9px",
+                        outline: "none",
+                        transition: "border-color .12s, background .12s",
+                        caretColor: "#1a56ff",
+                        opacity: otpVerifying ? 0.6 : 1,
+                      }}
+                    />
+                  ))}
+                </div>
+
+                {otpError && (
+                  <div style={{ fontSize: "11px", color: "#e03348", marginBottom: "12px", lineHeight: 1.6 }}>{otpError}</div>
+                )}
+
+                {otpVerifying && (
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px", fontSize: "11px", color: t3, fontFamily: mono }}>
+                    <div style={{ width: "12px", height: "12px", borderRadius: "50%", border: "1.5px solid rgba(26,86,255,0.2)", borderTopColor: "#1a56ff", animation: "circleSpinAnim 0.7s linear infinite" }} />
+                    Verifying…
+                  </div>
+                )}
+
+                {resentToast && (
+                  <div style={{ fontSize: "11px", color: "#00b87a", fontFamily: mono, marginBottom: "12px" }}>
+                    ✓ A fresh code has been sent
+                  </div>
+                )}
+
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "14px", paddingTop: "14px", borderTop: "1px solid var(--bdr)" }}>
+                  <div style={{ fontSize: "10px", color: t3, fontFamily: mono }}>
+                    {codeSecondsLeft > 0
+                      ? `Expires in ${Math.floor(codeSecondsLeft / 60)}:${String(codeSecondsLeft % 60).padStart(2, "0")}`
+                      : "Code expired"}
+                  </div>
+                  <button onClick={resendOTP} disabled={resendSecondsLeft > 0 || otpVerifying}
+                    style={{
+                      height: "30px",
+                      padding: "0 12px",
+                      background: "transparent",
+                      border: `1px solid ${resendSecondsLeft > 0 ? "var(--bdr)" : "rgba(26,86,255,0.35)"}`,
+                      borderRadius: "7px",
+                      color: resendSecondsLeft > 0 ? t3 : "#8aaeff",
+                      fontSize: "11px",
+                      fontFamily: mono,
+                      cursor: resendSecondsLeft > 0 || otpVerifying ? "not-allowed" : "pointer",
+                      opacity: resendSecondsLeft > 0 || otpVerifying ? 0.55 : 1,
+                      transition: "border-color .12s, color .12s",
+                    }}>
+                    {resendSecondsLeft > 0 ? `Resend in ${resendSecondsLeft}s` : "Resend code"}
+                  </button>
+                </div>
+
+                <button onClick={() => { setConnectView("email"); setOtpError(""); setOtpDigits(["","","","","",""]) }}
+                  style={{ width: "100%", marginTop: "12px", height: "34px", padding: "0 14px", background: "transparent", border: "1px solid var(--bdr)", borderRadius: "7px", color: t3, fontSize: "11px", fontFamily: mono, cursor: "pointer" }}>
+                  ← Use a different email
+                </button>
+              </div>
+            )}
+
+            {/* PIN setup view — first-time users only, Circle iframe takes over */}
+            {connectView === "pin" && (
               <div style={{ textAlign: "center", padding: "8px 0 4px" }}>
-                {emailError ? (
+                {otpError ? (
                   <>
-                    <div style={{ fontSize: "11px", color: "#e03348", marginBottom: "14px", lineHeight: 1.6 }}>{emailError}</div>
-                    <button onClick={() => { setConnectView("email"); setEmailError("") }}
+                    <div style={{ fontSize: "11px", color: "#e03348", marginBottom: "14px", lineHeight: 1.6 }}>{otpError}</div>
+                    <button onClick={() => { setConnectView("email"); setOtpError(""); setOtpDigits(["","","","","",""]) }}
                       style={{ height: "36px", padding: "0 20px", background: "transparent", border: "1px solid var(--bdr)", borderRadius: "8px", color: t2, fontSize: "12px", cursor: "pointer" }}>
-                      Try again
+                      Start over
                     </button>
                   </>
                 ) : (
                   <>
-                    {/* Spinner */}
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "18px" }}>
                       <div style={{ width: "36px", height: "36px", borderRadius: "50%", border: "2px solid rgba(26,86,255,0.15)", borderTopColor: "#1a56ff", animation: "circleSpinAnim 0.8s linear infinite" }} />
                     </div>
-                    <div style={{ fontSize: "14px", fontWeight: 600, color: t1, marginBottom: "6px" }}>Opening secure window</div>
-                    <div style={{ fontSize: "12px", color: t3, lineHeight: 1.6, fontFamily: mono }}>
-                      Set your PIN in the Circle window.<br />It may appear behind this tab.
+                    <div style={{ fontSize: "14px", fontWeight: 600, color: t1, marginBottom: "6px" }}>
+                      {pinPhase === "finalizing" ? "Finalizing your wallet" : "Set up your wallet"}
                     </div>
-                    <button onClick={cancelCircle}
-                      style={{ marginTop: "20px", height: "32px", padding: "0 18px", background: "transparent", border: "1px solid var(--bdr)", borderRadius: "7px", color: t3, fontSize: "11px", cursor: "pointer", fontFamily: mono }}>
-                      Cancel
-                    </button>
+                    <div style={{ fontSize: "12px", color: t3, lineHeight: 1.6, fontFamily: mono }}>
+                      {pinPhase === "finalizing"
+                        ? <>Almost there. This usually takes<br />a few seconds.</>
+                        : <>A secure window is opening so you can create your<br />PIN. You'll only need to do this once.</>}
+                    </div>
+                    {pinPhase === "pin" && (
+                      <button onClick={cancelCircle}
+                        style={{ marginTop: "20px", height: "32px", padding: "0 18px", background: "transparent", border: "1px solid var(--bdr)", borderRadius: "7px", color: t3, fontSize: "11px", cursor: "pointer", fontFamily: mono }}>
+                        Cancel
+                      </button>
+                    )}
                   </>
                 )}
               </div>
