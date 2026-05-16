@@ -2,12 +2,6 @@ export const runtime = "nodejs"
 import { NextRequest, NextResponse } from "next/server"
 import { Pool } from "pg"
 
-export async function DELETE() {
-  const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
-  await pool.query(`DELETE FROM builder_profiles WHERE address LIKE '0xdead%'`)
-  return NextResponse.json({ success: true })
-}
-
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
 
 async function ensureTable() {
