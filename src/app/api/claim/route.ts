@@ -12,13 +12,22 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Email and project required" }, { status: 400 })
     }
     const result = await pool.query(
-      `SELECT id, name, slug, email FROM projects WHERE (slug = $1 OR id::text = $1) AND approved = true AND live = true`,
+      `SELECT id, name, slug, email, owner_wallet FROM projects WHERE (slug = $1 OR id::text = $1) AND approved = true AND live = true`,
       [slug.trim()]
     )
     if (result.rows.length === 0) return NextResponse.json({ error: "Project not found" }, { status: 404 })
     const project = result.rows[0]
     if (project.email?.toLowerCase() !== email.trim().toLowerCase()) {
       return NextResponse.json({ error: "Email does not match the submission email for this project" }, { status: 403 })
+    }
+    // Already claimed — refuse to issue a new claim email so a compromised
+    // submission inbox can't be used to overwrite ownership. Lost-wallet
+    // recovery routes through support.
+    if (project.owner_wallet) {
+      return NextResponse.json(
+        { error: "This project has already been claimed. Sign in with the wallet that owns it, or contact support if you lost access." },
+        { status: 409 }
+      )
     }
     const token   = randomBytes(32).toString("hex")
     const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
@@ -146,12 +155,22 @@ export async function PUT(req: NextRequest) {
     }
 
     const result = await pool.query(
-      `SELECT id, name, claim_token_expires FROM projects WHERE (slug = $1 OR id::text = $1) AND claim_token = $2`,
+      `SELECT id, name, claim_token_expires, owner_wallet FROM projects WHERE (slug = $1 OR id::text = $1) AND claim_token = $2`,
       [slug, token]
     )
     if (result.rows.length === 0) return NextResponse.json({ error: "Invalid token" }, { status: 403 })
     if (new Date(result.rows[0].claim_token_expires) < new Date()) {
       return NextResponse.json({ error: "Token expired" }, { status: 403 })
+    }
+    // Defense in depth: even with a valid token + signature, never silently
+    // overwrite an existing owner. A different wallet trying to claim the
+    // same project has to go through support.
+    const existingOwner = result.rows[0].owner_wallet
+    if (existingOwner && existingOwner.toLowerCase() !== addr) {
+      return NextResponse.json(
+        { error: "This project is already claimed by another wallet. Contact support if you need to transfer ownership." },
+        { status: 409 }
+      )
     }
 
     // Tamper-proof: token alone is no longer enough — must prove wallet ownership.

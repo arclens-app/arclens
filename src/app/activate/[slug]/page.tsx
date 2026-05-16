@@ -70,7 +70,9 @@ export default function ActivatePage() {
         const res  = await fetch(`/api/claim?slug=${slug}&token=${token}`)
         const data = await res.json()
         if (!res.ok) { setError(data.error || "Invalid or expired link"); setLoading(false); return }
-        if (data.project.owner_wallet) { router.replace(`/dashboard/${slug}`); return }
+        // Preserve the token so the dashboard authenticates via the magic link
+        // when the user isn't on the same device/wallet they originally used.
+        if (data.project.owner_wallet) { router.replace(`/dashboard/${slug}?token=${token}`); return }
         setProject(data.project)
 
         // Check Circle wallet in localStorage first, then MetaMask
@@ -214,7 +216,9 @@ export default function ActivatePage() {
       return
     }
     setStep("done")
-    setTimeout(() => router.replace(`/dashboard/${slug}`), 2000)
+    // Keep the token in the URL — gives the dashboard a fallback auth path
+    // if the wallet auth attempt hasn't completed yet on first paint.
+    setTimeout(() => router.replace(`/dashboard/${slug}?token=${token}`), 2000)
   }
 
   async function signAndActivate() {
