@@ -117,6 +117,7 @@ export default function TesterProfilePage() {
   // PFP upload state
   const [pfpUrl, setPfpUrl]         = useState<string | null>(null)
   const [pfpUploading, setPfpUploading] = useState(false)
+  const [pfpError,     setPfpError]     = useState("")
   const [pfpHover, setPfpHover]     = useState(false)
   const fileInputRef                = useRef<HTMLInputElement>(null)
 
@@ -147,20 +148,34 @@ export default function TesterProfilePage() {
 
   async function handlePfpUpload(file: File) {
     if (!file) return
+    setPfpError("")
     setPfpUploading(true)
     try {
+      // 1. Upload to image host
       const fd = new FormData()
       fd.append("image", file)
       const up = await fetch("/api/upload", { method: "POST", body: fd })
-      const { url } = await up.json()
-      if (!url) return
-      // Save to DB
-      await fetch(`/api/trials/tester/${walletParam}`, {
-        method: "PATCH",
+      const upJson = await up.json().catch(() => ({} as any))
+      if (!up.ok || !upJson?.url) {
+        setPfpError(upJson?.error || "Image upload failed. Try a different file.")
+        return
+      }
+
+      // 2. Save the URL to your tester profile (requires session for your own wallet)
+      const save = await fetch(`/api/trials/tester/${walletParam}`, {
+        method:  "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pfp_url: url }),
+        body:    JSON.stringify({ pfp_url: upJson.url }),
       })
-      setPfpUrl(url)
+      const saveJson = await save.json().catch(() => ({} as any))
+      if (!save.ok) {
+        setPfpError(saveJson?.error || "Couldn't save your profile photo. Try again.")
+        return
+      }
+
+      setPfpUrl(upJson.url)
+    } catch (e: any) {
+      setPfpError(e?.message || "Network error. Try again.")
     } finally {
       setPfpUploading(false)
     }
@@ -248,6 +263,11 @@ export default function TesterProfilePage() {
                     </div>
                   )}
                 </div>
+                {isOwn && pfpError && (
+                  <div style={{ marginTop: 8, fontSize: 11, color: "#e03348", fontFamily: "monospace" }}>
+                    {pfpError}
+                  </div>
+                )}
               </div>
             </div>
 

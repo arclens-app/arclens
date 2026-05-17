@@ -19,8 +19,15 @@ export async function GET(req: NextRequest) {
     "icon.horse",
   ]
   try {
-    const hostname = new URL(url).hostname
-    if (!allowed.some(h => hostname.endsWith(h))) {
+    const parsed = new URL(url)
+    // Reject anything that isn't http/https — blocks file:// data:// javascript:// etc
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return new NextResponse("Protocol not allowed", { status: 403 })
+    }
+    const hostname = parsed.hostname.toLowerCase()
+    // Exact match or true subdomain — `endsWith("ibb.co")` alone matched evil-ibb.co
+    const ok = allowed.some(h => hostname === h || hostname.endsWith("." + h))
+    if (!ok) {
       return new NextResponse("Domain not allowed", { status: 403 })
     }
   } catch {

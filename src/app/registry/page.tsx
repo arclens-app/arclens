@@ -1,7 +1,6 @@
 "use client"
 import { useEffect, useState } from "react"
 import ArcLayout from "@/components/ArcLayout"
-import { circleSignMessage } from "@/lib/circleSign"
 
 const PROTECTED_NAMES = ["usdc","circle","arc bridge","arclens","uniswap","aave","compound","metamask","official","verified"]
 
@@ -36,9 +35,6 @@ export default function RegistryPage() {
   const [deployer, setDeployer]         = useState("")
   const [deployerChecked, setDeployerChecked] = useState(false)
   const [checkingDeployer, setCheckingDeployer] = useState(false)
-  const [signing, setSigning]           = useState(false)
-  const [signed, setSigned]             = useState(false)
-  const [signature, setSignature]       = useState("")
   const [submitting, setSubmitting]     = useState(false)
   const [status, setStatus]             = useState<"idle"|"done"|"error">("idle")
   const [statusMsg, setStatusMsg]       = useState("")
@@ -72,7 +68,6 @@ export default function RegistryPage() {
     }
     setCheckingDeployer(true)
     setDeployerChecked(false)
-    setSigned(false)
     setWarnings([])
     try {
       // Check contract exists
@@ -108,52 +103,23 @@ export default function RegistryPage() {
     finally { setCheckingDeployer(false) }
   }
 
-  async function signClaim() {
-    if (!(window as any).ethereum) { alert("Connect your wallet first"); return }
-    if (!walletAddr) { alert("Connect your wallet first"); return }
-    setSigning(true)
-    try {
-      const message = [
-        "ArcLens Contract Registry Claim",
-        "",
-        "I am claiming identity for:",
-        "Contract: " + addr.trim(),
-        "Name: " + name.trim(),
-        "Timestamp: " + Math.floor(Date.now() / 1000),
-        "",
-        "This is a FREE signature. No transaction. No gas. No funds moved.",
-      ].join("\n")
-
-      const walletType  = localStorage.getItem("arclens-wallet-type")
-      const circleEmail = localStorage.getItem("arclens-circle-email")
-      let sig: string
-
-      if (walletType === "circle" && circleEmail) {
-        sig = await circleSignMessage(circleEmail, message)
-      } else {
-        if (!(window as any).ethereum) { alert("Connect your wallet first"); return }
-        sig = await (window as any).ethereum.request({ method: "personal_sign", params: [message, walletAddr] })
-      }
-
-      setSignature(sig)
-      setSigned(true)
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e)
-      if (!msg.includes("rejected")) alert("Signing failed: " + msg)
-    } finally { setSigning(false) }
-  }
-
   async function submit() {
     if (!addr.trim() || !name.trim() || !email.trim()) {
       setStatus("error"); setStatusMsg("Contract address, name and email are required"); return
     }
-    if (!signed) {
-      setStatus("error"); setStatusMsg("Please sign the claim with your wallet first"); return
+    if (!walletAddr) {
+      setStatus("error"); setStatusMsg("Connect your wallet first"); return
+    }
+    if (!deployerChecked || !deployer) {
+      setStatus("error"); setStatusMsg("Verify the contract on-chain first"); return
+    }
+    if (deployer.toLowerCase() !== walletAddr.toLowerCase()) {
+      setStatus("error"); setStatusMsg("Connected wallet is not the contract deployer. Connect the deployer wallet to claim."); return
     }
     setSubmitting(true)
     try {
       const res  = await fetch("/api/verify", {
-        method: "POST",
+        method:  "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           address:     addr.trim(),
@@ -164,9 +130,6 @@ export default function RegistryPage() {
           twitter:     twitter.trim() || undefined,
           email:       email.trim(),
           source_code: source.trim() || undefined,
-          signature,
-          signer:      walletAddr,
-          deployer,
           warnings,
         }),
       })
@@ -207,7 +170,7 @@ export default function RegistryPage() {
           {[
             { n: "1", label: "Connect wallet",      sub: "Prove you own the deployer address", done: !!walletAddr },
             { n: "2", label: "Verify contract",     sub: "We confirm it exists on Arc",         done: deployerChecked },
-            { n: "3", label: "Sign the claim",      sub: "Free — no gas, no funds",             done: signed },
+            { n: "3", label: "Add source (optional)", sub: "Upgrades badge to verified",          done: !!source.trim() },
             { n: "4", label: "Submit for review",   sub: "Goes live after ArcLens approves",    done: status === "done" },
           ].map((s, i) => (
             <div key={i} style={{ background: surf, padding: "12px 16px", display: "flex", alignItems: "flex-start", gap: "10px" }}>
@@ -253,7 +216,7 @@ export default function RegistryPage() {
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "10px" }}>
                   <div>
                     <label style={{ display: "block", fontSize: "9.5px", fontFamily: mono, color: "#3a4870", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "5px" }}>Contract Address *</label>
-                    <input style={inputStyle} value={addr} onChange={e => { setAddr(e.target.value); setDeployerChecked(false); setSigned(false) }} placeholder="0x..." spellCheck={false} />
+                    <input style={inputStyle} value={addr} onChange={e => { setAddr(e.target.value); setDeployerChecked(false) }} placeholder="0x..." spellCheck={false} />
                   </div>
                   <div>
                     <label style={{ display: "block", fontSize: "9.5px", fontFamily: mono, color: "#3a4870", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "5px" }}>Contract Name *</label>
@@ -303,21 +266,9 @@ export default function RegistryPage() {
                 )}
               </div>
 
-              {/* STEP 3 — SIGN */}
+              {/* STEP 3 — SOURCE CODE (OPTIONAL) */}
               <div style={{ padding: "16px 20px", borderBottom: "1px solid " + border }}>
-                <div style={{ fontSize: "11px", fontFamily: mono, color: "#3a4870", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "8px" }}>Step 3 — Sign the Claim</div>
-                <div style={{ fontSize: "11.5px", color: "#6b7da8", lineHeight: 1.65, marginBottom: "12px", fontWeight: 300 }}>
-                  Sign a message proving you control this wallet. <strong style={{ color: "#eef2ff", fontWeight: 500 }}>This is completely free — no transaction, no gas, no funds moved.</strong> MetaMask will show a message signing screen, not a transaction screen.
-                </div>
-                <button onClick={signClaim} disabled={signing || !walletAddr || !deployerChecked}
-                  style={{ height: "36px", padding: "0 18px", background: signed ? "rgba(0,184,122,0.08)" : "#1a56ff", color: signed ? "#00d990" : "#fff", fontSize: "12px", fontWeight: 600, border: signed ? "1px solid rgba(0,184,122,0.2)" : "none", borderRadius: "7px", cursor: (signing||!walletAddr||!deployerChecked) ? "not-allowed" : "pointer", fontFamily: "'Geist',sans-serif", opacity: (signing||!walletAddr||!deployerChecked) ? .6 : 1 }}>
-                  {signing ? "Waiting for wallet..." : signed ? "✓ Claim signed" : "Sign Claim (Free)"}
-                </button>
-              </div>
-
-              {/* STEP 4 — SOURCE CODE (OPTIONAL) */}
-              <div style={{ padding: "16px 20px", borderBottom: "1px solid " + border }}>
-                <div style={{ fontSize: "11px", fontFamily: mono, color: "#3a4870", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "6px" }}>Step 4 — Source Code (Optional)</div>
+                <div style={{ fontSize: "11px", fontFamily: mono, color: "#3a4870", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "6px" }}>Step 3 — Source Code (Optional)</div>
                 <div style={{ fontSize: "11px", color: "#3a4870", fontFamily: mono, marginBottom: "8px" }}>Submitting source code upgrades your badge from ✓ Claimed to ✓✓ Verified. Source code is publicly readable — it shows users your contract is open and auditable.</div>
                 <textarea
                   style={{ ...inputStyle, height: "100px", padding: "10px 12px", resize: "vertical", lineHeight: 1.6 } as React.CSSProperties}
@@ -326,14 +277,21 @@ export default function RegistryPage() {
                 />
               </div>
 
-              {/* SUBMIT */}
-              <div style={{ padding: "14px 20px", display: "flex", alignItems: "center", gap: "12px" }}>
-                <button onClick={submit} disabled={submitting || !signed}
-                  style={{ flex: 1, height: "40px", background: status === "done" ? "#00b87a" : "#1a56ff", color: "#fff", fontSize: "13px", fontWeight: 600, border: "none", borderRadius: "8px", cursor: (submitting||!signed) ? "not-allowed" : "pointer", fontFamily: "'Geist',sans-serif", opacity: (submitting||!signed) ? .7 : 1 }}>
-                  {submitting ? "Submitting..." : status === "done" ? "✓ Submitted" : "Submit for Review"}
-                </button>
-                <div style={{ fontSize: "10px", fontFamily: mono, color: "#3a4870", lineHeight: 1.6 }}>Free · Reviewed by<br />ArcLens team</div>
-              </div>
+              {/* SUBMIT — backend re-fetches deployer and rejects if signed-in wallet doesn't match */}
+              {(() => {
+                const deployerMatches = !!walletAddr && !!deployer && deployer.toLowerCase() === walletAddr.toLowerCase()
+                const ready = deployerChecked && deployerMatches
+                return (
+                  <div style={{ padding: "14px 20px", display: "flex", alignItems: "center", gap: "12px" }}>
+                    <button onClick={submit} disabled={submitting || !ready}
+                      title={!walletAddr ? "Connect wallet" : !deployerChecked ? "Verify the contract first" : !deployerMatches ? "Connected wallet is not the deployer" : ""}
+                      style={{ flex: 1, height: "40px", background: status === "done" ? "#00b87a" : ready ? "#1a56ff" : "rgba(26,86,255,0.25)", color: "#fff", fontSize: "13px", fontWeight: 600, border: "none", borderRadius: "8px", cursor: (submitting||!ready) ? "not-allowed" : "pointer", fontFamily: "'Geist',sans-serif", opacity: submitting ? .7 : 1 }}>
+                      {submitting ? "Submitting..." : status === "done" ? "✓ Submitted" : !walletAddr ? "Connect wallet to submit" : !deployerChecked ? "Verify contract first" : !deployerMatches ? "Wrong wallet — connect deployer" : "Submit for Review"}
+                    </button>
+                    <div style={{ fontSize: "10px", fontFamily: mono, color: "#3a4870", lineHeight: 1.6 }}>Free · Reviewed by<br />ArcLens team</div>
+                  </div>
+                )
+              })()}
 
               {(status === "done" || status === "error") && (
                 <div style={{ margin: "0 20px 16px", padding: "11px 13px", background: status === "done" ? "rgba(0,184,122,0.06)" : "rgba(224,51,72,0.06)", border: "1px solid " + (status === "done" ? "rgba(0,184,122,0.2)" : "rgba(224,51,72,0.2)"), borderRadius: "8px", fontSize: "12px", color: status === "done" ? "#00d990" : "#e03348", lineHeight: 1.65 }}>

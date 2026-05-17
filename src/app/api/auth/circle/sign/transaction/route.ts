@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { Pool } from "pg"
+import { enforce } from "@/lib/ratelimit"
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
 const BASE = "https://api.circle.com"
@@ -16,6 +17,8 @@ function apiHeaders(userToken?: string) {
 // Accepts a generic contract execution request.
 // Caller supplies contractAddress, abiFunctionSignature, abiParameters.
 export async function POST(req: NextRequest) {
+  const blocked = await enforce(req, "circle-sign-tx", { limit: 20, windowMs: 60_000 })
+  if (blocked) return blocked
   try {
     const { email, contractAddress, abiFunctionSignature, abiParameters } = await req.json()
     if (!email || !contractAddress || !abiFunctionSignature)

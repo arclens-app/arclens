@@ -58,6 +58,13 @@ export async function rateLimit(
     const elapsedInWindowMs = (Math.floor(Date.now() / 1000) % windowSec) * 1000
     const resetIn = windowMs - elapsedInWindowMs
 
+    // Opportunistic sweep: once per ~500 requests, drop stale buckets so the
+    // table doesn't grow forever. ~24h kept is enough for analytics + retry.
+    if (Math.random() < 0.002) {
+      pool.query(`DELETE FROM rate_limits WHERE window_start < NOW() - INTERVAL '24 hours'`)
+        .catch(() => {})
+    }
+
     if (count > limit) return { allowed: false, remaining: 0, resetIn }
     return { allowed: true, remaining: Math.max(0, limit - count), resetIn }
   } catch (e) {

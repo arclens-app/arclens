@@ -78,7 +78,10 @@ export async function GET(req: NextRequest) {
         low:  USDC_LOW_THRESHOLD,
         crit: USDC_CRIT_THRESHOLD,
       },
-    }, { headers: { "Cache-Control": "no-store" } })
+    }, { headers: {
+      // Cache for 60s — admin doesn't need real-time and Arcscan calls aren't free
+      "Cache-Control": "private, max-age=60",
+    } })
   } catch (e) {
     console.error("[payout-balance]", e)
     return NextResponse.json({ error: "Failed to fetch balance" }, { status: 502 })
