@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { Pool } from "pg"
+import { enforce } from "@/lib/ratelimit"
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
 const BASE = "https://api.circle.com"
@@ -14,6 +15,8 @@ function apiHeaders(userToken?: string) {
 }
 
 export async function POST(req: NextRequest) {
+  const blocked = await enforce(req, "circle-sign-msg", { limit: 20, windowMs: 60_000 })
+  if (blocked) return blocked
   try {
     const { email, message } = await req.json()
     if (!email || !message) return NextResponse.json({ error: "email and message required" }, { status: 400 })

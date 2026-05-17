@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { Pool } from "pg"
+import { enforce } from "@/lib/ratelimit"
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
 const BASE = "https://api.circle.com"
@@ -16,6 +17,8 @@ function apiHeaders(userToken?: string) {
 // After a Circle contractExecution challenge completes, call this to get the on-chain txHash.
 // Circle may take a few seconds to index the transaction, so we retry up to 6 times.
 export async function POST(req: NextRequest) {
+  const blocked = await enforce(req, "circle-tx-latest", { limit: 30, windowMs: 60_000 })
+  if (blocked) return blocked
   try {
     const { email } = await req.json()
     if (!email) return NextResponse.json({ error: "email required" }, { status: 400 })

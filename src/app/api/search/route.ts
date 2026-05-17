@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
+import { enforce } from "@/lib/ratelimit"
 
 export async function POST(req: NextRequest) {
+  const blocked = await enforce(req, "search", { limit: 60, windowMs: 60_000 })
+  if (blocked) return blocked
   try {
     const { query } = await req.json()
     if (!query?.trim()) {

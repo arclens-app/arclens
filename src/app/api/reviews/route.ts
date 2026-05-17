@@ -1,5 +1,7 @@
 ﻿import { NextRequest, NextResponse } from "next/server"
 import { Pool } from "pg"
+import { enforce } from "@/lib/ratelimit"
+import { getSession } from "@/lib/session"
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
 
@@ -57,11 +59,22 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const blocked = await enforce(req, "review-submit", { limit: 10, windowMs: 60_000 })
+    if (blocked) return blocked
+
     const body = await req.json()
     const { project_id, wallet, category, rating, review_text, is_public, contact } = body
 
     if (!project_id || !wallet || !category || !rating || !review_text?.trim()) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
+    }
+
+    // Session check: only the wallet owner can submit reviews as themselves.
+    // Without this, anyone who knew a wallet that had used the contract could
+    // submit a fake review under that wallet, capped by the duplicate check.
+    const sess = getSession(req)
+    if (!sess || sess.addr !== String(wallet).toLowerCase()) {
+      return NextResponse.json({ error: "Sign in with the reviewing wallet to leave a review" }, { status: 401 })
     }
     if (!CATEGORIES.includes(category)) {
       return NextResponse.json({ error: "Invalid category" }, { status: 400 })

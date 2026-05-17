@@ -1,16 +1,32 @@
 ﻿import { NextRequest, NextResponse } from "next/server"
 import { Pool } from "pg"
+import { enforce } from "@/lib/ratelimit"
+import { getSession } from "@/lib/session"
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
 
 // PATCH /api/trials/tester/[wallet] — update pfp_url
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ wallet: string }> }) {
+  const blocked = await enforce(req, "tester-pfp", { limit: 10, windowMs: 60_000 })
+  if (blocked) return blocked
+
   const { wallet } = await params
   const w = wallet.toLowerCase()
+
+  // Only the wallet owner can change their own PFP — must be signed in as them
+  const sess = getSession(req)
+  if (!sess || sess.addr !== w) {
+    return NextResponse.json({ error: "Sign in with this wallet to update your profile" }, { status: 401 })
+  }
+
   try {
     const { pfp_url } = await req.json()
     if (!pfp_url || typeof pfp_url !== "string") {
       return NextResponse.json({ error: "pfp_url required" }, { status: 400 })
+    }
+    // Cap the URL length so spam can't bloat the row
+    if (pfp_url.length > 1000) {
+      return NextResponse.json({ error: "pfp_url too long" }, { status: 400 })
     }
     // Upsert: create reputation row if not exists, then set pfp_url
     await pool.query(

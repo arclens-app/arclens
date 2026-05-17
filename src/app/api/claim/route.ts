@@ -84,7 +84,8 @@ export async function GET(req: NextRequest) {
       if (result.rows.length === 0) return NextResponse.json({ error: "Invalid or expired token" }, { status: 403 })
       if (new Date(result.rows[0].claim_token_expires) < new Date()) return NextResponse.json({ error: "Token expired" }, { status: 403 })
       projectRow = result.rows[0]
-      if (!projectRow.claimed_at) await pool.query(`UPDATE projects SET claimed_at = NOW() WHERE id = $1`, [projectRow.id])
+      // Do NOT set claimed_at here. The link being opened is not a claim;
+      // claimed_at flips when the wallet is actually attached in PUT below.
     } else {
       return NextResponse.json({ error: "Missing token or wallet" }, { status: 400 })
     }
@@ -189,7 +190,12 @@ export async function PUT(req: NextRequest) {
       }
     }
 
-    await pool.query(`UPDATE projects SET owner_wallet = $1 WHERE id = $2`, [addr, result.rows[0].id])
+    // Set both owner_wallet and claimed_at atomically — claimed_at now
+    // truthfully means "wallet attached", not "email link opened"
+    await pool.query(
+      `UPDATE projects SET owner_wallet = $1, claimed_at = COALESCE(claimed_at, NOW()) WHERE id = $2`,
+      [addr, result.rows[0].id]
+    )
     return NextResponse.json({ success: true })
   } catch (err) { console.error("[Claim PUT]", err); return NextResponse.json({ error: "Server error" }, { status: 500 }) }
 }
