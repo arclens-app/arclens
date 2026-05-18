@@ -11,7 +11,7 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejec
 // - MATERIAL: queued in pending_campaign_updates for admin approval. Stops
 //   bait-and-switch (high reward to attract testers → silently nerf after).
 // - Anything not in either list is locked once the campaign exists.
-const COSMETIC = new Set(["tagline", "description", "app_url", "banner_position", "campaign_logo", "reward_description"])
+const COSMETIC = new Set(["tagline", "description", "app_url", "banner_position", "campaign_logo", "reward_description", "invite_codes"])
 const MATERIAL = new Set(["expires_at", "total_slots", "contract_address"])
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -145,6 +145,24 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         return NextResponse.json({ error: "Contract address must be a valid 0x address" }, { status: 400 })
       }
       material.contract_address = addr || null
+    }
+
+    // Normalize invite_codes — dedupe case-insensitively, trim, cap.
+    if (cosmetic.invite_codes !== undefined) {
+      const raw = Array.isArray(cosmetic.invite_codes) ? cosmetic.invite_codes : []
+      const seen = new Set<string>()
+      const out: string[] = []
+      for (const v of raw) {
+        if (typeof v !== "string") continue
+        const trimmed = v.trim().slice(0, 64)
+        if (!trimmed) continue
+        const key = trimmed.toUpperCase()
+        if (seen.has(key)) continue
+        seen.add(key)
+        out.push(trimmed)
+        if (out.length >= 200) break
+      }
+      cosmetic.invite_codes = JSON.stringify(out)
     }
 
     // Apply cosmetic changes immediately. Build the SET clause dynamically but

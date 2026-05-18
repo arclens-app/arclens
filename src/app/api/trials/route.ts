@@ -104,6 +104,7 @@ export async function POST(req: NextRequest) {
       total_slots, is_fcfs, min_rank,
       project_id, creator_wallet,
       expires_at,
+      invite_codes,
     } = body
 
     if (!title?.trim())         return NextResponse.json({ error: "Title required" }, { status: 400 })
@@ -156,6 +157,24 @@ export async function POST(req: NextRequest) {
       slug = `${baseSlug}-${++suffix}`
     }
 
+    // Normalize invite codes — trim, cap length, dedupe case-insensitively.
+    // ArcLens stores them verbatim and displays to testers; we don't validate
+    // or enforce usage (Tower's DEX handles redemption).
+    const normalizedCodes: string[] = []
+    if (Array.isArray(invite_codes) && invite_codes.length > 0) {
+      const seen = new Set<string>()
+      for (const raw of invite_codes) {
+        if (typeof raw !== "string") continue
+        const c = raw.trim().slice(0, 64)
+        if (!c) continue
+        const key = c.toUpperCase()
+        if (seen.has(key)) continue
+        seen.add(key)
+        normalizedCodes.push(c)
+        if (normalizedCodes.length >= 200) break
+      }
+    }
+
     const result = await pool.query(
       `INSERT INTO campaigns
          (title, tagline, description, type,
@@ -165,8 +184,8 @@ export async function POST(req: NextRequest) {
           campaign_logo, banner_position, app_url, slug,
           total_slots, is_fcfs, min_rank,
           project_id, project_name, project_logo,
-          creator_wallet, expires_at, status)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,'pending_approval')
+          creator_wallet, expires_at, invite_codes, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,'pending_approval')
        RETURNING id, slug`,
       [
         title.trim(),
@@ -192,6 +211,7 @@ export async function POST(req: NextRequest) {
         project_logo,
         creator_wallet.toLowerCase(),
         expires_at || null,
+        JSON.stringify(normalizedCodes),
       ]
     )
 
