@@ -1,8 +1,12 @@
 ﻿"use client"
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import ArcLayout from "@/components/ArcLayout"
 import { useArcStore } from "@/store/arc"
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from "@dnd-kit/core"
+import type { DragEndEvent } from "@dnd-kit/core"
+import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from "@dnd-kit/sortable"
+import { CSS } from "@dnd-kit/utilities"
 
 interface Task { id: string; title: string; description: string; contract_address?: string }
 interface ReviewQuestion { id: string; label: string; placeholder: string; min_words: number; required: boolean }
@@ -159,6 +163,19 @@ export default function CreateCampaignPage() {
   const [rewardUsdcAmount, setRewardUsdcAmount] = useState("")
   const [totalSlots, setTotalSlots]             = useState("")
   const [expiresAt, setExpiresAt]               = useState("")
+  // Invite codes for closed-beta protocols (e.g. Tower). Founder pastes the
+  // codes their own product accepts; ArcLens just displays them to testers in
+  // a clean copy-to-clipboard panel. We don't validate or distribute — that's
+  // entirely on the founder's product side.
+  const [inviteCodesRaw, setInviteCodesRaw]     = useState("")
+  // Preview view: "card" mirrors the feed card; "journey" mirrors the full
+  // detail page testers actually walk through (banner → tasks → feedback → submit).
+  const [previewMode, setPreviewMode]           = useState<"card" | "journey">("journey")
+  // Which step the preview wizard is on. 0..tasks.length-1 = task steps,
+  // tasks.length = feedback step, tasks.length + 1 = submitted state.
+  const [previewStep, setPreviewStep]           = useState(0)
+  // Which preview chip is currently showing the "✓ COPIED" flash (cleared after ~1.4s)
+  const [previewCopied, setPreviewCopied]       = useState<string | null>(null)
   const [isFcfs, setIsFcfs]                     = useState(true)
   const [minRank, setMinRank]                   = useState(0)
   const [campaignLogo, setCampaignLogo]         = useState<string | null>(null)
@@ -189,6 +206,12 @@ export default function CreateCampaignPage() {
     if (error) errorRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })
   }, [error])
 
+  // Clamp preview step if tasks shrink (e.g. founder deletes a step the preview
+  // was currently showing). Max valid step is tasks.length + 1 (the done state).
+  useEffect(() => {
+    setPreviewStep(s => Math.min(s, tasks.length + 1))
+  }, [tasks.length])
+
   // Save draft to localStorage, debounced 600ms
   const saveDraft = useCallback(() => {
     if (saveTimer.current) clearTimeout(saveTimer.current)
@@ -198,12 +221,13 @@ export default function CreateCampaignPage() {
           type, title, tagline, description, contractAddress, projectId,
           tasks, questions, rewardType, rewardDesc, rewardUsdcAmount,
           totalSlots, expiresAt, isFcfs, minRank, campaignLogo, bannerPos, appUrl,
+          inviteCodesRaw,
         }))
       } catch { /* storage full — silent */ }
     }, 600)
   }, [type, title, tagline, description, contractAddress, projectId, tasks, questions,
       rewardType, rewardDesc, rewardUsdcAmount, totalSlots, expiresAt, isFcfs, minRank,
-      campaignLogo, bannerPos, appUrl])
+      campaignLogo, bannerPos, appUrl, inviteCodesRaw])
 
   useEffect(() => {
     if (mounted) saveDraft()
@@ -237,6 +261,7 @@ export default function CreateCampaignPage() {
         if (d.campaignLogo)     { setCampaignLogo(d.campaignLogo); setLogoPreview(d.campaignLogo) }
         if (d.bannerPos)        setBannerPos(d.bannerPos)
         if (d.appUrl)           setAppUrl(d.appUrl)
+        if (typeof d.inviteCodesRaw === "string")  setInviteCodesRaw(d.inviteCodesRaw)
         setDraftRestored(true)
       }
     } catch { /* corrupt draft — ignore */ }
@@ -304,6 +329,24 @@ export default function CreateCampaignPage() {
   function addTask() { setTasks(p => [...p, { id: uid(), title: "", description: "", contract_address: "" }]) }
   function updateTask(id: string, f: keyof Task, v: string) { setTasks(p => p.map(t => t.id === id ? { ...t, [f]: v } : t)) }
   function removeTask(id: string) { if (tasks.length > 1) setTasks(p => p.filter(t => t.id !== id)) }
+
+  // Drag-and-drop sensors: PointerSensor activates only after 6px of movement so
+  // a click on the row inputs doesn't accidentally start a drag. Keyboard sensor
+  // makes the reorder a11y-accessible (Space to pick up, arrows to move, Enter to drop).
+  const dndSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  )
+  function onTaskDragEnd(e: DragEndEvent) {
+    const { active, over } = e
+    if (!over || active.id === over.id) return
+    setTasks(prev => {
+      const from = prev.findIndex(t => t.id === active.id)
+      const to   = prev.findIndex(t => t.id === over.id)
+      if (from < 0 || to < 0) return prev
+      return arrayMove(prev, from, to)
+    })
+  }
   function addQuestion() { setQuestions(p => [...p, { id: uid(), label: "", placeholder: "", min_words: 25, required: true }]) }
   function updateQuestion(id: string, f: keyof ReviewQuestion, v: string | number | boolean) { setQuestions(p => p.map(q => q.id === id ? { ...q, [f]: v } : q)) }
   function removeQuestion(id: string) { if (questions.length > 1) setQuestions(p => p.filter(q => q.id !== id)) }
@@ -358,6 +401,7 @@ export default function CreateCampaignPage() {
           is_fcfs: isFcfs, min_rank: minRank,
           project_id: projectId, creator_wallet: wallet, expires_at: expiresAt || null,
           banner_position: `${bannerPos.x}% ${bannerPos.y}%`,
+          invite_codes: parsedInviteCodes,
         }),
       })
       const data = await res.json()
@@ -369,6 +413,24 @@ export default function CreateCampaignPage() {
 
   const selectedType  = TYPES.find(t => t.id === type)!
   const selectedRwd   = REWARDS.find(r => r.id === rewardType)!
+
+  // Parse invite-code textarea: split on newline / comma / semicolon / whitespace,
+  // trim, drop empties, cap length, dedupe case-insensitively. Preserve original
+  // case for display so Tower's "TWR-ABC123" still looks like "TWR-ABC123".
+  const parsedInviteCodes = useMemo(() => {
+    const raw = inviteCodesRaw.split(/[\n,;\s]+/).map(s => s.trim()).filter(Boolean)
+    const seen = new Set<string>()
+    const out: string[] = []
+    for (const c of raw) {
+      const key = c.toUpperCase()
+      if (seen.has(key)) continue
+      seen.add(key)
+      out.push(c.slice(0, 64))
+      if (out.length >= 200) break
+    }
+    return out
+  }, [inviteCodesRaw])
+
   const totalUsdcCost = rewardType === "usdc" && rewardUsdcAmount && totalSlots
     ? (parseFloat(rewardUsdcAmount) * parseInt(totalSlots)).toFixed(2) : null
 
@@ -468,6 +530,7 @@ export default function CreateCampaignPage() {
                 setRewardType("whitelist"); setRewardDesc(""); setRewardUsdcAmount("")
                 setTotalSlots(""); setExpiresAt(""); setIsFcfs(true); setMinRank(0)
                 setCampaignLogo(null); setLogoPreview(null); setBannerPos({ x: 50, y: 50 }); setAppUrl("")
+                setInviteCodesRaw("")
               }} style={{ fontSize: 11, fontFamily: mono, color: "var(--t3,#2e3a5c)", background: "none", border: "none", cursor: "pointer", padding: 0, textDecoration: "underline" }}>
                 Clear draft
               </button>
@@ -741,45 +804,64 @@ export default function CreateCampaignPage() {
           </Card>
 
           {/* ── 03 Tester Tasks ── */}
-          <Card step="03" title="What should testers do?" sub={CONTRACT_REQUIRED.has(type) ? "Each step can have its own contract address — expand a step to set it. Testers are verified on-chain against every contract you add." : "Walk testers through exactly what to do, step by step. Be specific — the clearer the task, the better the feedback."}>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 10 }}>
-              {tasks.map((task, i) => {
-                const taskContractValid = task.contract_address && /^0x[a-fA-F0-9]{40}$/.test(task.contract_address)
-                return (
-                <div key={task.id} style={{ background: surf2, border: "1px solid " + bdr, borderRadius: 10 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 14px" }}>
-                    <div style={{ width: 24, height: 24, borderRadius: 6, background: "rgba(26,86,255,0.1)", border: "1px solid rgba(26,86,255,0.2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "#8aaeff", fontFamily: mono, flexShrink: 0 }}>
-                      {String(i + 1).padStart(2, "0")}
-                    </div>
-                    <input type="text" value={task.title} placeholder={`Step ${i + 1} — e.g. Deposit USDC into the lending pool`}
-                      onChange={e => updateTask(task.id, "title", e.target.value)}
-                      style={{ flex: 1, background: "transparent", border: "none", outline: "none", fontSize: 13, fontWeight: 500, color: t1, fontFamily: "inherit" }} />
-                    {tasks.length > 1 && (
-                      <button onClick={() => removeTask(task.id)} style={{ fontSize: 13, color: t3, background: "none", border: "none", cursor: "pointer", padding: "0 2px", lineHeight: 1, flexShrink: 0 }}>✕</button>
-                    )}
-                  </div>
-                  <div style={{ padding: "0 14px 8px 48px" }}>
-                    <input type="text" value={task.description} placeholder="Detail — what exactly to do, what to look for, or any relevant link"
-                      onChange={e => updateTask(task.id, "description", e.target.value)}
-                      style={{ width: "100%", background: "transparent", border: "none", outline: "none", fontSize: 12, color: t2, fontFamily: "inherit", boxSizing: "border-box" as const }} />
-                  </div>
-                  {/* Per-task contract address — also hidden when external verification is on */}
-                  {CONTRACT_REQUIRED.has(type) && !externalVerify && (
-                    <div style={{ padding: "8px 14px 10px 48px", borderTop: "1px solid " + bdr, display: "flex", alignItems: "center", gap: 8 }}>
-                      <span style={{ fontSize: 9, fontFamily: mono, color: t3, flexShrink: 0, textTransform: "uppercase", letterSpacing: "0.08em" }}>Contract</span>
-                      <input type="text" value={task.contract_address || ""} placeholder={contractAddress || "0x... (inherits primary if blank)"}
-                        onChange={e => updateTask(task.id, "contract_address", e.target.value.trim())}
-                        style={{ flex: 1, background: "transparent", border: "none", outline: "none", fontSize: 11, fontFamily: mono,
-                          color: taskContractValid ? "#00b87a" : t3 }} />
-                      {taskContractValid && (
-                        <div style={{ width: 5, height: 5, borderRadius: "50%", background: "#00b87a", flexShrink: 0 }} />
-                      )}
-                    </div>
-                  )}
+          <Card step="03" title="What should testers do?" sub={CONTRACT_REQUIRED.has(type) ? "Each step can have its own contract address — expand a step to set it. Testers are verified on-chain against every contract you add. Drag the ⋮⋮ handle to reorder." : "Walk testers through exactly what to do, step by step. Drag the ⋮⋮ handle to reorder."}>
+            <DndContext sensors={dndSensors} collisionDetection={closestCenter} onDragEnd={onTaskDragEnd}>
+              <SortableContext items={tasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 10 }}>
+                  {tasks.map((task, i) => {
+                    const taskContractValid = task.contract_address && /^0x[a-fA-F0-9]{40}$/.test(task.contract_address)
+                    return (
+                      <SortableTaskRow key={task.id} id={task.id}>
+                        {({ listeners, setActivatorNodeRef, isDragging }) => (
+                          <div style={{ background: surf2, border: `1px solid ${isDragging ? "rgba(26,86,255,0.4)" : bdr}`, borderRadius: 10 }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 14px" }}>
+                              {/* Drag handle — only this element starts a drag, so clicks
+                                  on the title input below still focus the input. */}
+                              <button
+                                ref={setActivatorNodeRef}
+                                {...listeners}
+                                type="button"
+                                aria-label={`Reorder step ${i + 1}`}
+                                style={{ width: 16, height: 24, background: "transparent", border: "none", color: t3, cursor: "grab", padding: 0, fontSize: 14, lineHeight: 1, fontFamily: mono, flexShrink: 0, touchAction: "none" }}
+                                onMouseEnter={e => (e.currentTarget.style.color = "#8aaeff")}
+                                onMouseLeave={e => (e.currentTarget.style.color = t3 as string)}
+                              >⋮⋮</button>
+                              <div style={{ width: 24, height: 24, borderRadius: 6, background: "rgba(26,86,255,0.1)", border: "1px solid rgba(26,86,255,0.2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "#8aaeff", fontFamily: mono, flexShrink: 0 }}>
+                                {String(i + 1).padStart(2, "0")}
+                              </div>
+                              <input type="text" value={task.title} placeholder={`Step ${i + 1} — e.g. Deposit USDC into the lending pool`}
+                                onChange={e => updateTask(task.id, "title", e.target.value)}
+                                style={{ flex: 1, background: "transparent", border: "none", outline: "none", fontSize: 13, fontWeight: 500, color: t1, fontFamily: "inherit" }} />
+                              {tasks.length > 1 && (
+                                <button onClick={() => removeTask(task.id)} style={{ fontSize: 13, color: t3, background: "none", border: "none", cursor: "pointer", padding: "0 2px", lineHeight: 1, flexShrink: 0 }}>✕</button>
+                              )}
+                            </div>
+                            <div style={{ padding: "0 14px 8px 64px" }}>
+                              <input type="text" value={task.description} placeholder="Detail — what exactly to do, what to look for, or any relevant link"
+                                onChange={e => updateTask(task.id, "description", e.target.value)}
+                                style={{ width: "100%", background: "transparent", border: "none", outline: "none", fontSize: 12, color: t2, fontFamily: "inherit", boxSizing: "border-box" as const }} />
+                            </div>
+                            {/* Per-task contract address — also hidden when external verification is on */}
+                            {CONTRACT_REQUIRED.has(type) && !externalVerify && (
+                              <div style={{ padding: "8px 14px 10px 64px", borderTop: "1px solid " + bdr, display: "flex", alignItems: "center", gap: 8 }}>
+                                <span style={{ fontSize: 9, fontFamily: mono, color: t3, flexShrink: 0, textTransform: "uppercase", letterSpacing: "0.08em" }}>Contract</span>
+                                <input type="text" value={task.contract_address || ""} placeholder={contractAddress || "0x... (inherits primary if blank)"}
+                                  onChange={e => updateTask(task.id, "contract_address", e.target.value.trim())}
+                                  style={{ flex: 1, background: "transparent", border: "none", outline: "none", fontSize: 11, fontFamily: mono,
+                                    color: taskContractValid ? "#00b87a" : t3 }} />
+                                {taskContractValid && (
+                                  <div style={{ width: 5, height: 5, borderRadius: "50%", background: "#00b87a", flexShrink: 0 }} />
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </SortableTaskRow>
+                    )
+                  })}
                 </div>
-                )
-              })}
-            </div>
+              </SortableContext>
+            </DndContext>
             <button onClick={addTask}
               style={{ height: 36, width: "100%", background: "transparent", color: t3, border: "1px dashed " + bdr, borderRadius: 8, fontSize: 12, cursor: "pointer", fontFamily: mono, letterSpacing: "0.04em" }}>
               + Add step
@@ -934,6 +1016,33 @@ export default function CreateCampaignPage() {
                 </div>
               )}
             </div>
+          </Card>
+
+          {/* ── 06 Invite codes (optional) ── */}
+          <Card step="06" title="Invite codes for testers" sub="If your product is in closed beta (e.g. an aggregator DEX), paste the codes you've issued. They'll be shown to testers in a clean panel they can copy and use on your site. ArcLens stores and displays them only — your product handles redemption.">
+            <Field
+              label="Codes"
+              hint={parsedInviteCodes.length > 0 ? `${parsedInviteCodes.length} code${parsedInviteCodes.length === 1 ? "" : "s"} ready` : "Optional"}
+            >
+              <textarea
+                value={inviteCodesRaw}
+                onChange={e => setInviteCodesRaw(e.target.value)}
+                rows={5}
+                placeholder={"TWR-A1B2-C3D4\nTWR-E5F6-G7H8\nTWR-I9J0-K1L2\n(one per line, or comma / space separated)"}
+                style={{ ...inp, height: "auto", padding: "10px 12px", resize: "vertical", minHeight: 110, lineHeight: 1.7, fontFamily: mono, fontSize: 12 }}
+              />
+            </Field>
+            {parsedInviteCodes.length > 0 && (
+              <div style={{ marginTop: 10, padding: "10px 14px", background: "rgba(0,184,122,0.05)", border: "1px solid rgba(0,184,122,0.18)", borderRadius: 8, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#00b87a", flexShrink: 0 }} />
+                <span style={{ fontSize: 11, color: "#00b87a", fontFamily: mono }}>
+                  {parsedInviteCodes.length} code{parsedInviteCodes.length === 1 ? "" : "s"} parsed · duplicates dropped
+                </span>
+                <span style={{ fontSize: 10, color: t3, fontFamily: mono, marginLeft: "auto" }}>
+                  Max 200 · 64 chars each
+                </span>
+              </div>
+            )}
           </Card>
 
           {/* ── Submit ── */}
@@ -1138,58 +1247,308 @@ export default function CreateCampaignPage() {
                     ))}
                   </div>
 
-                  {/* What to do — task list as testers see it */}
-                  <div style={{ padding: "14px 16px", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-                    <div style={{ fontSize: 10, fontFamily: mono, color: t3, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 10 }}>
-                      {tasks.length} step{tasks.length !== 1 ? "s" : ""} to complete
-                    </div>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                      {tasks.map((task, i) => (
-                        <div key={task.id} style={{ display: "flex", alignItems: "flex-start", gap: 9, padding: "8px 10px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.04)", borderRadius: 7 }}>
-                          <div style={{ width: 18, height: 18, borderRadius: "50%", background: `${tm.color}15`, border: `1px solid ${tm.color}30`, color: tm.color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 700, fontFamily: mono, flexShrink: 0, marginTop: 1 }}>{i + 1}</div>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: 11, fontWeight: 600, color: task.title.trim() ? t1 : t3, lineHeight: 1.4 }}>{task.title.trim() || `Step ${i + 1} title…`}</div>
-                            {task.description?.trim() && (
-                              <div style={{ fontSize: 10, color: t2, lineHeight: 1.5, marginTop: 2 }}>{task.description.trim()}</div>
+                  {/* Invite-code panel — only shown if the founder has pasted codes.
+                      Chips are clickable (same copy interaction as live page) and
+                      we end with a full-width CTA dynamically labeled with the
+                      project name so the workflow is unmissable. */}
+                  {parsedInviteCodes.length > 0 && (() => {
+                    const proj = projects.find(p => p.id === projectId)
+                    const ctaLabel = proj ? `Open ${proj.name}` : "Open product"
+                    return (
+                      <div style={{ padding: "14px 16px", borderTop: "1px solid rgba(255,255,255,0.06)", background: "rgba(0,184,122,0.03)" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
+                          <div style={{ width: 5, height: 5, borderRadius: "50%", background: "#00b87a", flexShrink: 0 }} />
+                          <div style={{ fontSize: 10, fontFamily: mono, color: "#00b87a", letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 600 }}>
+                            Closed-beta access · tap to copy
+                          </div>
+                        </div>
+                        <div style={{ fontSize: 10, color: t2, lineHeight: 1.5, marginBottom: 10 }}>
+                          Use one of these on the product, then come back to complete the steps.
+                        </div>
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 6 }}>
+                          {parsedInviteCodes.slice(0, 6).map(c => {
+                            const isCopied = previewCopied === c
+                            return (
+                              <button
+                                key={c}
+                                type="button"
+                                onClick={() => {
+                                  try {
+                                    navigator.clipboard.writeText(c)
+                                    setPreviewCopied(c)
+                                    window.setTimeout(() => setPreviewCopied(p => (p === c ? null : p)), 1400)
+                                  } catch { /* clipboard blocked — code still visible */ }
+                                }}
+                                style={{
+                                  display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6,
+                                  padding: "7px 10px",
+                                  background: isCopied ? "rgba(0,184,122,0.16)" : "rgba(0,184,122,0.08)",
+                                  border: `1px solid ${isCopied ? "rgba(0,184,122,0.45)" : "rgba(0,184,122,0.22)"}`,
+                                  borderRadius: 6,
+                                  cursor: "pointer",
+                                  color: "#00d990",
+                                  fontFamily: mono,
+                                  fontSize: 10.5,
+                                  letterSpacing: "0.02em",
+                                  transition: "all 0.15s",
+                                  textAlign: "left",
+                                  overflow: "hidden",
+                                }}
+                              >
+                                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c}</span>
+                                <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 14, height: 14, color: isCopied ? "#00d990" : t3, flexShrink: 0, transition: "color 0.15s" }}>
+                                  {isCopied ? (
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+                                      <polyline points="20 6 9 17 4 12"/>
+                                    </svg>
+                                  ) : (
+                                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                      <rect x="9" y="9" width="13" height="13" rx="2"/>
+                                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                                    </svg>
+                                  )}
+                                </span>
+                              </button>
+                            )
+                          })}
+                          {parsedInviteCodes.length > 6 && (
+                            <div style={{ padding: "7px 10px", fontSize: 10, fontFamily: mono, color: t3, textAlign: "center", border: `1px dashed ${bdr}`, borderRadius: 6 }}>
+                              +{parsedInviteCodes.length - 6} more
+                            </div>
+                          )}
+                        </div>
+                        {/* Primary CTA — only shown if the founder has set an app URL.
+                            Otherwise a muted placeholder so they know what testers will see. */}
+                        {appUrl.trim() ? (
+                          <div style={{
+                            display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+                            marginTop: 11, height: 36,
+                            background: "linear-gradient(135deg, #1a56ff 0%, #2563ff 100%)",
+                            color: "#fff", borderRadius: 8,
+                            fontSize: 11, fontWeight: 700, letterSpacing: "-0.01em",
+                            boxShadow: "0 3px 10px rgba(26,86,255,0.25)",
+                          }}>
+                            <span>{ctaLabel}</span>
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                              <line x1="5" y1="12" x2="19" y2="12"/>
+                              <polyline points="12 5 19 12 12 19"/>
+                            </svg>
+                          </div>
+                        ) : (
+                          <div style={{
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            marginTop: 11, height: 36,
+                            background: "transparent", border: `1px dashed ${bdr}`,
+                            borderRadius: 8, fontSize: 10, color: t3, fontFamily: mono,
+                          }}>
+                            Add an App URL above to enable the "Open product →" button
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })()}
+
+                  {/* ─── WIZARD — mirrors /trials/[id] one step at a time so the
+                       founder sees exactly what a tester sees walking through:
+                       Step 1 → Step 2 → ... → Feedback → Submit. Click the dots
+                       (or Done / Back) to navigate the preview. ─── */}
+                  {(() => {
+                    const totalSteps  = Math.max(tasks.length, 1)
+                    const stepClamped = Math.min(Math.max(previewStep, 0), totalSteps + 1)
+                    const isReview    = stepClamped === totalSteps
+                    const isDone      = stepClamped === totalSteps + 1
+                    const currentTask = !isReview && !isDone ? tasks[stepClamped] : null
+
+                    return (
+                      <>
+                        {/* "How this works" pill row — only at step 0, exactly as live */}
+                        {stepClamped === 0 && !isReview && !isDone && (
+                          <div style={{ padding: "9px 16px", borderTop: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                            {[`Do the steps`, `Write feedback`, `Earn ${rm.label}`].map((s, i, arr) => (
+                              <div key={i} style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                                <div style={{ width: 13, height: 13, borderRadius: "50%", background: "rgba(26,86,255,0.1)", border: "1px solid rgba(26,86,255,0.25)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 7, fontWeight: 700, color: "#8aaeff", fontFamily: mono }}>{i + 1}</div>
+                                <span style={{ fontSize: 10, color: t2, fontFamily: mono }}>{s}</span>
+                                {i < arr.length - 1 && <span style={{ fontSize: 8, color: t3 }}>→</span>}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Progress header — "Step N of M" + clickable dots */}
+                        {!isDone && (
+                          <div style={{ padding: "11px 16px", borderTop: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                            <div style={{ fontSize: 10, fontFamily: mono, color: t2 }}>
+                              {isReview
+                                ? `All ${totalSteps} step${totalSteps === 1 ? "" : "s"} done · Share your feedback`
+                                : `Step ${stepClamped + 1} of ${totalSteps}`}
+                            </div>
+                            <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                              {tasks.map((_, i) => {
+                                const isPast    = i < stepClamped
+                                const isCurrent = i === stepClamped && !isReview
+                                return (
+                                  <button
+                                    key={i}
+                                    type="button"
+                                    title={`Preview step ${i + 1}`}
+                                    onClick={() => setPreviewStep(i)}
+                                    style={{
+                                      width: isPast || isCurrent ? 14 : 5,
+                                      height: 5,
+                                      borderRadius: 3,
+                                      padding: 0,
+                                      border: "none",
+                                      background: isPast ? "#00b87a" : isCurrent ? "#1a56ff" : "rgba(255,255,255,0.06)",
+                                      cursor: "pointer",
+                                      transition: "all 0.2s",
+                                    }}
+                                  />
+                                )
+                              })}
+                              {/* Final dot = feedback / submit state */}
+                              <button
+                                type="button"
+                                title="Preview feedback step"
+                                onClick={() => setPreviewStep(totalSteps)}
+                                style={{
+                                  width: isReview ? 14 : 5,
+                                  height: 5,
+                                  borderRadius: 3,
+                                  padding: 0,
+                                  border: "none",
+                                  background: isReview ? "#1a56ff" : "rgba(255,255,255,0.06)",
+                                  cursor: "pointer",
+                                  transition: "all 0.2s",
+                                }}
+                              />
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Completed steps summary — compact ✓ list above current step */}
+                        {!isDone && stepClamped > 0 && (
+                          <div style={{ padding: "9px 16px", borderTop: "1px solid rgba(255,255,255,0.06)", display: "flex", flexDirection: "column", gap: 5 }}>
+                            {tasks.slice(0, stepClamped).map(task => (
+                              <div key={task.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                <div style={{ width: 14, height: 14, borderRadius: "50%", background: "rgba(0,184,122,0.1)", border: "1px solid rgba(0,184,122,0.25)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 7, color: "#00b87a", flexShrink: 0 }}>✓</div>
+                                <span style={{ fontSize: 10, color: t2, opacity: 0.75, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{task.title.trim() || `Step ${tasks.indexOf(task) + 1} title…`}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Current task card */}
+                        {currentTask && (
+                          <div style={{ padding: "16px 16px 18px", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                            <div style={{ display: "flex", alignItems: "flex-start", gap: 11, marginBottom: 14 }}>
+                              <div style={{ width: 30, height: 30, borderRadius: 8, background: "rgba(26,86,255,0.1)", border: "1px solid rgba(26,86,255,0.25)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, color: "#8aaeff", fontFamily: mono, flexShrink: 0 }}>
+                                {String(stepClamped + 1).padStart(2, "0")}
+                              </div>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontSize: 13, fontWeight: 700, color: currentTask.title.trim() ? t1 : t3, marginBottom: 4, lineHeight: 1.3 }}>
+                                  {currentTask.title.trim() || `Step ${stepClamped + 1} title…`}
+                                </div>
+                                {currentTask.description?.trim() && (
+                                  <div style={{ fontSize: 11, color: t2, lineHeight: 1.55 }}>{currentTask.description.trim()}</div>
+                                )}
+                              </div>
+                            </div>
+                            {appUrl.trim() && (
+                              <div style={{ display: "inline-flex", alignItems: "center", gap: 5, height: 26, padding: "0 11px", background: "rgba(26,86,255,0.06)", color: "#8aaeff", border: "1px solid rgba(26,86,255,0.2)", borderRadius: 6, fontSize: 11, marginBottom: 8 }}>
+                                Open app ↗
+                              </div>
                             )}
+                            <div style={{ fontSize: 10, color: t3, fontFamily: mono, marginBottom: 10, lineHeight: 1.6 }}>
+                              Complete this step in the app, then mark it done below.
+                            </div>
+                            <div style={{ display: "flex", gap: 6 }}>
+                              {stepClamped > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => setPreviewStep(s => Math.max(0, s - 1))}
+                                  style={{ height: 34, padding: "0 14px", background: "transparent", color: t2, border: `1px solid ${bdr}`, borderRadius: 7, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: mono }}>
+                                  ← Back
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => setPreviewStep(s => s + 1)}
+                                style={{ flex: 1, height: 34, background: "#1a56ff", color: "#fff", border: "none", borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: "pointer", letterSpacing: "-0.01em" }}>
+                                {stepClamped < totalSteps - 1 ? `Done — Next step →` : `Done — Share feedback →`}
+                              </button>
+                            </div>
                           </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+                        )}
 
-                  {/* Review questions — what testers will answer */}
-                  <div style={{ padding: "14px 16px", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-                    <div style={{ fontSize: 10, fontFamily: mono, color: t3, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 10 }}>
-                      {questions.length} feedback question{questions.length !== 1 ? "s" : ""}
-                    </div>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                      {questions.map((q, i) => (
-                        <div key={q.id}>
-                          <div style={{ fontSize: 11, fontWeight: 500, color: q.label.trim() ? t1 : t3, marginBottom: 4, lineHeight: 1.4 }}>
-                            {q.label.trim() || `Question ${i + 1}…`}
-                            {q.required && <span style={{ color: "#e03348", marginLeft: 3 }}>*</span>}
+                        {/* Feedback step — questions exactly as testers fill them out */}
+                        {isReview && (
+                          <div style={{ padding: "16px 16px 18px", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                            <div style={{ fontSize: 12, fontWeight: 600, color: t1, marginBottom: 3 }}>Share your feedback</div>
+                            <p style={{ fontSize: 11, color: t2, margin: "0 0 14px", lineHeight: 1.5 }}>
+                              Be specific — reference what you actually did, what you saw, and what could be better.
+                            </p>
+                            {questions.map((q, i) => (
+                              <div key={q.id} style={{ marginBottom: 12 }}>
+                                <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 5 }}>
+                                  <label style={{ fontSize: 11, fontWeight: 500, color: q.label.trim() ? t1 : t3 }}>
+                                    {q.label.trim() || `Question ${i + 1}…`}
+                                    {q.required && <span style={{ color: "#e03348", marginLeft: 2 }}>*</span>}
+                                  </label>
+                                  <span style={{ fontSize: 9, color: t3, fontFamily: mono }}>0/{q.min_words || 20}</span>
+                                </div>
+                                <div style={{ width: "100%", minHeight: 56, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)", borderRadius: 6, padding: "8px 10px", fontSize: 10, color: t3, lineHeight: 1.5, fontStyle: "italic" }}>
+                                  {q.placeholder?.trim() || "Tester's answer…"}
+                                </div>
+                              </div>
+                            ))}
+                            <div style={{ display: "flex", gap: 6 }}>
+                              <button
+                                type="button"
+                                onClick={() => setPreviewStep(s => Math.max(0, s - 1))}
+                                style={{ height: 34, padding: "0 14px", background: "transparent", color: t2, border: `1px solid ${bdr}`, borderRadius: 7, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: mono }}>
+                                ← Back to tasks
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setPreviewStep(totalSteps + 1)}
+                                style={{ flex: 1, height: 34, background: "#1a56ff", color: "#fff", border: "none", borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: "pointer", letterSpacing: "-0.01em" }}>
+                                Submit Completion →
+                              </button>
+                            </div>
                           </div>
-                          <div style={{ height: 36, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)", borderRadius: 6, padding: "8px 10px", fontSize: 10, color: t3, lineHeight: 1.4, fontStyle: "italic" }}>
-                            {q.placeholder?.trim() || "Tester's answer…"} {q.min_words ? `(${q.min_words}+ words)` : ""}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+                        )}
 
-                  {/* Submit CTA — what testers click when done */}
-                  <div style={{ padding: "12px 16px 16px", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-                    <div style={{ height: 36, background: tm.color + "22", border: `1px solid ${tm.color}40`, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 600, color: tm.color, fontFamily: mono, letterSpacing: "-0.01em" }}>
-                      Submit Completion →
-                    </div>
-                    <div style={{ fontSize: 10, color: t3, textAlign: "center", marginTop: 6, fontFamily: mono }}>
-                      Testers earn {rm.label.toLowerCase()} after submission{externalVerify ? "" : contractAddress ? " · on-chain verified" : ""}
-                    </div>
-                  </div>
+                        {/* Done state — what testers see right after submitting */}
+                        {isDone && (
+                          <div style={{ padding: "20px 16px 22px", borderTop: "1px solid rgba(255,255,255,0.06)", textAlign: "center" }}>
+                            <div style={{ width: 38, height: 38, borderRadius: "50%", background: "rgba(0,184,122,0.1)", border: "1px solid rgba(0,184,122,0.3)", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 18, color: "#00b87a", marginBottom: 10 }}>✓</div>
+                            <div style={{ fontSize: 13, fontWeight: 700, color: t1, marginBottom: 4 }}>Submission received</div>
+                            <p style={{ fontSize: 11, color: t2, margin: "0 0 12px", lineHeight: 1.5 }}>
+                              Quality score: <strong style={{ color: t1 }}>0/100</strong>
+                              <br />
+                              Reputation updates after the builder rates your feedback.
+                            </p>
+                            {rewardType === "usdc" && rewardUsdcAmount && (
+                              <div style={{ display: "inline-block", padding: "8px 14px", background: "rgba(0,184,122,0.08)", border: "1px solid rgba(0,184,122,0.3)", borderRadius: 7, fontSize: 12, fontWeight: 600, color: "#00d990", fontFamily: mono }}>
+                                Claim ${rewardUsdcAmount} USDC →
+                              </div>
+                            )}
+                            <div style={{ marginTop: 14 }}>
+                              <button
+                                type="button"
+                                onClick={() => setPreviewStep(0)}
+                                style={{ height: 28, padding: "0 12px", background: "transparent", color: t3, border: `1px solid ${bdr}`, borderRadius: 6, fontSize: 10, cursor: "pointer", fontFamily: mono }}>
+                                ↺ Replay from step 1
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    )
+                  })()}
                 </div>
                 <div style={{ marginTop: 14, fontSize: 11, color: t3, lineHeight: 1.6, padding: "0 2px" }}>
-                  Every step shown above is exactly what testers will see when they click into your campaign.
+                  Click the progress dots above (or the Done / Back buttons) to walk through every step exactly as a tester will see it.
                 </div>
               </div>
             )
@@ -1268,4 +1627,35 @@ function Field({ label, required, hint, children }: { label: string; required?: 
 
 function Ctr({ n, max }: { n: number; max: number }) {
   return <div style={{ fontSize: 10, fontFamily: "'DM Mono',monospace", color: n > max * 0.9 ? "#e08810" : "var(--t3,#2e3a5c)", textAlign: "right", marginTop: 3 }}>{n}/{max}</div>
+}
+
+// Drag-handle wrapper used by the Tasks editor. We expose listeners + activator
+// ref via render-props so the handle (only) starts the drag — clicks on the
+// title input below still focus the input normally.
+function SortableTaskRow({
+  id,
+  children,
+}: {
+  id: string
+  children: (handle: {
+    listeners: ReturnType<typeof useSortable>["listeners"]
+    setActivatorNodeRef: ReturnType<typeof useSortable>["setActivatorNodeRef"]
+    isDragging: boolean
+  }) => React.ReactNode
+}) {
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id })
+  return (
+    <div
+      ref={setNodeRef}
+      {...attributes}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.6 : 1,
+        zIndex: isDragging ? 10 : "auto",
+      }}
+    >
+      {children({ listeners, setActivatorNodeRef, isDragging })}
+    </div>
+  )
 }
