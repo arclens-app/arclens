@@ -50,6 +50,14 @@ function dicebear(address: string) {
   return `https://api.dicebear.com/9.x/identicon/svg?seed=${address}&backgroundColor=0e1224&radius=50`
 }
 
+// Real avatars (imgbb URLs) must go through our image-proxy so ad-blockers
+// and strict DNS don't break them. Local preview blob: / data: URLs render directly.
+function proxiedAvatar(url: string | null | undefined): string | null {
+  if (!url) return null
+  if (url.startsWith("blob:") || url.startsWith("data:")) return url
+  return `/api/image-proxy?url=${encodeURIComponent(url)}`
+}
+
 function shortAddr(addr: string) {
   return addr.slice(0, 8) + "…" + addr.slice(-6)
 }
@@ -276,10 +284,11 @@ export default function BuilderPage() {
   const displayName = profile?.display_name || shortAddr(address)
   const isClaimed   = !!profile?.claimed_at
 
-  // Displayed avatar: local preview during edit, profile avatar or dicebear otherwise
+  // Displayed avatar: local preview during edit, otherwise route stored URL
+  // through image-proxy so ad-blockers/strict-DNS don't break imgbb fetches.
   const shownAvatar = editing
-    ? (avatarPreview || (avatarErr ? dicebear(address) : (profile?.avatar_url || dicebear(address))))
-    : (avatarErr ? dicebear(address) : (profile?.avatar_url || dicebear(address)))
+    ? (avatarPreview || (avatarErr ? dicebear(address) : (proxiedAvatar(profile?.avatar_url) || dicebear(address))))
+    : (avatarErr ? dicebear(address) : (proxiedAvatar(profile?.avatar_url) || dicebear(address)))
 
   const inputStyle: React.CSSProperties = {
     width: "100%", height: "38px", background: surf2, border: "1px solid " + bdr,

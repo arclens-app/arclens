@@ -91,7 +91,18 @@ export default function EcosystemPage() {
 
   const pageSize = cols * 6  // always exactly 6 full rows
 
-  useEffect(() => { setMounted(true) }, [])
+  useEffect(() => {
+    setMounted(true)
+    // Deep-link support: /ecosystem?submit=1 opens the submission form
+    // straight away (used by the "no project yet" empty state on /trials/create).
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search)
+      if (params.get("submit") === "1") {
+        setShowForm(true)
+        setTimeout(() => window.scrollTo({ top: 0, behavior: "smooth" }), 50)
+      }
+    }
+  }, [])
 
   useEffect(() => {
     if (!mounted) return

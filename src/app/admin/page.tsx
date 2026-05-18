@@ -353,6 +353,27 @@ export default function AdminPage() {
 
           {/* Bottom actions */}
           <div style={{ marginTop:"auto", padding:"16px 10px", borderTop:"1px solid "+bdr, display:"flex", flexDirection:"column", gap:"6px" }}>
+            <button
+              onClick={async () => {
+                // Authorize, fetch the CSV, force a download
+                try {
+                  const res = await fetch("/api/admin/export-projects", { headers: { Authorization: `Bearer ${password}` } })
+                  if (!res.ok) { showToast(false, "Export failed"); return }
+                  const blob = await res.blob()
+                  const url  = URL.createObjectURL(blob)
+                  const a    = document.createElement("a")
+                  const cd   = res.headers.get("content-disposition") || ""
+                  const m    = /filename="([^"]+)"/.exec(cd)
+                  a.href     = url
+                  a.download = m?.[1] || `arclens-projects-${new Date().toISOString().slice(0,10)}.csv`
+                  a.click()
+                  setTimeout(() => URL.revokeObjectURL(url), 1000)
+                  showToast(true, "Projects CSV downloaded")
+                } catch { showToast(false, "Export failed") }
+              }}
+              style={{ height:"32px", background:"transparent", border:"1px solid "+bdr, borderRadius:"6px", color:t2, fontSize:"11px", fontFamily:mono, cursor:"pointer" }}>
+              ⬇ Export contracts (CSV)
+            </button>
             <button onClick={() => loadAll()} style={{ height:"32px", background:"transparent", border:"1px solid "+bdr, borderRadius:"6px", color:t2, fontSize:"11px", fontFamily:mono, cursor:"pointer" }}>
               ↻ Refresh
             </button>

@@ -132,6 +132,8 @@ export default function CampaignDetailPage() {
   const [editSubmitting, setEditSubmitting] = useState(false)
   const [editSubmitted, setEditSubmitted]   = useState(false)
   const [editError, setEditError]           = useState("")
+  const [editMessage, setEditMessage]       = useState("")
+  const [shareDone,   setShareDone]         = useState(false)
   const [pendingUpdate, setPendingUpdate]   = useState<{ status: string; admin_note?: string; submitted_at: string } | null>(null)
 
   useEffect(() => {
@@ -279,14 +281,27 @@ export default function CampaignDetailPage() {
     setEditSubmitting(true)
     try {
       const res  = await fetch(`/api/trials/${id}`, {
-        method: "PUT",
+        method:  "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ creator_wallet: wallet, changes }),
+        credentials: "include",
+        body:    JSON.stringify({ creator_wallet: wallet, changes }),
       })
       const data = await res.json()
       if (!res.ok) { setEditError(data.error || "Submission failed"); return }
+      // Backend now distinguishes "applied live" (cosmetic) from "queued for admin" (material).
+      // Surface that distinction so founders know exactly what happened.
       setEditSubmitted(true)
+      setEditMessage(data.message || "Changes submitted")
       setEditOpen(false)
+      // If anything went live immediately, refresh the page state
+      if (data.appliedInstant && data.appliedInstant > 0) {
+        try {
+          const r = await fetch(`/api/trials/${id}?wallet=${wallet}`, { cache: "no-store" })
+          const d = await r.json()
+          if (d.campaign) setCampaign(d.campaign)
+          if (d.pendingUpdate !== undefined) setPendingUpdate(d.pendingUpdate)
+        } catch {}
+      }
     } finally { setEditSubmitting(false) }
   }
 
@@ -368,9 +383,9 @@ export default function CampaignDetailPage() {
         )}
 
         {/* ── Hero Banner ── */}
-        <div style={{ background: "var(--surf,#0a0e1a)", border: "1px solid var(--bdr,rgba(255,255,255,0.06))", borderRadius: 14, marginBottom: 20, overflow: "hidden" }}>
-          {/* Banner image — full width, 200px tall */}
-          <div style={{ position: "relative", width: "100%", height: 200, background: `linear-gradient(135deg, ${tm.color}22 0%, ${tm.color}08 50%, #0a0e1a 100%)`, overflow: "hidden" }}>
+        <div style={{ background: "var(--surf,#0a0e1a)", border: "1px solid var(--bdr,rgba(255,255,255,0.06))", borderRadius: 16, marginBottom: 24, overflow: "hidden", boxShadow: "0 1px 0 rgba(255,255,255,0.02) inset" }}>
+          {/* Banner image — full width, 240px tall on desktop, 180px mobile */}
+          <div className="heroBanner" style={{ position: "relative", width: "100%", height: 240, background: `linear-gradient(135deg, ${tm.color}22 0%, ${tm.color}08 50%, #0a0e1a 100%)`, overflow: "hidden" }}>
             {/* Fallback: large abbr centered */}
             <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 80, fontWeight: 900, fontFamily: "var(--font-mono,monospace)", color: `${tm.color}18`, letterSpacing: "-0.04em", userSelect: "none" }}>{tm.abbr}</span>
             {/* Accent line at top */}
@@ -386,16 +401,49 @@ export default function CampaignDetailPage() {
             {/* Gradient overlay so text below is always readable */}
             <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 80, background: "linear-gradient(0deg, var(--surf,#0a0e1a) 0%, transparent 100%)" }} />
           </div>
-          {/* Title + badges below banner */}
-          <div style={{ padding: "18px 24px 20px" }}>
-            <h1 style={{ fontSize: 22, fontWeight: 700, color: "var(--t1,#e8ecff)", margin: "0 0 6px", letterSpacing: "-0.02em", lineHeight: 1.25 }}>{campaign.title}</h1>
-            {campaign.tagline && <p style={{ fontSize: 13, color: "var(--t2,#6b7da8)", margin: "0 0 14px", lineHeight: 1.6 }}>{campaign.tagline}</p>}
-            <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
-              <span style={{ fontSize: 10, fontFamily: "var(--font-mono,monospace)", background: `${tm.color}15`, color: tm.color, border: `1px solid ${tm.color}25`, padding: "3px 9px", borderRadius: 4 }}>{tm.label}</span>
-              <span style={{ fontSize: 10, fontFamily: "var(--font-mono,monospace)", background: `${rm.color}15`, color: rm.color, border: `1px solid ${rm.color}25`, padding: "3px 9px", borderRadius: 4 }}>{rm.label}</span>
-              {campaign.project_name && (
-                <span style={{ fontSize: 11, color: "var(--t3,#2e3a5c)", fontFamily: "var(--font-mono,monospace)" }}>{campaign.project_name}</span>
-              )}
+          {/* Title + badges below banner.
+              flexWrap lets the share buttons drop below the title block on
+              narrow phones so they never overlap or get cut off. */}
+          <div style={{ padding: "24px 28px 24px" }}>
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 14, flexWrap: "wrap" }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <h1 style={{ fontSize: 26, fontWeight: 600, color: "var(--t1,#e8ecff)", margin: "0 0 8px", letterSpacing: "-0.025em", lineHeight: 1.2 }}>{campaign.title}</h1>
+                {campaign.tagline && <p style={{ fontSize: 14, color: "var(--t2,#6b7da8)", margin: "0 0 16px", lineHeight: 1.65, maxWidth: 640 }}>{campaign.tagline}</p>}
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 10, fontFamily: "var(--font-mono,monospace)", background: `${tm.color}15`, color: tm.color, border: `1px solid ${tm.color}25`, padding: "4px 10px", borderRadius: 5, letterSpacing: "0.03em" }}>{tm.label}</span>
+                  <span style={{ fontSize: 10, fontFamily: "var(--font-mono,monospace)", background: `${rm.color}15`, color: rm.color, border: `1px solid ${rm.color}25`, padding: "4px 10px", borderRadius: 5, letterSpacing: "0.03em" }}>{rm.label}</span>
+                  {campaign.project_name && (
+                    <span style={{ fontSize: 11, color: "var(--t3,#2e3a5c)", fontFamily: "var(--font-mono,monospace)" }}>· {campaign.project_name}</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Share button — copies URL + opens Twitter intent. Founders share their own;
+                  fans share campaigns they're excited about. */}
+              <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                <button
+                  title="Copy link"
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(typeof window !== "undefined" ? window.location.href : "")
+                      setShareDone(true)
+                      setTimeout(() => setShareDone(false), 1500)
+                    } catch {}
+                  }}
+                  style={{ height: 32, padding: "0 12px", background: shareDone ? "rgba(0,184,122,0.08)" : "transparent", border: `1px solid ${shareDone ? "rgba(0,184,122,0.25)" : "var(--bdr,rgba(255,255,255,0.08))"}`, borderRadius: 7, color: shareDone ? "#00d990" : "var(--t2,#6b7da8)", fontSize: 11, fontFamily: "var(--font-mono,monospace)", cursor: "pointer", whiteSpace: "nowrap" }}>
+                  {shareDone ? "✓ copied" : "↗ copy link"}
+                </button>
+                <a
+                  href={typeof window !== "undefined"
+                    ? `https://twitter.com/intent/tweet?text=${encodeURIComponent(`${campaign.title} on ArcLens — testing campaign with ${campaign.reward_type === "usdc" ? `$${campaign.reward_usdc_amount} USDC` : "rewards"} per tester. Join in:`)}&url=${encodeURIComponent(window.location.href)}`
+                    : "#"
+                  }
+                  target="_blank" rel="noopener noreferrer"
+                  style={{ height: 32, padding: "0 12px", background: "transparent", border: "1px solid var(--bdr,rgba(255,255,255,0.08))", borderRadius: 7, color: "var(--t2,#6b7da8)", fontSize: 11, fontFamily: "var(--font-mono,monospace)", cursor: "pointer", textDecoration: "none", display: "flex", alignItems: "center", gap: 6 }}>
+                  <svg width={11} height={11} viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.746l7.73-8.835L1.254 2.25H8.08l4.261 5.635 5.903-5.635Zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+                  share
+                </a>
+              </div>
             </div>
           </div>
           {/* Stat bar */}
@@ -405,9 +453,9 @@ export default function CampaignDetailPage() {
               { label: "completed",  value: String(campaign.completion_count), color: "var(--t1,#e8ecff)" },
               ...(campaign.expires_at ? [{ label: "closes", value: new Date(campaign.expires_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }), color: "var(--t2,#6b7da8)" }] : []),
             ].map((s, i, arr) => (
-              <div key={i} style={{ padding: "13px 0", textAlign: "center", borderRight: i < arr.length - 1 ? "1px solid var(--bdr,rgba(255,255,255,0.06))" : "none" }}>
-                <div style={{ fontSize: 17, fontWeight: 700, color: s.color, fontFamily: "var(--font-mono,monospace)", lineHeight: 1 }}>{s.value}</div>
-                <div style={{ fontSize: 9, color: "var(--t3,#2e3a5c)", textTransform: "uppercase", letterSpacing: "0.08em", marginTop: 5, fontFamily: "var(--font-mono,monospace)" }}>{s.label}</div>
+              <div key={i} style={{ padding: "18px 0", textAlign: "center", borderRight: i < arr.length - 1 ? "1px solid var(--bdr,rgba(255,255,255,0.06))" : "none" }}>
+                <div style={{ fontSize: 22, fontWeight: 600, color: s.color, fontFamily: "var(--font-mono,monospace)", lineHeight: 1, letterSpacing: "-0.02em" }}>{s.value}</div>
+                <div style={{ fontSize: 9, color: "var(--t3,#2e3a5c)", textTransform: "uppercase", letterSpacing: "0.1em", marginTop: 7, fontFamily: "var(--font-mono,monospace)" }}>{s.label}</div>
               </div>
             ))}
           </div>
@@ -481,8 +529,8 @@ export default function CampaignDetailPage() {
                       </div>
                     </div>
 
-                    {/* Rank comparison */}
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 28px 1fr", alignItems: "center", gap: 8, marginBottom: 20 }}>
+                    {/* Rank comparison — collapses to vertical stack on narrow screens */}
+                    <div className="rankCompareGrid" style={{ display: "grid", gridTemplateColumns: "1fr 28px 1fr", alignItems: "center", gap: 8, marginBottom: 20 }}>
                       {/* Current rank */}
                       <div style={{ background: "var(--surf2,#0e1224)", border: `1px solid ${RANK_COLORS[testerRank]}25`, borderRadius: 10, padding: "14px 12px", textAlign: "center" }}>
                         <div style={{ fontSize: 9, fontFamily: "var(--font-mono,monospace)", color: "var(--t3,#2e3a5c)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 }}>Your rank</div>
@@ -624,13 +672,31 @@ export default function CampaignDetailPage() {
                           ? `All ${totalSteps} steps done · Share your feedback`
                           : `Step ${flowStep + 1} of ${totalSteps}`}
                       </div>
-                      {/* Progress dots */}
+                      {/* Progress dots — click any completed step to jump back to it */}
                       <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
-                        {campaign.tasks.map((_, i) => (
-                          <div key={i} style={{ width: i < flowStep ? 16 : 6, height: 6, borderRadius: 3,
-                            background: i < flowStep ? "#00b87a" : i === flowStep ? "#1a56ff" : "var(--bdr,rgba(255,255,255,0.06))",
-                            transition: "all 0.2s" }} />
-                        ))}
+                        {campaign.tasks.map((_, i) => {
+                          const isPast = i < flowStep
+                          const isCurrent = i === flowStep && !isReviewStep
+                          return (
+                            <button
+                              key={i}
+                              type="button"
+                              onClick={() => { if (i <= flowStep || isReviewStep) setFlowStep(i) }}
+                              title={isPast ? `Back to step ${i + 1}` : isCurrent ? `Step ${i + 1}` : `Step ${i + 1} (locked)`}
+                              disabled={i > flowStep && !isReviewStep}
+                              style={{
+                                width: isPast || isCurrent ? 16 : 6,
+                                height: 6,
+                                borderRadius: 3,
+                                padding: 0,
+                                border: "none",
+                                background: isPast ? "#00b87a" : isCurrent ? "#1a56ff" : "var(--bdr,rgba(255,255,255,0.06))",
+                                cursor: (i <= flowStep || isReviewStep) ? "pointer" : "default",
+                                transition: "all 0.2s",
+                              }}
+                            />
+                          )
+                        })}
                         <div style={{ width: isReviewStep ? 16 : 6, height: 6, borderRadius: 3,
                           background: isDoneStep ? "#00b87a" : isReviewStep ? "#1a56ff" : "var(--bdr,rgba(255,255,255,0.06))",
                           transition: "all 0.2s" }} />
@@ -678,11 +744,20 @@ export default function CampaignDetailPage() {
                           <div style={{ fontSize: 11, color: "var(--t3,#2e3a5c)", fontFamily: "var(--font-mono,monospace)", marginBottom: 12, lineHeight: 1.6 }}>
                             Complete this step in the app, then mark it done below.
                           </div>
-                          <button
-                            onClick={() => setFlowStep(s => s + 1)}
-                            style={{ width: "100%", height: 42, background: "#1a56ff", color: "#fff", border: "none", borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: "pointer", letterSpacing: "-0.01em" }}>
-                            {flowStep < totalSteps - 1 ? `Done — Next step →` : `Done — Share feedback →`}
-                          </button>
+                          <div style={{ display: "flex", gap: 8 }}>
+                            {flowStep > 0 && (
+                              <button
+                                onClick={() => setFlowStep(s => Math.max(0, s - 1))}
+                                style={{ height: 42, padding: "0 18px", background: "transparent", color: "var(--t2,#6b7da8)", border: "1px solid var(--bdr,rgba(255,255,255,0.06))", borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "var(--font-mono,monospace)" }}>
+                                ← Back
+                              </button>
+                            )}
+                            <button
+                              onClick={() => setFlowStep(s => s + 1)}
+                              style={{ flex: 1, height: 42, background: "#1a56ff", color: "#fff", border: "none", borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: "pointer", letterSpacing: "-0.01em" }}>
+                              {flowStep < totalSteps - 1 ? `Done — Next step →` : `Done — Share feedback →`}
+                            </button>
+                          </div>
                         </div>
                       ) : (
                         /* Feedback questions */
@@ -718,12 +793,19 @@ export default function CampaignDetailPage() {
                           {submitError && (
                             <div style={{ fontSize: 12, color: "#e03348", marginBottom: 12, padding: "8px 12px", background: "rgba(224,51,72,0.08)", borderRadius: 8 }}>{submitError}</div>
                           )}
-                          <button
-                            onClick={submitCompletion}
-                            disabled={submitting || !reviewComplete}
-                            style={{ width: "100%", height: 42, background: reviewComplete ? "#1a56ff" : "var(--surf2,#0e1224)", color: reviewComplete ? "#fff" : "var(--t2,#6b7da8)", border: reviewComplete ? "none" : "1px solid var(--bdr,rgba(255,255,255,0.06))", borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: reviewComplete && !submitting ? "pointer" : "default", letterSpacing: "-0.01em" }}>
-                            {submitting ? "Submitting..." : "Submit Completion →"}
-                          </button>
+                          <div style={{ display: "flex", gap: 8 }}>
+                            <button
+                              onClick={() => setFlowStep(s => Math.max(0, s - 1))}
+                              style={{ height: 42, padding: "0 18px", background: "transparent", color: "var(--t2,#6b7da8)", border: "1px solid var(--bdr,rgba(255,255,255,0.06))", borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "var(--font-mono,monospace)" }}>
+                              ← Back to tasks
+                            </button>
+                            <button
+                              onClick={submitCompletion}
+                              disabled={submitting || !reviewComplete}
+                              style={{ flex: 1, height: 42, background: reviewComplete ? "#1a56ff" : "var(--surf2,#0e1224)", color: reviewComplete ? "#fff" : "var(--t2,#6b7da8)", border: reviewComplete ? "none" : "1px solid var(--bdr,rgba(255,255,255,0.06))", borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: reviewComplete && !submitting ? "pointer" : "default", letterSpacing: "-0.01em" }}>
+                              {submitting ? "Submitting..." : "Submit Completion →"}
+                            </button>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -821,15 +903,23 @@ export default function CampaignDetailPage() {
 
                 {editOpen && (
                   <div style={{ borderTop: "1px solid var(--bdr,rgba(255,255,255,0.06))", padding: "16px 20px 20px" }}>
-                    {/* Pending state — block form while review is in progress */}
-                    {(editSubmitted || pendingUpdate?.status === "pending") ? (
+                    {editSubmitted && editMessage && (
+                      <div style={{ marginBottom: 12, padding: "10px 14px", background: "rgba(0,184,122,0.07)", border: "1px solid rgba(0,184,122,0.2)", borderRadius: 8, fontSize: 12, color: "#00d990", lineHeight: 1.5 }}>
+                        ✓ {editMessage}
+                      </div>
+                    )}
+                    {/* Pending state — only shown if there's actually a queued material edit */}
+                    {pendingUpdate?.status === "pending" ? (
                       <div style={{ textAlign: "center", padding: "8px 0" }}>
                         <div style={{ width: 32, height: 32, borderRadius: "50%", background: "rgba(224,136,16,0.1)", border: "1px solid rgba(224,136,16,0.25)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 10px", fontSize: 14, color: "#e08810" }}>⏳</div>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: "#e08810", marginBottom: 4 }}>Edit pending admin review</div>
-                        <div style={{ fontSize: 11, fontFamily: "var(--font-mono,monospace)", color: "var(--t2,#6b7da8)" }}>You'll be notified by email once approved or rejected</div>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: "#e08810", marginBottom: 4 }}>Material change pending admin review</div>
+                        <div style={{ fontSize: 11, fontFamily: "var(--font-mono,monospace)", color: "var(--t2,#6b7da8)" }}>You'll be notified by email once approved or rejected. Cosmetic edits (description, links, banner) are already live.</div>
                       </div>
                     ) : (
                       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                        <div style={{ fontSize: 11, color: "var(--t3,#2e3a5c)", fontFamily: "var(--font-mono,monospace)", lineHeight: 1.6, padding: "10px 12px", background: "rgba(26,86,255,0.04)", border: "1px solid rgba(26,86,255,0.12)", borderRadius: 6 }}>
+                          <strong style={{ color: "#8aaeff" }}>Tagline, description, app URL, reward details</strong> apply instantly. <strong style={{ color: "#8aaeff" }}>Slots, deadline, contract</strong> require admin approval.
+                        </div>
                         {pendingUpdate?.status === "rejected" && (
                           <div style={{ padding: "10px 14px", background: "rgba(224,51,72,0.07)", border: "1px solid rgba(224,51,72,0.2)", borderRadius: 8 }}>
                             <div style={{ fontSize: 12, fontWeight: 600, color: "#e03348", marginBottom: pendingUpdate.admin_note ? 4 : 0 }}>Last edit request was not approved</div>
@@ -948,6 +1038,22 @@ export default function CampaignDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Mobile-only overrides — additive media queries that only fire below
+          560px width so desktop renders the same as it does today. */}
+      <style>{`
+        @media (max-width: 560px) {
+          .rankCompareGrid {
+            grid-template-columns: 1fr !important;
+          }
+          .rankCompareGrid > div:nth-child(2) {
+            display: none !important;
+          }
+          .heroBanner {
+            height: 180px !important;
+          }
+        }
+      `}</style>
     </ArcLayout>
   )
 }

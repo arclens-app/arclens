@@ -143,6 +143,14 @@ export default function CreateCampaignPage() {
   const [tagline, setTagline]                   = useState("")
   const [description, setDescription]           = useState("")
   const [contractAddress, setContractAddress]   = useState("")
+  // For protocols that verify on-chain actions in their own backend
+  // (aggregator DEXes, off-chain matchers, custodial flows). When true we
+  // skip the contract requirement and the on-chain verification gate at
+  // /api/trials/[id]/complete fires only on contract-bearing campaigns.
+  const [externalVerify, setExternalVerify]     = useState(false)
+  // Show the 2 most common types up front; everything else behind a toggle so
+  // first-time founders aren't paralyzed by 8 similarly-named options.
+  const [showAdvancedTypes, setShowAdvancedTypes] = useState(false)
   const [projectId, setProjectId]               = useState<number | null>(null)
   const [tasks, setTasks]                       = useState<Task[]>(TEMPLATES.beta_test.tasks)
   const [questions, setQuestions]               = useState<ReviewQuestion[]>(TEMPLATES.beta_test.questions)
@@ -309,7 +317,7 @@ export default function CreateCampaignPage() {
     if (questions.some(q => !q.label.trim())) { setError("All questions must have a label"); return }
     if (rewardType === "usdc" && !rewardUsdcAmount) { setError("Enter the USDC amount per tester"); return }
     if (rewardType === "usdc" && !totalSlots)        { setError("Set a slot count for USDC campaigns"); return }
-    if (CONTRACT_REQUIRED.has(type) && !contractAddress.trim()) { setError("A contract address is required for this campaign type"); return }
+    if (CONTRACT_REQUIRED.has(type) && !contractAddress.trim() && !externalVerify) { setError("A contract address is required for this campaign type — or enable external verification if you handle on-chain checks yourself"); return }
     if (contractAddress && !/^0x[a-fA-F0-9]{40}$/.test(contractAddress.trim())) { setError("Contract address must be a valid 0x address"); return }
 
     let depositTxHash: string | null = null
@@ -388,36 +396,58 @@ export default function CreateCampaignPage() {
 
   if (hasProject === false) return (
     <ArcLayout active="trials">
-      <div style={{ padding: "80px 28px", maxWidth: 480, margin: "0 auto", textAlign: "center" }}>
+      <div style={{ padding: "80px 28px", maxWidth: 520, margin: "0 auto", textAlign: "center" }}>
         <div style={{ width: 48, height: 48, borderRadius: 12, background: "rgba(26,86,255,0.1)", border: "1px solid rgba(26,86,255,0.2)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px", fontSize: 20, fontFamily: mono, fontWeight: 700, color: "#8aaeff" }}>!</div>
-        <div style={{ fontSize: 20, fontWeight: 700, color: t1, marginBottom: 8, letterSpacing: "-0.03em" }}>Project Required</div>
-        <p style={{ fontSize: 13, color: t2, lineHeight: 1.8, marginBottom: 8 }}>
-          To create a campaign, your project must first be listed and approved on Arc Ecosystem. This ensures every campaign is backed by a real, verifiable builder.
+        <div style={{ fontSize: 22, fontWeight: 700, color: t1, marginBottom: 10, letterSpacing: "-0.03em" }}>List your project first</div>
+        <p style={{ fontSize: 13, color: t2, lineHeight: 1.8, marginBottom: 28, maxWidth: 420, margin: "0 auto 28px" }}>
+          Every campaign on Arc Trials runs under a project that's been listed and approved on the Arc Ecosystem. Two paths:
         </p>
-        <p style={{ fontSize: 12, color: t3, lineHeight: 1.7, marginBottom: 28, fontFamily: mono }}>
-          Already listed? Activate your founder dashboard first — go to your project page on Arc Ecosystem and click <strong style={{ color: t2 }}>Claim Dashboard</strong>.
-        </p>
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          <button onClick={() => router.push("/ecosystem")} style={{ height: 44, background: "#1a56ff", color: "#fff", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: "pointer", letterSpacing: "-0.01em" }}>Browse Arc Ecosystem →</button>
-          <button onClick={() => router.push("/trials")} style={{ height: 40, background: "transparent", color: t2, border: "1px solid " + bdr, borderRadius: 10, fontSize: 13, cursor: "pointer" }}>Back to Arc Trials</button>
+
+        {/* Two-path chooser — much clearer than a single generic CTA */}
+        <div style={{ display: "grid", gap: 10, marginBottom: 16, textAlign: "left" }}>
+          {/* Path A — never listed before */}
+          <button onClick={() => router.push("/ecosystem?submit=1")}
+            style={{ padding: "14px 16px", background: "rgba(26,86,255,0.06)", border: "1px solid rgba(26,86,255,0.25)", borderRadius: 10, cursor: "pointer", display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{ width: 32, height: 32, borderRadius: 8, background: "rgba(26,86,255,0.15)", color: "#8aaeff", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: mono, fontSize: 12, fontWeight: 700, flexShrink: 0 }}>1</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: t1, marginBottom: 2 }}>Submit a new project</div>
+              <div style={{ fontSize: 11, color: t2, lineHeight: 1.5 }}>Opens the listing form. Approved within 24h, then come back here.</div>
+            </div>
+            <span style={{ color: "#8aaeff", fontSize: 16 }}>→</span>
+          </button>
+
+          {/* Path B — listed but not claimed */}
+          <button onClick={() => router.push("/ecosystem")}
+            style={{ padding: "14px 16px", background: "transparent", border: "1px solid " + bdr, borderRadius: 10, cursor: "pointer", display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{ width: 32, height: 32, borderRadius: 8, background: "rgba(107,125,168,0.08)", color: t2, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: mono, fontSize: 12, fontWeight: 700, flexShrink: 0 }}>2</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: t1, marginBottom: 2 }}>Already listed but not claimed?</div>
+              <div style={{ fontSize: 11, color: t2, lineHeight: 1.5 }}>Find your project on Ecosystem and click <strong style={{ color: t1 }}>Claim Dashboard</strong> to attach this wallet.</div>
+            </div>
+            <span style={{ color: t3, fontSize: 16 }}>→</span>
+          </button>
         </div>
+
+        <button onClick={() => router.push("/trials")} style={{ height: 38, background: "transparent", color: t3, border: "1px solid " + bdr, borderRadius: 10, fontSize: 12, fontFamily: mono, cursor: "pointer", padding: "0 16px" }}>
+          ← Back to Arc Trials
+        </button>
       </div>
     </ArcLayout>
   )
 
   return (
     <ArcLayout active="trials">
-      <div style={{ padding: "28px 24px 64px", maxWidth: 800, margin: "0 auto" }}>
+      <div style={{ padding: "36px 28px 80px", maxWidth: 1240, margin: "0 auto" }}>
 
         {/* Header */}
-        <button onClick={() => router.push("/trials")} style={{ fontSize: 12, color: t3, background: "none", border: "none", cursor: "pointer", padding: 0, marginBottom: 24, fontFamily: mono, display: "flex", alignItems: "center", gap: 6 }}>
+        <button onClick={() => router.push("/trials")} style={{ fontSize: 12, color: t3, background: "none", border: "none", cursor: "pointer", padding: 0, marginBottom: 28, fontFamily: mono, display: "flex", alignItems: "center", gap: 6 }}>
           ← Arc Trials
         </button>
-        <div style={{ marginBottom: 36 }}>
-          <div style={{ fontSize: 10, fontFamily: mono, color: "#1a56ff", letterSpacing: "0.14em", textTransform: "uppercase", marginBottom: 10 }}>New Campaign</div>
-          <h1 style={{ fontSize: 30, fontWeight: 700, letterSpacing: "-0.04em", color: t1, margin: "0 0 8px" }}>What do you need tested?</h1>
-          <p style={{ fontSize: 14, color: t2, margin: 0, lineHeight: 1.7, maxWidth: 560 }}>
-            Define your tasks and questions. Arclens reviews it, then qualified testers on Arc Testnet complete the work and submit structured feedback — automatically verified on-chain.
+        <div style={{ marginBottom: 40 }}>
+          <div style={{ fontSize: 10, fontFamily: mono, color: "#8aaeff", letterSpacing: "0.16em", textTransform: "uppercase", marginBottom: 12 }}>New Campaign</div>
+          <h1 style={{ fontSize: 32, fontWeight: 600, letterSpacing: "-0.035em", color: t1, margin: "0 0 10px", lineHeight: 1.15 }}>What do you need tested?</h1>
+          <p style={{ fontSize: 14, color: t2, margin: 0, lineHeight: 1.7, maxWidth: 580 }}>
+            Define your tasks and questions. ArcLens reviews it, then qualified testers on Arc Testnet complete the work and submit structured feedback.
           </p>
         </div>
 
@@ -446,49 +476,102 @@ export default function CreateCampaignPage() {
           </div>
         )}
 
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        {/* Two-column layout on wide screens — form on left, sticky preview on right.
+            Collapses to single column below 960px via the .createLayout media query. */}
+        <div className="createLayout" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 380px", gap: 28, alignItems: "start" }}>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 16, minWidth: 0 }}>
 
           {/* ── 01 Campaign Type ── */}
-          <Card step="01" title="Campaign type" sub="Picking the right type loads a starter set of tasks and review questions tailored to your goal.">
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 8 }}>
-              {TYPES.map(ct => {
-                const active = type === ct.id
-                return (
-                  <button key={ct.id} onClick={() => applyTemplate(ct.id)}
-                    style={{ padding: 0, textAlign: "left", borderRadius: 10, cursor: "pointer", overflow: "hidden",
-                      background: active ? `${ct.color}0c` : surf2,
-                      border: `1px solid ${active ? ct.color + "55" : bdr}`,
-                      transition: "all 0.1s",
-                    }}>
-                    <div style={{ height: 2, background: active ? ct.color : "transparent" }} />
-                    <div style={{ padding: "12px 13px" }}>
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 9 }}>
-                        <div style={{ fontFamily: mono, fontSize: 11, fontWeight: 700, color: active ? ct.color : t3,
-                          background: active ? `${ct.color}15` : "rgba(107,125,168,0.06)",
-                          border: `1px solid ${active ? ct.color + "30" : bdr}`,
-                          padding: "3px 7px", borderRadius: 5, letterSpacing: "0.04em" }}>
-                          {ct.abbr}
-                        </div>
-                        <span style={{ fontSize: 8, fontFamily: mono, color: active ? ct.color : t3, letterSpacing: "0.06em", textTransform: "uppercase" }}>{ct.tag}</span>
-                      </div>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: active ? t1 : t2, marginBottom: 4, letterSpacing: "-0.01em" }}>{ct.label}</div>
-                      <div style={{ fontSize: 11, color: t3, lineHeight: 1.5 }}>{ct.desc}</div>
-                    </div>
+          <Card step="01" title="Campaign type" sub="Pick the closest match — we'll pre-fill tasks and review questions you can edit. Most founders pick one of the two below.">
+            {(() => {
+              // Two most common picks visible by default. Everything else is one
+              // click away. If the founder has an advanced type already selected
+              // (e.g. from a saved draft), expand automatically so they see it.
+              const PRIMARY  = new Set(["beta_test", "ux_review"])
+              const primary  = TYPES.filter(t => PRIMARY.has(t.id))
+              const advanced = TYPES.filter(t => !PRIMARY.has(t.id))
+              const hasAdvancedSelected = !PRIMARY.has(type)
+              const expanded = showAdvancedTypes || hasAdvancedSelected
+              return (
+                <>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10, marginBottom: 12 }}>
+                    {primary.map(ct => {
+                      const active = type === ct.id
+                      return (
+                        <button key={ct.id} onClick={() => applyTemplate(ct.id)}
+                          style={{ padding: 0, textAlign: "left", borderRadius: 10, cursor: "pointer", overflow: "hidden",
+                            background: active ? `${ct.color}0c` : surf2,
+                            border: `1px solid ${active ? ct.color + "55" : bdr}`,
+                            transition: "all 0.1s",
+                          }}>
+                          <div style={{ height: 2, background: active ? ct.color : "transparent" }} />
+                          <div style={{ padding: "14px 15px" }}>
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                              <div style={{ fontFamily: mono, fontSize: 11, fontWeight: 700, color: active ? ct.color : t3,
+                                background: active ? `${ct.color}15` : "rgba(107,125,168,0.06)",
+                                border: `1px solid ${active ? ct.color + "30" : bdr}`,
+                                padding: "3px 7px", borderRadius: 5, letterSpacing: "0.04em" }}>
+                                {ct.abbr}
+                              </div>
+                              <span style={{ fontSize: 8, fontFamily: mono, color: active ? ct.color : t3, letterSpacing: "0.06em", textTransform: "uppercase" }}>{ct.tag}</span>
+                            </div>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: active ? t1 : t2, marginBottom: 4, letterSpacing: "-0.01em" }}>{ct.label}</div>
+                            <div style={{ fontSize: 11, color: t3, lineHeight: 1.5 }}>{ct.desc}</div>
+                          </div>
+                        </button>
+                      )
+                    })}
+                  </div>
+
+                  <button type="button" onClick={() => setShowAdvancedTypes(s => !s)}
+                    style={{ background: "transparent", border: "1px dashed " + bdr, borderRadius: 8, padding: "8px 12px", width: "100%", fontSize: 11, fontFamily: mono, color: t3, letterSpacing: "0.04em", cursor: "pointer", textAlign: "center" }}>
+                    {expanded ? "− Hide advanced types" : `+ More campaign types (${advanced.length})`}
                   </button>
-                )
-              })}
-            </div>
+
+                  {expanded && (
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 8, marginTop: 10 }}>
+                      {advanced.map(ct => {
+                        const active = type === ct.id
+                        return (
+                          <button key={ct.id} onClick={() => applyTemplate(ct.id)}
+                            style={{ padding: 0, textAlign: "left", borderRadius: 10, cursor: "pointer", overflow: "hidden",
+                              background: active ? `${ct.color}0c` : surf2,
+                              border: `1px solid ${active ? ct.color + "55" : bdr}`,
+                              transition: "all 0.1s",
+                            }}>
+                            <div style={{ height: 2, background: active ? ct.color : "transparent" }} />
+                            <div style={{ padding: "12px 13px" }}>
+                              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 9 }}>
+                                <div style={{ fontFamily: mono, fontSize: 11, fontWeight: 700, color: active ? ct.color : t3,
+                                  background: active ? `${ct.color}15` : "rgba(107,125,168,0.06)",
+                                  border: `1px solid ${active ? ct.color + "30" : bdr}`,
+                                  padding: "3px 7px", borderRadius: 5, letterSpacing: "0.04em" }}>
+                                  {ct.abbr}
+                                </div>
+                                <span style={{ fontSize: 8, fontFamily: mono, color: active ? ct.color : t3, letterSpacing: "0.06em", textTransform: "uppercase" }}>{ct.tag}</span>
+                              </div>
+                              <div style={{ fontSize: 12, fontWeight: 600, color: active ? t1 : t2, marginBottom: 4, letterSpacing: "-0.01em" }}>{ct.label}</div>
+                              <div style={{ fontSize: 11, color: t3, lineHeight: 1.5 }}>{ct.desc}</div>
+                            </div>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+                </>
+              )
+            })()}
           </Card>
 
           {/* ── 02 Campaign Details ── */}
           <Card step="02" title="Campaign details" sub="The more context you give, the better feedback you'll get. Be specific about what stage you're at.">
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
 
-              {/* Campaign banner upload + live card preview */}
-              <div style={{ display: "flex", gap: 20, alignItems: "flex-start", flexWrap: "wrap" }}>
-
-                {/* Campaign banner upload — drag to reposition */}
-                <div style={{ flex: "1 1 280px" }}>
+              {/* Campaign banner upload — the live preview is now in the sidebar
+                  (no more duplicate card preview next to the uploader) */}
+              <div>
+                <div>
                   <div style={{ fontSize: 12, fontWeight: 500, color: t1, marginBottom: 6 }}>
                     Campaign banner
                     <span style={{ fontSize: 10, fontFamily: mono, color: t3, fontWeight: 400, marginLeft: 6 }}>
@@ -550,8 +633,8 @@ export default function CreateCampaignPage() {
                       <div style={{ textAlign: "center" }}>
                         <div style={{ fontSize: 26, fontWeight: 900, fontFamily: mono, color: `${selectedType.color}35`, letterSpacing: "-0.04em", lineHeight: 1 }}>{selectedType.abbr}</div>
                         <div style={{ fontSize: 11, color: t2, marginTop: 10, fontWeight: 500 }}>Click to upload banner</div>
-                        <div style={{ fontSize: 10, fontFamily: mono, color: t3, marginTop: 4 }}>Recommended: 1200 × 300px · min 600 × 150px</div>
-                        <div style={{ fontSize: 10, fontFamily: mono, color: t3, marginTop: 2 }}>PNG, JPG, GIF · max 5MB · renders at full width, 200px tall</div>
+                        <div style={{ fontSize: 10, fontFamily: mono, color: t3, marginTop: 4 }}>Recommended: 16:9 — e.g. 1920 × 1080 or 4824 × 2714 high-res</div>
+                        <div style={{ fontSize: 10, fontFamily: mono, color: t3, marginTop: 2 }}>PNG, JPG, WebP, GIF · max 5MB · renders full-width, 200px tall — drag to crop after upload</div>
                       </div>
                     )}
                   </div>
@@ -570,48 +653,6 @@ export default function CreateCampaignPage() {
                   </div>
                   <input ref={logoInputRef} type="file" accept="image/*" style={{ display: "none" }}
                     onChange={e => { const f = e.target.files?.[0]; if (f) uploadLogo(f) }} />
-                </div>
-
-                {/* Live card preview */}
-                <div style={{ flex: "1 1 260px" }}>
-                  <div style={{ fontSize: 12, fontWeight: 500, color: t1, marginBottom: 6 }}>
-                    Card preview <span style={{ fontSize: 10, fontFamily: mono, color: t3, fontWeight: 400 }}>· updates as you fill in details</span>
-                  </div>
-                  <div style={{
-                    background: surf2, border: `1px solid ${selectedType.color}25`,
-                    borderRadius: 12, padding: "16px 18px",
-                    display: "flex", flexDirection: "column", gap: 10,
-                  }}>
-                    <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
-                      {/* Card preview logo — exact same render as live listing page */}
-                      <div style={{ position: "relative", width: 48, height: 48, borderRadius: 12, background: `${selectedType.color}12`, border: `1px solid ${selectedType.color}25`, overflow: "hidden", flexShrink: 0 }}>
-                        <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 800, fontFamily: mono, color: selectedType.color, letterSpacing: "-0.02em" }}>{selectedType.abbr}</span>
-                        {logoPreview && <img src={logoPreview} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />}
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0, paddingTop: 2 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4, flexWrap: "wrap" }}>
-                          <div style={{ fontSize: 14, fontWeight: 700, color: title ? t1 : t3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title || "Campaign title"}</div>
-                          <span style={{ fontSize: 9, fontWeight: 800, color: selectedType.color, fontFamily: mono, padding: "1px 6px", borderRadius: 4, background: `${selectedType.color}15`, border: `1px solid ${selectedType.color}30`, flexShrink: 0 }}>{selectedType.abbr}</span>
-                        </div>
-                        {projects.find(p => p.id === projectId) && (
-                          <div style={{ fontSize: 11, color: t2 }}>{projects.find(p => p.id === projectId)?.name}</div>
-                        )}
-                      </div>
-                    </div>
-                    {tagline && (
-                      <p style={{ fontSize: 12, color: t2, margin: 0, lineHeight: 1.5, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" as const }}>{tagline}</p>
-                    )}
-                    <div>
-                      {rewardType === "usdc" && rewardUsdcAmount
-                        ? <div><span style={{ fontSize: 18, fontWeight: 800, color: "#00d990", fontFamily: mono }}>${rewardUsdcAmount}</span><span style={{ fontSize: 11, color: t2, marginLeft: 5 }}>USDC per tester</span></div>
-                        : <span style={{ fontSize: 10, background: `${selectedRwd.color}15`, color: selectedRwd.color, border: `1px solid ${selectedRwd.color}30`, padding: "3px 8px", borderRadius: 4, fontFamily: mono }}>{selectedRwd.label}</span>
-                      }
-                    </div>
-                    <div style={{ display: "flex", justifyContent: "space-between", paddingTop: 8, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-                      <span style={{ fontSize: 11, color: t3, fontFamily: mono }}>{tasks.length} task{tasks.length !== 1 ? "s" : ""} · 0 done</span>
-                      <span style={{ fontSize: 11, color: t3 }}>just now</span>
-                    </div>
-                  </div>
                 </div>
 
               </div>
@@ -641,9 +682,26 @@ export default function CreateCampaignPage() {
                   style={inp} />
               </Field>
 
-              <div style={{ display: "grid", gridTemplateColumns: CONTRACT_HIDDEN.has(type) ? "1fr" : "1fr 1fr", gap: 12 }}>
-                {/* Primary contract — required for contract types, hidden for UI-only types */}
-                {!CONTRACT_HIDDEN.has(type) && (
+              {/* External-verification opt-in — for aggregator DEXes, off-chain matchers,
+                  custodial flows. When on, contract fields are hidden and the on-chain
+                  participation gate in /complete is skipped. */}
+              {!CONTRACT_HIDDEN.has(type) && (
+                <label style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "12px 14px", background: externalVerify ? "rgba(0,184,122,0.05)" : surf2, border: `1px solid ${externalVerify ? "rgba(0,184,122,0.25)" : bdr}`, borderRadius: 8, cursor: "pointer", marginBottom: 12 }}>
+                  <input type="checkbox" checked={externalVerify}
+                    onChange={e => { setExternalVerify(e.target.checked); if (e.target.checked) setContractAddress("") }}
+                    style={{ marginTop: 2, accentColor: "#00b87a" }} />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: externalVerify ? "#00d990" : t1 }}>External verification</div>
+                    <div style={{ fontSize: 11, color: t2, lineHeight: 1.6, marginTop: 3 }}>
+                      I'll verify tester actions in my own backend. Skip ArcLens's on-chain checks and don't ask testers for a contract.
+                    </div>
+                  </div>
+                </label>
+              )}
+
+              <div className="twoColGrid" style={{ display: "grid", gridTemplateColumns: (CONTRACT_HIDDEN.has(type) || externalVerify) ? "1fr" : "1fr 1fr", gap: 12 }}>
+                {/* Primary contract — hidden when type is UI-only OR external verification is on */}
+                {!CONTRACT_HIDDEN.has(type) && !externalVerify && (
                   <Field
                     label="Primary contract"
                     required={CONTRACT_REQUIRED.has(type)}
@@ -705,8 +763,8 @@ export default function CreateCampaignPage() {
                       onChange={e => updateTask(task.id, "description", e.target.value)}
                       style={{ width: "100%", background: "transparent", border: "none", outline: "none", fontSize: 12, color: t2, fontFamily: "inherit", boxSizing: "border-box" as const }} />
                   </div>
-                  {/* Per-task contract address (only shown for contract campaign types) */}
-                  {CONTRACT_REQUIRED.has(type) && (
+                  {/* Per-task contract address — also hidden when external verification is on */}
+                  {CONTRACT_REQUIRED.has(type) && !externalVerify && (
                     <div style={{ padding: "8px 14px 10px 48px", borderTop: "1px solid " + bdr, display: "flex", alignItems: "center", gap: 8 }}>
                       <span style={{ fontSize: 9, fontFamily: mono, color: t3, flexShrink: 0, textTransform: "uppercase", letterSpacing: "0.08em" }}>Contract</span>
                       <input type="text" value={task.contract_address || ""} placeholder={contractAddress || "0x... (inherits primary if blank)"}
@@ -801,7 +859,7 @@ export default function CreateCampaignPage() {
               {rewardType === "usdc" && (
                 <div style={{ padding: "16px", background: "rgba(0,217,144,0.04)", border: "1px solid rgba(0,217,144,0.14)", borderRadius: 10 }}>
                   <div style={{ fontSize: 10, fontFamily: mono, color: "#00d990", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 12 }}>USDC configuration</div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+                  <div className="twoColGrid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
                     <Field label="Per tester" required>
                       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                         <input type="number" value={rewardUsdcAmount} onChange={e => setRewardUsdcAmount(e.target.value)} placeholder="5.00" min="0.01" step="0.01" style={{ ...inp, flex: 1 }} />
@@ -833,7 +891,7 @@ export default function CreateCampaignPage() {
               </Field>
 
               {rewardType !== "usdc" && (
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <div className="twoColGrid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                   <Field label="Total slots" hint="Leave blank for unlimited">
                     <input type="number" value={totalSlots} onChange={e => setTotalSlots(e.target.value)} placeholder="Unlimited" min={1} style={inp} />
                   </Field>
@@ -902,7 +960,269 @@ export default function CreateCampaignPage() {
           </div>
 
         </div>
+        {/* ─── End form column ─── */}
+
+        {/* Live preview aside — sticks to the right as the founder scrolls.
+            ArcLayout's main wrapper now uses overflow-x:clip (not overflow:hidden),
+            so sticky works as expected here. Updates as you type. */}
+        <aside
+          className="createPreviewAside"
+          style={{
+            position: "sticky",
+            top: 24,
+            alignSelf: "start",
+            // Constrain to viewport so a tall preview can scroll internally
+            // instead of overflowing past the bottom of the viewport
+            maxHeight: "calc(100vh - 48px)",
+            overflowY: "auto",
+          }}>
+          {(() => {
+            // Defensive defaults — never throw out of this block, the preview must
+            // always render so it can't "disappear" mid-interaction even if some
+            // upstream state is briefly inconsistent (stale draft, race, etc).
+            const tm  = selectedType || TYPES[0]
+            const rm  = REWARDS.find(r => r.id === rewardType) || REWARDS.find(r => r.id === "credit") || REWARDS[0]
+            // If blank, slots is null → treated as unlimited (matches backend behavior:
+            // total_slots stays null in DB and the public feed shows the campaign as Open).
+            const parsedSlots = parseInt(totalSlots || "", 10)
+            const slots = Number.isFinite(parsedSlots) && parsedSlots > 0 ? parsedSlots : null
+            // Prefer the local blob URL (logoPreview) over the remote imgbb URL
+            // (campaignLogo). The remote URL can be blocked by ad-blockers /
+            // privacy extensions / strict DNS — when that happened the preview
+            // appeared to "disappear" because the imgbb image silently failed.
+            // The blob URL is always reachable since it's local to the browser.
+            // For any remote URL we still need to render (e.g. after a draft
+            // restore), route through /api/image-proxy so the request goes to
+            // our own origin instead of imgbb directly.
+            const rawLogo = logoPreview || campaignLogo || ""
+            const previewLogo = rawLogo.startsWith("blob:") || rawLogo.startsWith("data:")
+              ? rawLogo
+              : rawLogo
+                ? `/api/image-proxy?url=${encodeURIComponent(rawLogo)}`
+                : ""
+            const bx = Number.isFinite(bannerPos?.x) ? bannerPos.x : 50
+            const by = Number.isFinite(bannerPos?.y) ? bannerPos.y : 50
+            return (
+              <div>
+                <div style={{ fontSize: 10, fontFamily: mono, color: t3, letterSpacing: "0.14em", textTransform: "uppercase", marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#00b87a" }} />
+                  Live preview
+                </div>
+                <div style={{ background: "#0a0e1a", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 14, overflow: "hidden", display: "flex", flexDirection: "column", boxShadow: "0 12px 32px rgba(0,0,0,0.4)" }}>
+                  {/* Banner */}
+                  <div style={{ position: "relative", width: "100%", height: 130, background: `linear-gradient(135deg, ${tm.color}20 0%, ${tm.color}08 60%, #0a0e1a 100%)`, overflow: "hidden", flexShrink: 0 }}>
+                    <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 64, fontWeight: 900, fontFamily: mono, color: `${tm.color}15`, letterSpacing: "-0.04em", userSelect: "none" }}>{tm.abbr}</span>
+                    <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: `linear-gradient(90deg, ${tm.color}, ${tm.color}30)` }} />
+                    {previewLogo && (
+                      // Background-image div instead of <img> so we never have an
+                      // "image failed to load → element hidden" state. The div
+                      // always renders at full size; if the URL is bad the BT
+                      // placeholder behind it just stays visible.
+                      <div
+                        style={{
+                          position: "absolute",
+                          inset: 0,
+                          backgroundImage: `url("${previewLogo.replace(/"/g, '\\"')}")`,
+                          backgroundSize: "cover",
+                          backgroundPosition: `${bx}% ${by}%`,
+                          backgroundRepeat: "no-repeat",
+                          pointerEvents: "none",
+                        }}
+                      />
+                    )}
+                    <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 48, background: "linear-gradient(0deg, #0a0e1a 0%, transparent 100%)" }} />
+                    {!externalVerify && contractAddress && /^0x[a-fA-F0-9]{40}$/.test(contractAddress) && (
+                      <span style={{ position: "absolute", top: 10, right: 10, fontSize: 9, fontFamily: mono, background: "rgba(0,0,0,0.65)", color: "#00d990", border: "1px solid #00b87a40", padding: "3px 8px", borderRadius: 4, backdropFilter: "blur(4px)" }}>on-chain</span>
+                    )}
+                  </div>
+                  {/* Body */}
+                  <div style={{ padding: "18px 20px 20px", display: "flex", flexDirection: "column", gap: 12, flex: 1 }}>
+                    <div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4, flexWrap: "wrap" }}>
+                        <div style={{ fontSize: 15, fontWeight: 600, color: "#e8ecff", lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, minWidth: 0, letterSpacing: "-0.01em" }}>{title.trim() || "Untitled campaign"}</div>
+                        <span style={{ fontSize: 9, fontWeight: 700, color: tm.color, fontFamily: mono, padding: "2px 7px", borderRadius: 4, background: `${tm.color}15`, border: `1px solid ${tm.color}30`, flexShrink: 0, letterSpacing: "0.04em" }}>{tm.abbr}</span>
+                      </div>
+                      <div style={{ fontSize: 11, color: "#6b7da8", fontFamily: mono }}>
+                        {projects.find(p => p.id === projectId)?.name || "Your project"}
+                      </div>
+                    </div>
+                    {tagline.trim() && (
+                      <p style={{ fontSize: 12.5, color: "#6b7da8", margin: 0, lineHeight: 1.6, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical" as const }}>{tagline.trim()}</p>
+                    )}
+                    <div>
+                      {rewardType === "usdc" && rewardUsdcAmount ? (
+                        <div>
+                          <span style={{ fontSize: 20, fontWeight: 700, color: "#00d990", fontFamily: mono, letterSpacing: "-0.02em" }}>${rewardUsdcAmount}</span>
+                          <span style={{ fontSize: 11, color: "#6b7da8", marginLeft: 6 }}>USDC per tester</span>
+                        </div>
+                      ) : (
+                        <span style={{ fontSize: 10, background: `${rm.color}15`, color: rm.color, border: `1px solid ${rm.color}30`, padding: "4px 10px", borderRadius: 4, fontFamily: mono, letterSpacing: "0.03em" }}>{rm.label}</span>
+                      )}
+                    </div>
+                    {slots !== null ? (
+                      <div>
+                        <div style={{ height: 3, background: "rgba(255,255,255,0.06)", borderRadius: 2, overflow: "hidden", marginBottom: 5 }}>
+                          <div style={{ height: "100%", width: "0%", background: tm.color, borderRadius: 2 }} />
+                        </div>
+                        <div style={{ display: "flex", justifyContent: "space-between", fontFamily: mono }}>
+                          <span style={{ fontSize: 10, color: "#2e3a5c" }}>0/{slots} filled</span>
+                          <span style={{ fontSize: 10, color: "#2e3a5c" }}>{slots} left</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: 10, color: "#2e3a5c", fontFamily: mono }}>
+                        Open · unlimited testers
+                      </div>
+                    )}
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingTop: 10, borderTop: "1px solid rgba(255,255,255,0.05)", marginTop: "auto" }}>
+                      <span style={{ fontSize: 10, color: "#2e3a5c", fontFamily: mono }}>{tasks.length} task{tasks.length !== 1 ? "s" : ""} · 0 done</span>
+                      <span style={{ fontSize: 10, color: "#2e3a5c", fontFamily: mono }}>just now</span>
+                    </div>
+                  </div>
+                </div>
+                <div style={{ marginTop: 14, fontSize: 11, color: t3, lineHeight: 1.6, padding: "0 2px" }}>
+                  Updates as you type. This is exactly the card testers see in their feed.
+                </div>
+
+                {/* ─── DETAIL PAGE PREVIEW — exactly what testers see when they
+                     click into the campaign. Banner → stats → tasks → review
+                     questions → submit. Mirrors /trials/[id] for testers. ─── */}
+                <div style={{ marginTop: 28, fontSize: 10, fontFamily: mono, color: t3, letterSpacing: "0.14em", textTransform: "uppercase", marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#8aaeff" }} />
+                  Tester detail view
+                </div>
+                <div style={{ background: "#0a0e1a", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 14, overflow: "hidden", boxShadow: "0 12px 32px rgba(0,0,0,0.4)" }}>
+                  {/* Detail hero — wider banner, same as the real /trials/[id] page */}
+                  <div style={{ position: "relative", width: "100%", height: 110, background: `linear-gradient(135deg, ${tm.color}22 0%, ${tm.color}08 50%, #0a0e1a 100%)`, overflow: "hidden" }}>
+                    <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 56, fontWeight: 900, fontFamily: mono, color: `${tm.color}18`, letterSpacing: "-0.04em", userSelect: "none" }}>{tm.abbr}</span>
+                    <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: `linear-gradient(90deg, ${tm.color}, ${tm.color}40)` }} />
+                    {previewLogo && (
+                      <div
+                        style={{
+                          position: "absolute",
+                          inset: 0,
+                          backgroundImage: `url("${previewLogo.replace(/"/g, '\\"')}")`,
+                          backgroundSize: "cover",
+                          backgroundPosition: `${bx}% ${by}%`,
+                          backgroundRepeat: "no-repeat",
+                          pointerEvents: "none",
+                        }}
+                      />
+                    )}
+                    <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 50, background: "linear-gradient(0deg, #0a0e1a 0%, transparent 100%)" }} />
+                  </div>
+
+                  {/* Title + tagline + badges */}
+                  <div style={{ padding: "14px 16px 12px" }}>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: t1, lineHeight: 1.3, marginBottom: 4, letterSpacing: "-0.015em" }}>{title.trim() || "Untitled campaign"}</div>
+                    {tagline.trim() && (
+                      <p style={{ fontSize: 11, color: t2, margin: "0 0 8px", lineHeight: 1.55 }}>{tagline.trim()}</p>
+                    )}
+                    <div style={{ display: "flex", alignItems: "center", gap: 5, flexWrap: "wrap" }}>
+                      <span style={{ fontSize: 9, fontFamily: mono, background: `${tm.color}15`, color: tm.color, border: `1px solid ${tm.color}25`, padding: "2px 6px", borderRadius: 4 }}>{tm.label}</span>
+                      <span style={{ fontSize: 9, fontFamily: mono, background: `${rm.color}15`, color: rm.color, border: `1px solid ${rm.color}25`, padding: "2px 6px", borderRadius: 4 }}>{rm.label}</span>
+                    </div>
+                  </div>
+
+                  {/* Stat bar — exactly the same one testers see on the real detail page */}
+                  <div style={{ display: "grid", gridTemplateColumns: expiresAt ? "1fr 1fr 1fr" : "1fr 1fr", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                    {[
+                      { label: "slots left", value: slots !== null ? String(slots) : "Open", color: "#00b87a" },
+                      { label: "completed",  value: "0", color: t1 },
+                      ...(expiresAt ? [{ label: "closes", value: new Date(expiresAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }), color: t2 }] : []),
+                    ].map((s, i, arr) => (
+                      <div key={i} style={{ padding: "12px 0", textAlign: "center", borderRight: i < arr.length - 1 ? "1px solid rgba(255,255,255,0.06)" : "none" }}>
+                        <div style={{ fontSize: 15, fontWeight: 600, color: s.color, fontFamily: mono, lineHeight: 1 }}>{s.value}</div>
+                        <div style={{ fontSize: 8, color: t3, textTransform: "uppercase", letterSpacing: "0.1em", marginTop: 4, fontFamily: mono }}>{s.label}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* What to do — task list as testers see it */}
+                  <div style={{ padding: "14px 16px", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                    <div style={{ fontSize: 10, fontFamily: mono, color: t3, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 10 }}>
+                      {tasks.length} step{tasks.length !== 1 ? "s" : ""} to complete
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      {tasks.map((task, i) => (
+                        <div key={task.id} style={{ display: "flex", alignItems: "flex-start", gap: 9, padding: "8px 10px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.04)", borderRadius: 7 }}>
+                          <div style={{ width: 18, height: 18, borderRadius: "50%", background: `${tm.color}15`, border: `1px solid ${tm.color}30`, color: tm.color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 700, fontFamily: mono, flexShrink: 0, marginTop: 1 }}>{i + 1}</div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 11, fontWeight: 600, color: task.title.trim() ? t1 : t3, lineHeight: 1.4 }}>{task.title.trim() || `Step ${i + 1} title…`}</div>
+                            {task.description?.trim() && (
+                              <div style={{ fontSize: 10, color: t2, lineHeight: 1.5, marginTop: 2 }}>{task.description.trim()}</div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Review questions — what testers will answer */}
+                  <div style={{ padding: "14px 16px", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                    <div style={{ fontSize: 10, fontFamily: mono, color: t3, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 10 }}>
+                      {questions.length} feedback question{questions.length !== 1 ? "s" : ""}
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                      {questions.map((q, i) => (
+                        <div key={q.id}>
+                          <div style={{ fontSize: 11, fontWeight: 500, color: q.label.trim() ? t1 : t3, marginBottom: 4, lineHeight: 1.4 }}>
+                            {q.label.trim() || `Question ${i + 1}…`}
+                            {q.required && <span style={{ color: "#e03348", marginLeft: 3 }}>*</span>}
+                          </div>
+                          <div style={{ height: 36, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)", borderRadius: 6, padding: "8px 10px", fontSize: 10, color: t3, lineHeight: 1.4, fontStyle: "italic" }}>
+                            {q.placeholder?.trim() || "Tester's answer…"} {q.min_words ? `(${q.min_words}+ words)` : ""}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Submit CTA — what testers click when done */}
+                  <div style={{ padding: "12px 16px 16px", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                    <div style={{ height: 36, background: tm.color + "22", border: `1px solid ${tm.color}40`, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 600, color: tm.color, fontFamily: mono, letterSpacing: "-0.01em" }}>
+                      Submit Completion →
+                    </div>
+                    <div style={{ fontSize: 10, color: t3, textAlign: "center", marginTop: 6, fontFamily: mono }}>
+                      Testers earn {rm.label.toLowerCase()} after submission{externalVerify ? "" : contractAddress ? " · on-chain verified" : ""}
+                    </div>
+                  </div>
+                </div>
+                <div style={{ marginTop: 14, fontSize: 11, color: t3, lineHeight: 1.6, padding: "0 2px" }}>
+                  Every step shown above is exactly what testers will see when they click into your campaign.
+                </div>
+              </div>
+            )
+          })()}
+        </aside>
+
+        </div>
+        {/* ─── End two-column layout ─── */}
       </div>
+
+      {/* Responsive overrides:
+          - .createLayout: 2-col on wide (form + sticky preview) → 1-col below 960px
+          - .createPreviewAside: drops out of sticky and centers itself on narrow
+          - .twoColGrid: 2-col field rows → 1-col below 560px
+          All purely additive media queries so desktop is unchanged. */}
+      <style>{`
+        @media (max-width: 960px) {
+          .createLayout {
+            grid-template-columns: 1fr !important;
+          }
+          .createPreviewAside {
+            position: static !important;
+            max-width: 380px;
+            margin: 0 auto;
+            width: 100%;
+          }
+        }
+        @media (max-width: 560px) {
+          .twoColGrid {
+            grid-template-columns: 1fr !important;
+          }
+        }
+      `}</style>
     </ArcLayout>
   )
 }
@@ -918,14 +1238,16 @@ const inp: React.CSSProperties = {
 function Card({ step, title, sub, children }: { step: string; title: string; sub: string; children: React.ReactNode }) {
   return (
     <section style={{ background: "var(--surf,#0a0e1a)", border: "1px solid var(--bdr,rgba(255,255,255,0.06))", borderRadius: 14, overflow: "hidden" }}>
-      <div style={{ padding: "14px 20px 12px", borderBottom: "1px solid var(--bdr,rgba(255,255,255,0.06))", display: "flex", alignItems: "flex-start", gap: 12 }}>
-        <span style={{ fontSize: 8, fontFamily: "'DM Mono',monospace", padding: "3px 7px", borderRadius: 4, background: "rgba(26,86,255,0.1)", color: "#8aaeff", border: "1px solid rgba(26,86,255,0.18)", flexShrink: 0, marginTop: 2, letterSpacing: "0.06em" }}>{step}</span>
+      <div style={{ padding: "20px 24px 18px", borderBottom: "1px solid var(--bdr,rgba(255,255,255,0.06))", display: "flex", alignItems: "flex-start", gap: 14 }}>
+        {step ? (
+          <span style={{ fontSize: 9, fontFamily: "'DM Mono',monospace", padding: "4px 9px", borderRadius: 5, background: "rgba(26,86,255,0.08)", color: "#8aaeff", border: "1px solid rgba(26,86,255,0.18)", flexShrink: 0, marginTop: 3, letterSpacing: "0.08em", fontWeight: 600 }}>{step}</span>
+        ) : null}
         <div>
-          <div style={{ fontSize: 13, fontWeight: 600, color: "var(--t1,#e8ecff)", marginBottom: 2, letterSpacing: "-0.01em" }}>{title}</div>
-          <div style={{ fontSize: 11, color: "var(--t3,#2e3a5c)", fontFamily: "'DM Mono',monospace", lineHeight: 1.5 }}>{sub}</div>
+          <div style={{ fontSize: 15, fontWeight: 600, color: "var(--t1,#e8ecff)", marginBottom: 4, letterSpacing: "-0.015em", lineHeight: 1.3 }}>{title}</div>
+          <div style={{ fontSize: 12, color: "var(--t2,#6b7da8)", lineHeight: 1.6 }}>{sub}</div>
         </div>
       </div>
-      <div style={{ padding: "16px 20px 20px" }}>{children}</div>
+      <div style={{ padding: "22px 24px 24px" }}>{children}</div>
     </section>
   )
 }
@@ -933,9 +1255,9 @@ function Card({ step, title, sub, children }: { step: string; title: string; sub
 function Field({ label, required, hint, children }: { label: string; required?: boolean; hint?: string; children: React.ReactNode }) {
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 6 }}>
-        <label style={{ fontSize: 12, fontWeight: 500, color: "var(--t1,#e8ecff)", letterSpacing: "-0.01em" }}>
-          {label}{required && <span style={{ color: "#e03348", marginLeft: 2 }}>*</span>}
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 8 }}>
+        <label style={{ fontSize: 11, fontWeight: 600, color: "var(--t2,#6b7da8)", letterSpacing: "0.04em", textTransform: "uppercase", fontFamily: "'DM Mono',monospace" }}>
+          {label}{required && <span style={{ color: "#e03348", marginLeft: 3 }}>*</span>}
         </label>
         {hint && <span style={{ fontSize: 10, fontFamily: "'DM Mono',monospace", color: "var(--t3,#2e3a5c)" }}>{hint}</span>}
       </div>
