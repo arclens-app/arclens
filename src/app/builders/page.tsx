@@ -19,6 +19,15 @@ function dicebear(address: string) {
   return `https://api.dicebear.com/9.x/identicon/svg?seed=${address}&backgroundColor=0e1224&radius=50`
 }
 
+// Real avatars (imgbb URLs) need to go through our image-proxy so ad-blockers
+// and strict DNS don't break them. Dicebear is on our allowlist so it can
+// also go through. Local preview blob: / data: URLs render directly.
+function proxiedAvatar(url: string | null | undefined, fallbackAddress: string): string {
+  if (!url) return dicebear(fallbackAddress)
+  if (url.startsWith("blob:") || url.startsWith("data:")) return url
+  return `/api/image-proxy?url=${encodeURIComponent(url)}`
+}
+
 function shortAddr(addr: string) {
   return addr.slice(0, 6) + "…" + addr.slice(-4)
 }
@@ -114,7 +123,7 @@ export default function BuildersPage() {
                 onMouseLeave={e => { e.currentTarget.style.borderColor = bdr; e.currentTarget.style.transform = "translateY(0)" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "12px" }}>
                   <img
-                    src={b.avatar_url || dicebear(b.address)}
+                    src={proxiedAvatar(b.avatar_url, b.address)}
                     alt={b.display_name || b.address}
                     onError={e => { (e.target as HTMLImageElement).src = dicebear(b.address) }}
                     style={{ width: "44px", height: "44px", borderRadius: "50%", border: "1px solid " + bdr, background: surf2, flexShrink: 0, objectFit: "cover" }}

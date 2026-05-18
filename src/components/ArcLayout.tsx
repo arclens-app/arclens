@@ -801,8 +801,11 @@ export default function ArcLayout({ children, active }: { children: React.ReactN
         </div>
       </aside>
 
-      {/* MAIN — always full width since sidebar is overlaid */}
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: "100vh", width: "100%", maxWidth: "100vw", overflow: "hidden" }}>
+      {/* MAIN — always full width since sidebar is overlaid.
+          overflowX: "clip" (instead of overflow:hidden) prevents horizontal
+          scrollbars from leaking content but does NOT establish a containing
+          block, so descendants using position:sticky still work as expected. */}
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: "100vh", width: "100%", maxWidth: "100vw", overflowX: "clip" }}>
 
         {/* TOPBAR */}
         <header style={{ height: "52px", background: surf, borderBottom: "1px solid " + bdr, display: "flex", alignItems: "center", padding: "0 16px", gap: "10px", position: "sticky", top: 0, zIndex: 30, backdropFilter: "blur(8px)" }}>
