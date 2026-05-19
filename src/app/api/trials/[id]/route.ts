@@ -35,6 +35,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       `SELECT
          c.*,
          p.twitter AS project_twitter,
+         p.slug    AS project_slug,
          (SELECT COUNT(*) FROM campaign_completions cc WHERE cc.campaign_id = c.id) AS completion_count,
          (SELECT COUNT(*) FROM campaign_completions cc WHERE cc.campaign_id = c.id AND cc.status = 'reviewed') AS reviewed_count
        FROM campaigns c
@@ -76,11 +77,17 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       [campaignId]
     ).catch(() => {})
 
+    // NOTE: task_proofs MUST be included — the founder dashboard renders proof
+    // links + screenshot thumbnails per submission. xp_earned + per_question_ratings
+    // are also needed for the rating breakdown. LIMIT raised to 500 so large
+    // campaigns (Tower had 56 submissions silently dropped at LIMIT 50) show
+    // every tester.
     const completionsRes = await pool.query(
       `SELECT tester_wallet, auto_score, builder_rating, quality_score, status,
-              reward_delivered, review_answers, contract_verified, created_at
+              reward_delivered, review_answers, task_proofs, contract_verified,
+              xp_earned, per_question_ratings, created_at
        FROM campaign_completions WHERE campaign_id = $1
-       ORDER BY created_at DESC LIMIT 50`,
+       ORDER BY created_at DESC LIMIT 500`,
       [campaignId]
     )
 
