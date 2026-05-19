@@ -54,12 +54,22 @@ export async function GET(
       [project.category, project.id]
     )
 
-    // All-time leaderboard for this project — aggregates across every campaign
-    // it has run. Only builder-rated, reviewed completions count so unrated
-    // spam can't claim a spot on a public board.
+    // All-time leaderboard for this project. Aggregates across every campaign.
+    // Builder-rated reviewed entries only (no unrated spam).
+    //
+    // XP-aware ranking: if any of this project's campaigns has max_xp set,
+    // the board sorts by SUM(xp_earned). Otherwise we fall back to the legacy
+    // quality_score sum so projects that opted out keep their existing behavior.
     let leaderboard: any[] = []
-    let campaignsRun = 0
+    let campaignsRun  = 0
+    let usingXp       = false
     try {
+      const xpFlag = await pool.query(
+        `SELECT 1 FROM campaigns WHERE project_id = $1 AND max_xp_per_completion IS NOT NULL LIMIT 1`,
+        [project.id]
+      )
+      usingXp = xpFlag.rowCount > 0
+
       const lbRes = await pool.query(
         `SELECT
            cc.tester_wallet,
@@ -67,6 +77,7 @@ export async function GET(
            AVG(cc.quality_score)::numeric(6,2)          AS avg_quality,
            AVG(cc.builder_rating)::numeric(4,2)         AS avg_rating,
            SUM(cc.quality_score)::int                   AS total_score,
+           SUM(cc.xp_earned)::int                       AS total_xp,
            MAX(cc.created_at)                           AS last_active
          FROM campaign_completions cc
          JOIN campaigns c ON c.id = cc.campaign_id
@@ -74,7 +85,7 @@ export async function GET(
            AND cc.status = 'reviewed'
            AND cc.builder_rating IS NOT NULL
          GROUP BY cc.tester_wallet
-         ORDER BY total_score DESC, avg_quality DESC
+         ORDER BY ${usingXp ? "total_xp DESC, " : ""}total_score DESC, avg_quality DESC
          LIMIT 20`,
         [project.id]
       )
@@ -90,7 +101,7 @@ export async function GET(
     }
 
     return NextResponse.json(
-      { project: { ...project, txCount }, related: related.rows, leaderboard, campaignsRun },
+      { project: { ...project, txCount }, related: related.rows, leaderboard, campaignsRun, usingXp },
       { headers: { "Cache-Control": "public, s-maxage=30, stale-while-revalidate=60" } }
     )
   } catch (err) {
