@@ -1170,7 +1170,7 @@ export default function CampaignDetailPage() {
                 The campaign page stays focused on the tester experience. Founders
                 viewing their own campaign here see a small link to the dashboard. */}
             {isOwner && completions.length > 0 && (
-              <a href={`/dashboard/${campaign.slug || campaign.id}`}
+              <a href={`/dashboard/${(campaign as any).project_slug || campaign.slug || campaign.id}`}
                 style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "13px 18px",
                   background: "var(--surf,#0a0e1a)", border: "1px solid var(--bdr,rgba(255,255,255,0.06))", borderRadius: 10,
                   textDecoration: "none", transition: "border-color 0.12s" }}
