@@ -280,8 +280,10 @@ export default function CampaignDetailPage() {
     if (!wallet || !campaign) return
     setEditError("")
     const changes: Record<string, any> = {}
+    if (editForm.title?.trim()) changes.title = editForm.title.trim()
     if (editForm.expires_at) changes.expires_at = editForm.expires_at
     if (editForm.total_slots) changes.total_slots = parseInt(editForm.total_slots)
+    if (editForm.max_xp_per_completion?.trim()) changes.max_xp_per_completion = parseInt(editForm.max_xp_per_completion)
     if (editForm.tagline?.trim()) changes.tagline = editForm.tagline.trim()
     if (editForm.description?.trim()) changes.description = editForm.description.trim()
     if (editForm.app_url?.trim()) changes.app_url = editForm.app_url.trim()
@@ -1097,8 +1099,11 @@ export default function CampaignDetailPage() {
                     ) : (
                       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                         <div style={{ fontSize: 11, color: "var(--t3,#2e3a5c)", fontFamily: "var(--font-mono,monospace)", lineHeight: 1.6, padding: "10px 12px", background: "rgba(26,86,255,0.04)", border: "1px solid rgba(26,86,255,0.12)", borderRadius: 6 }}>
-                          <strong style={{ color: "#8aaeff" }}>Tagline, description, app URL, reward details</strong> apply instantly. <strong style={{ color: "#8aaeff" }}>Slots, deadline, contract</strong> require admin approval.
+                          <strong style={{ color: "#8aaeff" }}>Tagline, description, app URL, reward details, banner, invite codes</strong> apply instantly. <strong style={{ color: "#8aaeff" }}>Title, slots, deadline, max XP, contract, tasks, questions</strong> require admin approval.
                         </div>
+                        <EF label="Campaign title">
+                          <input type="text" value={editForm.title || ""} onChange={e => setEditForm(f => ({ ...f, title: e.target.value.slice(0, 80) }))} placeholder={campaign.title} style={ei} />
+                        </EF>
                         {pendingUpdate?.status === "rejected" && (
                           <div style={{ padding: "10px 14px", background: "rgba(224,51,72,0.07)", border: "1px solid rgba(224,51,72,0.2)", borderRadius: 8 }}>
                             <div style={{ fontSize: 12, fontWeight: 600, color: "#e03348", marginBottom: pendingUpdate.admin_note ? 4 : 0 }}>Last edit request was not approved</div>
@@ -1116,6 +1121,11 @@ export default function CampaignDetailPage() {
                             <input type="number" min={campaign.filled_slots || 1} value={editForm.total_slots || ""} onChange={e => setEditForm(f => ({ ...f, total_slots: e.target.value }))} placeholder={campaign.total_slots ? String(campaign.total_slots) : "—"} style={ei} />
                           </EF>
                         </div>
+                        {campaign.max_xp_per_completion != null && (
+                          <EF label="Max XP per completion">
+                            <input type="number" min={1} max={10000} value={editForm.max_xp_per_completion || ""} onChange={e => setEditForm(f => ({ ...f, max_xp_per_completion: e.target.value }))} placeholder={String(campaign.max_xp_per_completion)} style={ei} />
+                          </EF>
+                        )}
                         <EF label="Tagline">
                           <input type="text" value={editForm.tagline || ""} onChange={e => setEditForm(f => ({ ...f, tagline: e.target.value }))} placeholder={campaign.tagline || "One-line hook"} style={ei} />
                         </EF>
@@ -1148,7 +1158,10 @@ export default function CampaignDetailPage() {
                           </button>
                           {tasksSectionOpen && editTasks && (
                             <div style={{ padding: "0 12px 12px", display: "flex", flexDirection: "column", gap: 8 }}>
-                              {editTasks.map((t, i) => (
+                              {editTasks.map((t, i) => {
+                                const proofType = (t.proof_type as ProofType | undefined) || "none"
+                                const contractValid = !!t.contract_address && /^0x[a-fA-F0-9]{40}$/.test(t.contract_address)
+                                return (
                                 <div key={t.id} style={{ background: "var(--surf,#0a0e1a)", border: "1px solid var(--bdr,rgba(255,255,255,0.06))", borderRadius: 7, padding: "9px 10px" }}>
                                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
                                     <span style={{ fontSize: 9, fontFamily: "var(--font-mono,monospace)", color: "var(--t3,#2e3a5c)", flexShrink: 0 }}>{String(i + 1).padStart(2, "0")}</span>
@@ -1163,8 +1176,35 @@ export default function CampaignDetailPage() {
                                   <input type="text" value={t.description} placeholder="What testers should do"
                                     onChange={e => setEditTasks(p => p?.map(x => x.id === t.id ? { ...x, description: e.target.value } : x) ?? null)}
                                     style={{ width: "100%", background: "transparent", border: "none", outline: "none", fontSize: 11, color: "var(--t2,#6b7da8)", marginLeft: 22, boxSizing: "border-box" }} />
+                                  {/* Verification controls — founders can change proof type
+                                      and per-task contract per step. Both go through the
+                                      admin queue along with title/description edits. */}
+                                  <div style={{ marginTop: 8, marginLeft: 22, paddingTop: 8, borderTop: "1px solid var(--bdr,rgba(255,255,255,0.04))", display: "flex", flexDirection: "column", gap: 6 }}>
+                                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                      <span style={{ fontSize: 9, fontFamily: "var(--font-mono,monospace)", color: "var(--t3,#2e3a5c)", textTransform: "uppercase", letterSpacing: "0.06em", flexShrink: 0, width: 60 }}>Proof</span>
+                                      <select value={proofType}
+                                        onChange={e => setEditTasks(p => p?.map(x => x.id === t.id ? { ...x, proof_type: e.target.value as ProofType } : x) ?? null)}
+                                        style={{ flex: 1, background: "transparent", border: "none", outline: "none", fontSize: 10.5, fontFamily: "var(--font-mono,monospace)", color: proofType !== "none" ? "#8aaeff" : "var(--t3,#2e3a5c)", cursor: "pointer" }}>
+                                        <option value="none">None — no proof required</option>
+                                        <option value="x_link">X (Twitter) post link</option>
+                                        <option value="tx_hash">Transaction hash</option>
+                                        <option value="screenshot">Screenshot upload</option>
+                                        <option value="url">Custom URL</option>
+                                      </select>
+                                    </div>
+                                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                      <span style={{ fontSize: 9, fontFamily: "var(--font-mono,monospace)", color: "var(--t3,#2e3a5c)", textTransform: "uppercase", letterSpacing: "0.06em", flexShrink: 0, width: 60 }}>Contract</span>
+                                      <input type="text" value={t.contract_address || ""} placeholder="0x… (optional — for internal verification)"
+                                        onChange={e => setEditTasks(p => p?.map(x => x.id === t.id ? { ...x, contract_address: e.target.value.trim() } : x) ?? null)}
+                                        style={{ flex: 1, background: "transparent", border: "none", outline: "none", fontSize: 10.5, fontFamily: "var(--font-mono,monospace)",
+                                          color: contractValid ? "#00d990" : t.contract_address ? "#e03348" : "var(--t3,#2e3a5c)" }} />
+                                      {contractValid && (
+                                        <div style={{ width: 5, height: 5, borderRadius: "50%", background: "#00d990", flexShrink: 0 }} />
+                                      )}
+                                    </div>
+                                  </div>
                                 </div>
-                              ))}
+                              )})}
                               <button type="button"
                                 onClick={() => setEditTasks(p => [...(p ?? []), { id: "t" + Date.now().toString(36), title: "", description: "" }])}
                                 style={{ height: 32, background: "transparent", color: "var(--t3,#2e3a5c)", border: "1px dashed var(--bdr,rgba(255,255,255,0.12))", borderRadius: 7, fontSize: 11, cursor: "pointer", fontFamily: "var(--font-mono,monospace)" }}>
