@@ -359,8 +359,10 @@ export default function ForgePage() {
                     display: "flex", flexDirection: "column",
                   }}
                 >
-                  {/* Banner */}
-                  <div style={{ position: "relative", width: "100%", height: 110, background: `linear-gradient(135deg, ${tm.color}20 0%, ${tm.color}08 60%, #0a0e1a 100%)`, overflow: "hidden", flexShrink: 0 }}>
+                  {/* Banner — 16:9 aspect ratio so full uploaded banners (which
+                      are 16:9 by the recommended-dimensions hint) render edge to
+                      edge instead of cropping left/right at a fixed height. */}
+                  <div style={{ position: "relative", width: "100%", aspectRatio: "16 / 9", background: `linear-gradient(135deg, ${tm.color}20 0%, ${tm.color}08 60%, #0a0e1a 100%)`, overflow: "hidden", flexShrink: 0 }}>
                     <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 56, fontWeight: 900, fontFamily: "monospace", color: `${tm.color}15`, letterSpacing: "-0.04em", userSelect: "none" }}>{tm.abbr}</span>
                     <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: `linear-gradient(90deg, ${tm.color}, ${tm.color}30)` }} />
                     {logoUrl && (
