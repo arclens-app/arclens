@@ -55,33 +55,49 @@ export async function GET(req: NextRequest) {
       `),
     ])
 
-    let usdc = 0
+    // CRITICAL: don't silently default to 0 on Arcscan failures.
+    // Previously a transient 5xx from Arcscan returned usdc=0 which got
+    // cached for 60s — causing the admin balance to flap between "$8" and
+    // "$0" depending on whether the last fetch succeeded. Now we surface
+    // null + fetchError so the UI can clearly show "—" + a "retry" hint.
+    let usdc: number | null = null
+    let fetchError: string | null = null
     if (coinRes.ok) {
-      const data = await coinRes.json()
-      usdc = Number(data.coin_balance || 0) / 1e18
+      try {
+        const data = await coinRes.json()
+        usdc = Number(data.coin_balance || 0) / 1e18
+      } catch {
+        fetchError = "Arcscan returned malformed JSON"
+      }
+    } else {
+      fetchError = `Arcscan responded ${coinRes.status}`
     }
 
     const committed = Number(commitRes.rows[0]?.committed || 0)
-    const free      = usdc - committed
+    const free      = usdc != null ? usdc - committed : null
+
+    const headers: Record<string, string> = {
+      // Only cache successful reads. Errors must NOT be cached or a
+      // transient blip locks the UI to "0" for 60s.
+      "Cache-Control": fetchError ? "no-store" : "private, max-age=60",
+    }
 
     return NextResponse.json({
-      address:    PAYOUT_ADDR,
+      address:     PAYOUT_ADDR,
       usdc,
       committed,
       free,
+      fetchError,
       alerts: {
-        critical:   usdc < USDC_CRIT_THRESHOLD,
-        low:        usdc < USDC_LOW_THRESHOLD,
-        underwater: free < 0,
+        critical:   usdc != null && usdc < USDC_CRIT_THRESHOLD,
+        low:        usdc != null && usdc < USDC_LOW_THRESHOLD,
+        underwater: free != null && free < 0,
       },
       thresholds: {
         low:  USDC_LOW_THRESHOLD,
         crit: USDC_CRIT_THRESHOLD,
       },
-    }, { headers: {
-      // Cache for 60s — admin doesn't need real-time and Arcscan calls aren't free
-      "Cache-Control": "private, max-age=60",
-    } })
+    }, { headers })
   } catch (e) {
     console.error("[payout-balance]", e)
     return NextResponse.json({ error: "Failed to fetch balance" }, { status: 502 })

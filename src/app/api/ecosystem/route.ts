@@ -73,15 +73,21 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // New submission — generate unique slug if taken
-    let finalSlug = slug
+    // New submission — slug must be derived purely from the project name.
+    // If the slug is already taken, reject with a clear error so the founder
+    // picks a different name (e.g. "Tower Exchange" instead of "Tower").
+    // This keeps every slug human-readable and tied to the brand — no random
+    // timestamps, no -2/-3 counters polluting public URLs.
     const slugCheck = await pool.query(
-      "SELECT id FROM projects WHERE slug = $1 LIMIT 1",
+      "SELECT id, name FROM projects WHERE slug = $1 LIMIT 1",
       [slug]
     )
     if (slugCheck.rows.length > 0) {
-      finalSlug = slug + "-" + Date.now().toString(36)
+      return NextResponse.json({
+        error: `A project named "${slugCheck.rows[0].name}" already uses this URL. Pick a more specific project name (e.g. "${name.trim()} Labs" or "${name.trim()} Protocol") and resubmit.`,
+      }, { status: 409 })
     }
+    const finalSlug = slug
 
     await pool.query(
       `INSERT INTO projects (name, tagline, description, category, logo_url, website, twitter, github, discord, contract, contracts, email, city, country, approved, live, slug)
