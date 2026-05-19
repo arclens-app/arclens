@@ -19,7 +19,7 @@ const COSMETIC = new Set(["tagline", "description", "app_url", "banner_position"
 // the pending_campaign_updates queue to prevent bait-and-switch.
 // `xp_mode` and per-question xp_value stay fully locked — switching them
 // mid-campaign would invalidate already-rated submissions.
-const MATERIAL = new Set(["expires_at", "total_slots", "contract_address", "max_xp_per_completion", "tasks", "review_questions"])
+const MATERIAL = new Set(["title", "expires_at", "total_slots", "contract_address", "max_xp_per_completion", "tasks", "review_questions"])
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -177,6 +177,11 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         return NextResponse.json({ error: "max_xp_per_completion must be 1 - 10000" }, { status: 400 })
       }
       material.max_xp_per_completion = n
+    }
+    if (material.title !== undefined) {
+      const t = String(material.title).trim().slice(0, 80)
+      if (!t) return NextResponse.json({ error: "Title can't be empty" }, { status: 400 })
+      material.title = t
     }
 
     // Validate + sanitize tasks array. Founders can edit existing tasks, add
