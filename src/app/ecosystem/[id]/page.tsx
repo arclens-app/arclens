@@ -49,6 +49,15 @@ interface Review {
   created_at: string
 }
 
+interface LeaderboardRow {
+  tester_wallet:        string
+  campaigns_completed:  number
+  avg_quality:          string | number
+  avg_rating:           string | number
+  total_score:          number
+  last_active:          string
+}
+
 const CAT_COLOR: Record<string, string> = {
   Infrastructure: "#1a56ff", DeFi: "#00d990", NFT: "#c08828",
   Payments: "#00d990", Gaming: "#a855f7", Social: "#ec4899",
@@ -102,6 +111,9 @@ export default function ProjectPage() {
   const [mounted, setMounted]     = useState(false)
   const [showBanner, setShowBanner] = useState(false)
   const [reviews, setReviews]     = useState<Review[]>([])
+  const [leaderboard, setLeaderboard] = useState<LeaderboardRow[]>([])
+  const [campaignsRun, setCampaignsRun] = useState<number>(0)
+  const [lbShowAll, setLbShowAll]     = useState(false)
   const [showReviewForm, setShowReviewForm] = useState(false)
   const [reviewForm, setReviewForm] = useState({ category: "Product Experience", rating: 5, text: "", isPublic: true, contact: "" })
   const [submittingReview, setSubmittingReview] = useState(false)
@@ -125,6 +137,8 @@ export default function ProjectPage() {
         const data = await res.json()
         setProject(data.project)
         setRelated(data.related || [])
+        setLeaderboard(data.leaderboard || [])
+        setCampaignsRun(data.campaignsRun || 0)
 
         // Record view
         const deviceId = getDeviceId()
@@ -193,7 +207,7 @@ export default function ProjectPage() {
   function share() {
     const url = `https://arclenz.xyz/ecosystem/${id}`
     const text = `Check out ${project?.name} on ArcLens — ${project?.tagline}\n\n${url}`
-    window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`, "_blank")
+    window.open(`https://x.com/intent/tweet?text=${encodeURIComponent(text)}`, "_blank")
   }
 
   function copyLink() {
@@ -386,7 +400,7 @@ export default function ProjectPage() {
               <span style={{ fontSize: "13px", color: usdc }}>✓ Review submitted successfully</span>
               <button onClick={() => {
                 const text = `Just reviewed ${project?.name} on ArcLens — arclenz.xyz/ecosystem/${id}`
-                window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`, "_blank")
+                window.open(`https://x.com/intent/tweet?text=${encodeURIComponent(text)}`, "_blank")
               }} style={{ height: "32px", padding: "0 14px", background: "#1a56ff", color: "#fff", fontSize: "12px", fontFamily: mono, border: "none", borderRadius: "6px", cursor: "pointer" }}>
                 Share on 𝕏
               </button>
@@ -473,6 +487,74 @@ export default function ProjectPage() {
             </div>
           )}
         </div>
+
+        {/* ALL-TIME TOP TESTERS — aggregated across every campaign this project
+            has run. Only renders if there's at least one rated submission. */}
+        {leaderboard.length > 0 && (() => {
+          const SHOW_LIMIT = 10
+          const visible = lbShowAll ? leaderboard : leaderboard.slice(0, SHOW_LIMIT)
+          const hasMore = leaderboard.length > SHOW_LIMIT
+          return (
+            <div id="leaderboard" style={{ marginTop: "32px", padding: "0 4px", scrollMarginTop: "24px" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px", marginBottom: "12px", flexWrap: "wrap" }}>
+                <div style={{ fontSize: "10px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.1em" }}>
+                  All-Time Top Testers
+                </div>
+                <div style={{ fontSize: "10px", fontFamily: mono, color: t3 }}>
+                  {leaderboard.length} contributor{leaderboard.length === 1 ? "" : "s"}{campaignsRun > 0 ? ` · across ${campaignsRun} campaign${campaignsRun === 1 ? "" : "s"}` : ""}
+                </div>
+              </div>
+              <div style={{ background: surf, border: "1px solid " + bdr, borderRadius: "14px", overflow: "hidden" }}>
+                {visible.map((row, i) => {
+                  const rank       = i + 1
+                  const avgQ       = Math.round(Number(row.avg_quality) || 0)
+                  const avgR       = Number(row.avg_rating) || 0
+                  const scoreColor = avgQ > 70 ? usdc : avgQ > 40 ? "#e08810" : t2
+                  const rkColor    = rank === 1 ? "#d4a447" : rank === 2 ? "#a5b0c5" : rank === 3 ? "#b88762" : t3
+                  return (
+                    <a key={row.tester_wallet} href={`/tester/${row.tester_wallet}`}
+                      style={{ display: "flex", alignItems: "center", gap: "14px", padding: "13px 20px",
+                        borderBottom: (i < visible.length - 1 || hasMore) ? "1px solid " + bdr : "none",
+                        textDecoration: "none", transition: "background 0.12s" }}
+                      onMouseEnter={e => (e.currentTarget.style.background = surf2)}
+                      onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
+                      <div style={{ width: "36px", fontSize: "12px", fontFamily: mono, fontWeight: 700, color: rkColor, flexShrink: 0, letterSpacing: "0.04em" }}>
+                        {"#" + rank}
+                      </div>
+                      <span style={{ fontSize: "13px", fontFamily: mono, color: t1, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {row.tester_wallet.slice(0, 8)}…{row.tester_wallet.slice(-4)}
+                      </span>
+                      <div style={{ display: "flex", alignItems: "center", gap: "16px", flexShrink: 0 }}>
+                        <div style={{ textAlign: "right", minWidth: "60px" }}>
+                          <div style={{ fontSize: "11px", fontWeight: 600, color: t1, fontFamily: mono }}>{row.campaigns_completed}</div>
+                          <div style={{ fontSize: "8.5px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.08em", marginTop: "2px" }}>tested</div>
+                        </div>
+                        <div style={{ textAlign: "right", minWidth: "70px" }}>
+                          <div style={{ fontSize: "11px", color: "#c08828", fontFamily: mono, fontWeight: 600 }}>{avgR.toFixed(1)}★</div>
+                          <div style={{ fontSize: "8.5px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.08em", marginTop: "2px" }}>avg rating</div>
+                        </div>
+                        <div style={{ textAlign: "right", minWidth: "60px" }}>
+                          <div style={{ fontSize: "13px", fontWeight: 700, color: scoreColor, fontFamily: mono }}>{avgQ}</div>
+                          <div style={{ fontSize: "8.5px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.08em", marginTop: "2px" }}>avg quality</div>
+                        </div>
+                      </div>
+                    </a>
+                  )
+                })}
+                {hasMore && (
+                  <button onClick={() => setLbShowAll(s => !s)}
+                    style={{ width: "100%", padding: "12px 20px", background: surf2, border: "none",
+                             color: "#8aaeff", fontSize: "11px", fontFamily: mono, cursor: "pointer", letterSpacing: "0.04em",
+                             transition: "background 0.12s" }}
+                    onMouseEnter={e => (e.currentTarget.style.background = "rgba(26,86,255,0.06)")}
+                    onMouseLeave={e => (e.currentTarget.style.background = surf2)}>
+                    {lbShowAll ? "Show less" : `View all ${leaderboard.length} contributors →`}
+                  </button>
+                )}
+              </div>
+            </div>
+          )
+        })()}
 
         {/* RELATED PROJECTS */}
         {related.length > 0 && (

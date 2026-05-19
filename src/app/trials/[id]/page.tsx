@@ -49,7 +49,8 @@ interface Campaign {
   contract_address: string | null
   app_url: string | null
   slug: string | null
-  invite_codes: string[] | null
+  invite_codes:      string[] | null
+  invite_codes_note: string | null
 }
 
 interface Completion {
@@ -385,8 +386,10 @@ export default function CampaignDetailPage() {
 
         {/* ── Hero Banner ── */}
         <div style={{ background: "var(--surf,#0a0e1a)", border: "1px solid var(--bdr,rgba(255,255,255,0.06))", borderRadius: 16, marginBottom: 24, overflow: "hidden", boxShadow: "0 1px 0 rgba(255,255,255,0.02) inset" }}>
-          {/* Banner image — full width, 240px tall on desktop, 180px mobile */}
-          <div className="heroBanner" style={{ position: "relative", width: "100%", height: 240, background: `linear-gradient(135deg, ${tm.color}22 0%, ${tm.color}08 50%, #0a0e1a 100%)`, overflow: "hidden" }}>
+          {/* Banner image — uses a true 16:9 aspect ratio so the full upload
+              renders (no edge cropping for branded banners like Tower x ArcLens).
+              maxHeight caps it on ultra-wide screens so it doesn't dominate. */}
+          <div className="heroBanner" style={{ position: "relative", width: "100%", aspectRatio: "16 / 9", maxHeight: 420, background: `linear-gradient(135deg, ${tm.color}22 0%, ${tm.color}08 50%, #0a0e1a 100%)`, overflow: "hidden" }}>
             {/* Fallback: large abbr centered */}
             <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 80, fontWeight: 900, fontFamily: "var(--font-mono,monospace)", color: `${tm.color}18`, letterSpacing: "-0.04em", userSelect: "none" }}>{tm.abbr}</span>
             {/* Accent line at top */}
@@ -419,9 +422,23 @@ export default function CampaignDetailPage() {
                 </div>
               </div>
 
-              {/* Share button — copies URL + opens Twitter intent. Founders share their own;
-                  fans share campaigns they're excited about. */}
-              <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+              {/* Share + Leaderboard buttons. Leaderboard only appears when at
+                  least one rated submission exists — empty campaigns hide it. */}
+              <div style={{ display: "flex", gap: 6, flexShrink: 0, flexWrap: "wrap" }}>
+                {completions.some(c => c.builder_rating != null && c.status === "reviewed") && (
+                  <a
+                    href={`/trials/${campaign.slug || campaign.id}/leaderboard`}
+                    title="View top contributors"
+                    style={{ height: 32, padding: "0 12px", background: "transparent", border: "1px solid var(--bdr,rgba(255,255,255,0.08))", borderRadius: 7, color: "var(--t2,#6b7da8)", fontSize: 11, fontFamily: "var(--font-mono,monospace)", cursor: "pointer", whiteSpace: "nowrap", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6 }}
+                  >
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="4" y1="20" x2="4" y2="12"/>
+                      <line x1="12" y1="20" x2="12" y2="4"/>
+                      <line x1="20" y1="20" x2="20" y2="16"/>
+                    </svg>
+                    leaderboard
+                  </a>
+                )}
                 <button
                   title="Copy link"
                   onClick={async () => {
@@ -436,7 +453,7 @@ export default function CampaignDetailPage() {
                 </button>
                 <a
                   href={typeof window !== "undefined"
-                    ? `https://twitter.com/intent/tweet?text=${encodeURIComponent(`${campaign.title} on ArcLens — testing campaign with ${campaign.reward_type === "usdc" ? `$${campaign.reward_usdc_amount} USDC` : "rewards"} per tester. Join in:`)}&url=${encodeURIComponent(window.location.href)}`
+                    ? `https://x.com/intent/tweet?text=${encodeURIComponent(`${campaign.title} on ArcLens — testing campaign with ${campaign.reward_type === "usdc" ? `$${campaign.reward_usdc_amount} USDC` : "rewards"} per tester. Join in:`)}&url=${encodeURIComponent(window.location.href)}`
                     : "#"
                   }
                   target="_blank" rel="noopener noreferrer"
@@ -658,7 +675,12 @@ export default function CampaignDetailPage() {
                         (e.g. closed-beta DEX). ArcLens displays them verbatim;
                         redemption happens on the founder's product, not here. */}
                     {Array.isArray(campaign.invite_codes) && campaign.invite_codes.length > 0 && (
-                      <InviteCodesPanel codes={campaign.invite_codes} appUrl={campaign.app_url} productName={campaign.project_name} />
+                      <InviteCodesPanel
+                        codes={campaign.invite_codes}
+                        appUrl={campaign.app_url}
+                        productName={campaign.project_name}
+                        note={campaign.invite_codes_note || null}
+                      />
                     )}
                     {/* How this works — shown only before the first step */}
                     {flowStep === 0 && !isReviewStep && (
@@ -820,6 +842,10 @@ export default function CampaignDetailPage() {
                 )}
               </div>
             )}
+
+            {/* Top contributors live on a dedicated page (/trials/[id]/leaderboard)
+                so they never compete for vertical space with the wizard. The
+                small pill in the header (added near share buttons) links there. */}
 
             {/* ── Builder: Rate Testers ── */}
             {isOwner && completions.length > 0 && (
@@ -1057,7 +1083,7 @@ export default function CampaignDetailPage() {
             display: none !important;
           }
           .heroBanner {
-            height: 180px !important;
+            max-height: 260px !important;
           }
         }
       `}</style>
@@ -1081,12 +1107,94 @@ function EF({ label, children }: { label: string; children: React.ReactNode }) {
   )
 }
 
+// Pro rank color treatment — gold/silver/bronze for top 3, dimmed for rest.
+function rankColor(rank: number, fallback: string): string {
+  if (rank === 1) return "#d4a447"
+  if (rank === 2) return "#a5b0c5"
+  if (rank === 3) return "#b88762"
+  return fallback
+}
+
+// Public per-campaign leaderboard. Builder-rated submissions only — keeps
+// unreviewed spam from gaming the public-facing board on USDC campaigns.
+function TopContributorsLeaderboard({ completions }: { completions: Completion[] }) {
+  const [showAll, setShowAll] = useState(false)
+  const SHOW_LIMIT = 5
+  const mono = "'DM Mono', monospace"
+
+  const ranked = completions
+    .filter(c => c.builder_rating != null && c.status === "reviewed")
+    .slice()
+    .sort((a, b) => {
+      const qa = Number(a.quality_score) || 0
+      const qb = Number(b.quality_score) || 0
+      if (qb !== qa) return qb - qa
+      return (Number(b.builder_rating) || 0) - (Number(a.builder_rating) || 0)
+    })
+
+  if (ranked.length === 0) return null
+  const visible = showAll ? ranked : ranked.slice(0, SHOW_LIMIT)
+  const hasMore = ranked.length > SHOW_LIMIT
+
+  return (
+    <div id="leaderboard" style={{ background: "var(--surf,#0a0e1a)", border: "1px solid var(--bdr,rgba(255,255,255,0.06))", borderRadius: 12, overflow: "hidden", scrollMarginTop: 24 }}>
+      <div style={{ padding: "14px 20px", borderBottom: "1px solid var(--bdr,rgba(255,255,255,0.06))", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+        <div style={{ fontSize: 11, fontFamily: mono, color: "var(--t2,#6b7da8)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+          Top Contributors
+        </div>
+        <div style={{ fontSize: 10, fontFamily: mono, color: "var(--t3,#2e3a5c)" }}>
+          {ranked.length} rated · ranked by quality
+        </div>
+      </div>
+      <div>
+        {visible.map((c, i) => {
+          const rank       = i + 1
+          const qs         = Math.round(Number(c.quality_score) || 0)
+          const scoreColor = qs > 70 ? "#00b87a" : qs > 40 ? "#e08810" : "var(--t2,#6b7da8)"
+          const rkColor    = rankColor(rank, "var(--t3,#2e3a5c)")
+          return (
+            <a key={c.tester_wallet} href={`/tester/${c.tester_wallet}`}
+              style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 20px",
+                       borderBottom: (i < visible.length - 1 || hasMore) ? "1px solid var(--bdr,rgba(255,255,255,0.06))" : "none",
+                       textDecoration: "none" }}>
+              <div style={{ width: 32, fontSize: 12, fontFamily: mono, color: rkColor, fontWeight: 700, flexShrink: 0, letterSpacing: "0.04em" }}>
+                {"#" + rank}
+              </div>
+              <WalletAvatar wallet={c.tester_wallet} size={26} />
+              <span style={{ fontSize: 12, fontFamily: mono, color: "var(--t1,#e8ecff)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {c.tester_wallet.slice(0, 8)}…{c.tester_wallet.slice(-4)}
+              </span>
+              <div style={{ fontSize: 11, fontFamily: mono, color: "#c08828", flexShrink: 0 }}>
+                {"★".repeat(c.builder_rating || 0)}<span style={{ opacity: 0.25 }}>{"★".repeat(5 - (c.builder_rating || 0))}</span>
+              </div>
+              <div style={{ minWidth: 50, textAlign: "right", flexShrink: 0 }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: scoreColor, fontFamily: mono }}>{qs}</span>
+                <span style={{ fontSize: 9, fontFamily: mono, color: "var(--t3,#2e3a5c)", marginLeft: 3 }}>/100</span>
+              </div>
+            </a>
+          )
+        })}
+        {hasMore && (
+          <button onClick={() => setShowAll(s => !s)}
+            style={{ width: "100%", padding: "11px 20px", background: "var(--surf2,#0e1224)", border: "none",
+                     color: "#8aaeff", fontSize: 11, fontFamily: mono, cursor: "pointer", letterSpacing: "0.04em",
+                     transition: "background 0.12s" }}
+            onMouseEnter={e => (e.currentTarget.style.background = "rgba(26,86,255,0.06)")}
+            onMouseLeave={e => (e.currentTarget.style.background = "var(--surf2,#0e1224)")}>
+            {showAll ? "Show less" : `View all ${ranked.length} contributors →`}
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // Closed-beta invite codes. ArcLens just displays the founder's codes; the
 // founder's own product validates them. Tester taps to copy. Each chip fades
 // up into place on mount (~200ms) and the panel ends with a big primary CTA
 // pointing to the product so the workflow — copy code → go use it there →
 // come back — is unmissable.
-function InviteCodesPanel({ codes, appUrl, productName }: { codes: string[]; appUrl: string | null; productName: string | null }) {
+function InviteCodesPanel({ codes, appUrl, productName, note }: { codes: string[]; appUrl: string | null; productName: string | null; note: string | null }) {
   const [copiedCode, setCopiedCode] = useState<string | null>(null)
   const mono = "'DM Mono', monospace"
 
@@ -1109,11 +1217,26 @@ function InviteCodesPanel({ codes, appUrl, productName }: { codes: string[]; app
         <div style={{ fontSize: 11, fontFamily: mono, color: "#00b87a", letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 600 }}>
           Closed-beta access · tap to copy
         </div>
+        <span style={{ marginLeft: "auto", fontSize: 10, fontFamily: mono, color: "#00b87a", padding: "2px 8px", borderRadius: 4, background: "rgba(0,184,122,0.1)", border: "1px solid rgba(0,184,122,0.2)" }}>
+          {codes.length} code{codes.length === 1 ? "" : "s"}
+        </span>
       </div>
       <div style={{ fontSize: 12, color: "var(--t2,#6b7da8)", marginBottom: 12, lineHeight: 1.6 }}>
-        Use one of these on the product to access the closed beta, then come back here to complete the steps.
+        {note && note.trim()
+          ? note.trim()
+          : "Use one of these on the product to access the closed beta, then come back here to complete the steps."}
       </div>
-      <div className="arclens-codes-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 6 }}>
+      {/* Scrollable container — when there are >12 codes, the grid scrolls
+          internally instead of pushing the rest of the page down. Cleaner UX
+          while still letting every code be reached. */}
+      <div className="arclens-codes-grid" style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
+        gap: 6,
+        maxHeight: codes.length > 12 ? 256 : "none",
+        overflowY: codes.length > 12 ? "auto" : "visible",
+        paddingRight: codes.length > 12 ? 4 : 0,
+      }}>
         {codes.map((code, i) => {
           const isCopied = copiedCode === code
           return (

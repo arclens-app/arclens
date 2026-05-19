@@ -168,6 +168,7 @@ export default function CreateCampaignPage() {
   // a clean copy-to-clipboard panel. We don't validate or distribute — that's
   // entirely on the founder's product side.
   const [inviteCodesRaw, setInviteCodesRaw]     = useState("")
+  const [inviteCodesNote, setInviteCodesNote]   = useState("")
   // Preview view: "card" mirrors the feed card; "journey" mirrors the full
   // detail page testers actually walk through (banner → tasks → feedback → submit).
   const [previewMode, setPreviewMode]           = useState<"card" | "journey">("journey")
@@ -221,13 +222,13 @@ export default function CreateCampaignPage() {
           type, title, tagline, description, contractAddress, projectId,
           tasks, questions, rewardType, rewardDesc, rewardUsdcAmount,
           totalSlots, expiresAt, isFcfs, minRank, campaignLogo, bannerPos, appUrl,
-          inviteCodesRaw,
+          inviteCodesRaw, inviteCodesNote,
         }))
       } catch { /* storage full — silent */ }
     }, 600)
   }, [type, title, tagline, description, contractAddress, projectId, tasks, questions,
       rewardType, rewardDesc, rewardUsdcAmount, totalSlots, expiresAt, isFcfs, minRank,
-      campaignLogo, bannerPos, appUrl, inviteCodesRaw])
+      campaignLogo, bannerPos, appUrl, inviteCodesRaw, inviteCodesNote])
 
   useEffect(() => {
     if (mounted) saveDraft()
@@ -262,6 +263,7 @@ export default function CreateCampaignPage() {
         if (d.bannerPos)        setBannerPos(d.bannerPos)
         if (d.appUrl)           setAppUrl(d.appUrl)
         if (typeof d.inviteCodesRaw === "string")  setInviteCodesRaw(d.inviteCodesRaw)
+        if (typeof d.inviteCodesNote === "string") setInviteCodesNote(d.inviteCodesNote)
         setDraftRestored(true)
       }
     } catch { /* corrupt draft — ignore */ }
@@ -402,6 +404,7 @@ export default function CreateCampaignPage() {
           project_id: projectId, creator_wallet: wallet, expires_at: expiresAt || null,
           banner_position: `${bannerPos.x}% ${bannerPos.y}%`,
           invite_codes: parsedInviteCodes,
+          invite_codes_note: inviteCodesNote.trim() || null,
         }),
       })
       const data = await res.json()
@@ -530,7 +533,7 @@ export default function CreateCampaignPage() {
                 setRewardType("whitelist"); setRewardDesc(""); setRewardUsdcAmount("")
                 setTotalSlots(""); setExpiresAt(""); setIsFcfs(true); setMinRank(0)
                 setCampaignLogo(null); setLogoPreview(null); setBannerPos({ x: 50, y: 50 }); setAppUrl("")
-                setInviteCodesRaw("")
+                setInviteCodesRaw(""); setInviteCodesNote("")
               }} style={{ fontSize: 11, fontFamily: mono, color: "var(--t3,#2e3a5c)", background: "none", border: "none", cursor: "pointer", padding: 0, textDecoration: "underline" }}>
                 Clear draft
               </button>
@@ -638,7 +641,7 @@ export default function CreateCampaignPage() {
                   <div style={{ fontSize: 12, fontWeight: 500, color: t1, marginBottom: 6 }}>
                     Campaign banner
                     <span style={{ fontSize: 10, fontFamily: mono, color: t3, fontWeight: 400, marginLeft: 6 }}>
-                      {logoPreview ? "· drag to reposition · exact size as live page" : "· full-width cover on campaign page (200px tall)"}
+                      {logoPreview ? "· drag to reposition · exact size as live page" : "· renders 16:9 full-width on the campaign page"}
                     </span>
                   </div>
                   {/* Banner preview — drag to reposition when image loaded */}
@@ -669,7 +672,8 @@ export default function CreateCampaignPage() {
                       window.addEventListener("mouseup", onUp)
                     } : undefined}
                     style={{
-                      position: "relative", width: "100%", height: 200, borderRadius: 10, overflow: "hidden",
+                      position: "relative", width: "100%", aspectRatio: "16 / 9", maxHeight: 420,
+                      borderRadius: 10, overflow: "hidden",
                       background: `linear-gradient(135deg, ${selectedType.color}18 0%, ${selectedType.color}06 100%)`,
                       border: `1px dashed ${logoPreview ? "rgba(0,184,122,0.35)" : selectedType.color + "40"}`,
                       cursor: logoPreview ? (isDragging ? "grabbing" : "grab") : "pointer",
@@ -1043,6 +1047,22 @@ export default function CreateCampaignPage() {
                 </span>
               </div>
             )}
+
+            {/* Optional note shown to testers above the codes — e.g. usage rules. */}
+            <div style={{ marginTop: 14 }}>
+              <Field
+                label="Note for testers"
+                hint={inviteCodesNote.length > 0 ? `${inviteCodesNote.length}/500` : "Optional"}
+              >
+                <textarea
+                  value={inviteCodesNote}
+                  onChange={e => setInviteCodesNote(e.target.value.slice(0, 500))}
+                  rows={2}
+                  placeholder={"e.g. Each code can be used up to 11 times. Codes expire on May 31."}
+                  style={{ ...inp, height: "auto", padding: "10px 12px", resize: "vertical", minHeight: 56, lineHeight: 1.6, fontFamily: "inherit" }}
+                />
+              </Field>
+            </div>
           </Card>
 
           {/* ── Submit ── */}
@@ -1119,7 +1139,7 @@ export default function CreateCampaignPage() {
                 </div>
                 <div style={{ background: "#0a0e1a", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 14, overflow: "hidden", display: "flex", flexDirection: "column", boxShadow: "0 12px 32px rgba(0,0,0,0.4)" }}>
                   {/* Banner */}
-                  <div style={{ position: "relative", width: "100%", height: 130, background: `linear-gradient(135deg, ${tm.color}20 0%, ${tm.color}08 60%, #0a0e1a 100%)`, overflow: "hidden", flexShrink: 0 }}>
+                  <div style={{ position: "relative", width: "100%", aspectRatio: "16 / 9", background: `linear-gradient(135deg, ${tm.color}20 0%, ${tm.color}08 60%, #0a0e1a 100%)`, overflow: "hidden", flexShrink: 0 }}>
                     <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 64, fontWeight: 900, fontFamily: mono, color: `${tm.color}15`, letterSpacing: "-0.04em", userSelect: "none" }}>{tm.abbr}</span>
                     <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: `linear-gradient(90deg, ${tm.color}, ${tm.color}30)` }} />
                     {previewLogo && (
@@ -1202,7 +1222,7 @@ export default function CreateCampaignPage() {
                 </div>
                 <div style={{ background: "#0a0e1a", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 14, overflow: "hidden", boxShadow: "0 12px 32px rgba(0,0,0,0.4)" }}>
                   {/* Detail hero — wider banner, same as the real /trials/[id] page */}
-                  <div style={{ position: "relative", width: "100%", height: 110, background: `linear-gradient(135deg, ${tm.color}22 0%, ${tm.color}08 50%, #0a0e1a 100%)`, overflow: "hidden" }}>
+                  <div style={{ position: "relative", width: "100%", aspectRatio: "16 / 9", background: `linear-gradient(135deg, ${tm.color}22 0%, ${tm.color}08 50%, #0a0e1a 100%)`, overflow: "hidden" }}>
                     <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 56, fontWeight: 900, fontFamily: mono, color: `${tm.color}18`, letterSpacing: "-0.04em", userSelect: "none" }}>{tm.abbr}</span>
                     <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: `linear-gradient(90deg, ${tm.color}, ${tm.color}40)` }} />
                     {previewLogo && (
@@ -1261,9 +1281,14 @@ export default function CreateCampaignPage() {
                           <div style={{ fontSize: 10, fontFamily: mono, color: "#00b87a", letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 600 }}>
                             Closed-beta access · tap to copy
                           </div>
+                          <span style={{ marginLeft: "auto", fontSize: 9, fontFamily: mono, color: "#00b87a", padding: "1px 6px", borderRadius: 3, background: "rgba(0,184,122,0.1)", border: "1px solid rgba(0,184,122,0.2)" }}>
+                            {parsedInviteCodes.length} code{parsedInviteCodes.length === 1 ? "" : "s"}
+                          </span>
                         </div>
                         <div style={{ fontSize: 10, color: t2, lineHeight: 1.5, marginBottom: 10 }}>
-                          Use one of these on the product, then come back to complete the steps.
+                          {inviteCodesNote.trim()
+                            ? inviteCodesNote.trim()
+                            : "Use one of these on the product, then come back to complete the steps."}
                         </div>
                         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 6 }}>
                           {parsedInviteCodes.slice(0, 6).map(c => {
@@ -1547,6 +1572,43 @@ export default function CreateCampaignPage() {
                     )
                   })()}
                 </div>
+
+                {/* ── Metadata strip — same info as the live page's right
+                     sidebar but rendered as a single horizontal pill row so it
+                     doesn't pretend to be a desktop sidebar in a 380px frame.
+                     This is exactly how Linear / Vercel surface this kind of
+                     contextual metadata on narrow surfaces. */}
+                {(() => {
+                  const pills: { k: string; v: string; color?: string }[] = [
+                    { k: "Reward", v: rewardType === "usdc" && rewardUsdcAmount ? `$${rewardUsdcAmount} USDC` : rm.label, color: rm.color },
+                    { k: "By",     v: wallet ? `${wallet.slice(0, 6)}…${wallet.slice(-4)}` : "—" },
+                  ]
+                  if (expiresAt)        pills.push({ k: "Closes",   v: new Date(expiresAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }) })
+                  if (appUrl.trim())    pills.push({ k: "App",      v: appUrl.replace(/^https?:\/\//, "").slice(0, 22) })
+                  if (contractAddress && /^0x[a-fA-F0-9]{40}$/.test(contractAddress)) {
+                    pills.push({ k: "Contract", v: `${contractAddress.slice(0, 6)}…${contractAddress.slice(-4)}`, color: "#00d990" })
+                  }
+                  if (externalVerify)   pills.push({ k: "Verify",   v: "External", color: "#8aaeff" })
+                  return (
+                    <div style={{ marginTop: 14, padding: "11px 14px", background: "#0a0e1a", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 10, display: "flex", flexWrap: "wrap", gap: 6 }}>
+                      {pills.map(p => (
+                        <div key={p.k} style={{
+                          display: "inline-flex", alignItems: "baseline", gap: 5,
+                          padding: "3px 8px",
+                          background: "rgba(255,255,255,0.02)",
+                          border: "1px solid rgba(255,255,255,0.06)",
+                          borderRadius: 5,
+                          fontFamily: mono,
+                          fontSize: 10,
+                        }}>
+                          <span style={{ color: t3, textTransform: "uppercase", letterSpacing: "0.06em", fontSize: 8.5 }}>{p.k}</span>
+                          <span style={{ color: p.color || t1, fontWeight: 600 }}>{p.v}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                })()}
+
                 <div style={{ marginTop: 14, fontSize: 11, color: t3, lineHeight: 1.6, padding: "0 2px" }}>
                   Click the progress dots above (or the Done / Back buttons) to walk through every step exactly as a tester will see it.
                 </div>
