@@ -68,6 +68,24 @@ export default function AdminPage() {
   const [allCampaigns, setAllCampaigns] = useState<any[]>([])
   const [repairOpen, setRepairOpen]   = useState<number|null>(null)
   const [repairWallet, setRepairWallet] = useState("")
+  // Admin completions view — keyed by campaign id. When set, expand the
+  // submissions panel for that campaign. Data fetched lazily on first open.
+  const [subsOpen, setSubsOpen]       = useState<number|null>(null)
+  const [subsLoading, setSubsLoading] = useState(false)
+  const [subsData, setSubsData]       = useState<{ campaign: any; completions: any[] } | null>(null)
+  // Track which testers' feedback is expanded inside the admin submissions panel
+  const [subsExpandedTester, setSubsExpandedTester] = useState<Set<string>>(new Set())
+
+  async function loadCampaignSubmissions(campaignId: number) {
+    setSubsLoading(true)
+    setSubsData(null)
+    setSubsExpandedTester(new Set())
+    try {
+      const res = await fetch(`/api/trials/${campaignId}`, { cache: "no-store" })
+      const data = await res.json()
+      if (data?.campaign) setSubsData({ campaign: data.campaign, completions: data.completions || [] })
+    } finally { setSubsLoading(false) }
+  }
   const [acting, setActing]           = useState(false)
   const [locInputs, setLocInputs]     = useState<Record<number,{city:string;country:string;status:string;result:string}>>({})
   const [toast, setToast]             = useState<{ok:boolean;text:string}|null>(null)
@@ -1159,6 +1177,15 @@ export default function AdminPage() {
                                   View
                                 </a>
                                 <button
+                                  onClick={() => {
+                                    const opening = subsOpen !== c.id
+                                    setSubsOpen(opening ? c.id : null)
+                                    if (opening) loadCampaignSubmissions(c.id)
+                                  }}
+                                  style={{ height:28, padding:"0 10px", background: subsOpen === c.id ? "rgba(138,174,255,0.12)" : "transparent", color: subsOpen === c.id ? "#8aaeff" : t3, fontSize:11, border:"1px solid "+(subsOpen === c.id ? "rgba(138,174,255,0.3)" : bdr), borderRadius:5, cursor:"pointer", fontFamily:"'Geist',sans-serif", fontWeight:600, flexShrink:0 }}>
+                                  Submissions
+                                </button>
+                                <button
                                   onClick={() => { setRepairOpen(isOpen ? null : c.id); setRepairWallet("") }}
                                   style={{ height:28, padding:"0 10px", background: isOpen ? "rgba(26,86,255,0.12)" : "transparent", color: isOpen ? "#8aaeff" : t3, fontSize:11, border:"1px solid "+(isOpen ? "rgba(26,86,255,0.3)" : bdr), borderRadius:5, cursor:"pointer", fontFamily:"'Geist',sans-serif", fontWeight:600, flexShrink:0 }}>
                                   Repair
@@ -1202,6 +1229,120 @@ export default function AdminPage() {
                                       Remove Tester
                                     </button>
                                   </div>
+                                </div>
+                              )}
+
+                              {/* Admin submissions panel — opens when "Submissions" clicked.
+                                  Fetches /api/trials/[id] (now returns task_proofs, xp_earned,
+                                  per_question_ratings, full completion list up to 500).
+                                  Admin sees every tester, every proof, every answer — no
+                                  founder-claim wall, no auth wall, full read-only view. */}
+                              {subsOpen === c.id && (
+                                <div style={{ borderTop: "1px solid " + bdr, padding: "14px 14px", background: "rgba(138,174,255,0.02)" }}>
+                                  {subsLoading || !subsData ? (
+                                    <div style={{ padding: "24px", textAlign: "center", fontFamily: mono, fontSize: 11, color: t3 }}>Loading submissions...</div>
+                                  ) : subsData.completions.length === 0 ? (
+                                    <div style={{ padding: "24px", textAlign: "center", fontFamily: mono, fontSize: 11, color: t3 }}>No submissions yet.</div>
+                                  ) : (() => {
+                                    const proofTasks = (subsData.campaign.tasks || []).filter((t: any) => t.proof_type && t.proof_type !== "none")
+                                    return (
+                                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
+                                          <div style={{ fontSize: 10, fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                                            All submissions · {subsData.completions.length}
+                                          </div>
+                                          <div style={{ fontSize: 10, fontFamily: mono, color: t3 }}>
+                                            {proofTasks.length} task{proofTasks.length === 1 ? "" : "s"} require proof
+                                          </div>
+                                        </div>
+                                        {subsData.completions.map((comp: any) => {
+                                          const expanded = subsExpandedTester.has(comp.tester_wallet)
+                                          const proofs = comp.task_proofs || {}
+                                          const proofKeys = Object.keys(proofs)
+                                          const scoreColor = comp.auto_score > 70 ? "#00b87a" : comp.auto_score > 40 ? "#e08810" : "#e03348"
+                                          return (
+                                            <div key={comp.tester_wallet} style={{ background: "#0a0e1a", border: "1px solid " + bdr, borderRadius: 7, overflow: "hidden" }}>
+                                              <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 11px", flexWrap: "wrap" }}>
+                                                <div style={{ width: 6, height: 6, borderRadius: "50%", background: scoreColor, flexShrink: 0 }} />
+                                                <a href={`/tester/${comp.tester_wallet}`} target="_blank" rel="noopener noreferrer"
+                                                  style={{ fontSize: 11, fontFamily: mono, color: t1, textDecoration: "none", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                                  {comp.tester_wallet.slice(0, 10)}…{comp.tester_wallet.slice(-6)}
+                                                </a>
+                                                <span style={{ fontSize: 9, fontFamily: mono, color: t3 }}>auto {comp.auto_score}/100</span>
+                                                {comp.builder_rating && <span style={{ fontSize: 10, color: "#c08828" }}>{"★".repeat(comp.builder_rating)}</span>}
+                                                {comp.xp_earned > 0 && <span style={{ fontSize: 9, fontFamily: mono, color: "#8aaeff", padding: "1px 6px", background: "rgba(138,174,255,0.08)", border: "1px solid rgba(138,174,255,0.2)", borderRadius: 3 }}>{comp.xp_earned} XP</span>}
+                                                <span style={{ fontSize: 9, fontFamily: mono, color: t3, padding: "1px 6px", background: "rgba(255,255,255,0.03)", borderRadius: 3 }}>
+                                                  {proofKeys.length}/{proofTasks.length} proofs
+                                                </span>
+                                                <button onClick={() => setSubsExpandedTester(prev => {
+                                                  const n = new Set(prev)
+                                                  if (n.has(comp.tester_wallet)) n.delete(comp.tester_wallet); else n.add(comp.tester_wallet)
+                                                  return n
+                                                })}
+                                                  style={{ height: 24, padding: "0 8px", background: "transparent", color: t2, fontSize: 10, fontFamily: mono, border: "1px solid " + bdr, borderRadius: 4, cursor: "pointer" }}>
+                                                  {expanded ? "Hide ↑" : "Open ↓"}
+                                                </button>
+                                              </div>
+                                              {expanded && (
+                                                <div style={{ padding: "10px 12px 12px", borderTop: "1px solid " + bdr, background: "rgba(255,255,255,0.01)" }}>
+                                                  {proofTasks.length > 0 && (
+                                                    <div style={{ marginBottom: 12, padding: "9px 11px", background: "rgba(138,174,255,0.04)", border: "1px solid rgba(138,174,255,0.18)", borderRadius: 6 }}>
+                                                      <div style={{ fontSize: 9, fontFamily: mono, color: "#8aaeff", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>Submitted proofs</div>
+                                                      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                                                        {proofTasks.map((t: any) => {
+                                                          const value = proofs[t.id] || ""
+                                                          const labelType = t.proof_type === "x_link" ? "X post" : t.proof_type === "tx_hash" ? "Tx hash" : t.proof_type === "screenshot" ? "Screenshot" : "URL"
+                                                          const linkHref = !value ? null : t.proof_type === "tx_hash" ? `https://testnet.arcscan.app/tx/${value}` : value
+                                                          const isShot = t.proof_type === "screenshot" && !!value
+                                                          return (
+                                                            <div key={t.id} style={{ display: "flex", alignItems: isShot ? "flex-start" : "center", gap: 8, fontSize: 10.5 }}>
+                                                              <span style={{ fontFamily: mono, color: t3, minWidth: 70, flexShrink: 0 }}>{labelType}</span>
+                                                              {isShot ? (
+                                                                <div style={{ display: "flex", gap: 8, alignItems: "center", flex: 1, minWidth: 0 }}>
+                                                                  <a href={value} target="_blank" rel="noopener noreferrer" style={{ flexShrink: 0 }}>
+                                                                    <img src={`/api/image-proxy?url=${encodeURIComponent(value)}`} alt=""
+                                                                      style={{ width: 48, height: 36, objectFit: "cover", borderRadius: 4, border: "1px solid " + bdr, display: "block", cursor: "zoom-in" }} />
+                                                                  </a>
+                                                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                                                    <div style={{ color: t2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.title}</div>
+                                                                    <a href={value} target="_blank" rel="noopener noreferrer" style={{ fontFamily: mono, fontSize: 9.5, color: "#8aaeff", textDecoration: "none" }}>Open full ↗</a>
+                                                                  </div>
+                                                                </div>
+                                                              ) : (
+                                                                <>
+                                                                  <span style={{ color: t2, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.title}:</span>
+                                                                  {linkHref ? (
+                                                                    <a href={linkHref} target="_blank" rel="noopener noreferrer"
+                                                                      style={{ fontFamily: mono, color: "#8aaeff", textDecoration: "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "55%" }}>{value} ↗</a>
+                                                                  ) : (
+                                                                    <span style={{ fontFamily: mono, color: "#e08810" }}>(missing)</span>
+                                                                  )}
+                                                                </>
+                                                              )}
+                                                            </div>
+                                                          )
+                                                        })}
+                                                      </div>
+                                                    </div>
+                                                  )}
+                                                  {(subsData.campaign.review_questions || []).map((q: any) => {
+                                                    const ans = comp.review_answers?.[q.id]
+                                                    if (!ans) return null
+                                                    return (
+                                                      <div key={q.id} style={{ marginBottom: 9 }}>
+                                                        <div style={{ fontSize: 9.5, fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 }}>{q.label}</div>
+                                                        <div style={{ fontSize: 11.5, color: t2, lineHeight: 1.6, whiteSpace: "pre-wrap", background: "rgba(255,255,255,0.02)", border: "1px solid " + bdr, borderRadius: 5, padding: "8px 10px" }}>{ans}</div>
+                                                      </div>
+                                                    )
+                                                  })}
+                                                </div>
+                                              )}
+                                            </div>
+                                          )
+                                        })}
+                                      </div>
+                                    )
+                                  })()}
                                 </div>
                               )}
                             </div>
