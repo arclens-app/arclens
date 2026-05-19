@@ -10,7 +10,14 @@ interface Completion {
   builder_rating:  number | null
   quality_score:   number | null
   status:          string
+  task_proofs:     Record<string, string> | null
   created_at:      string
+}
+
+interface CampaignTask {
+  id:          string
+  title:       string
+  proof_type?: "none" | "x_link" | "tx_hash" | "url"
 }
 
 interface Campaign {
@@ -20,6 +27,7 @@ interface Campaign {
   project_name: string | null
   type:         string
   reward_type:  string
+  tasks:        CampaignTask[]
 }
 
 const TYPE_COLOR: Record<string, string> = {

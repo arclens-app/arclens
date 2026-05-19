@@ -38,8 +38,8 @@ const RANK_COLORS = ["#6b7da8", "#1a56ff", "#00b87a", "#c08828", "#ec4899"]
 const RANK_REQ = [
   { campaigns: 3,  avg: 3.0 },
   { campaigns: 10, avg: 3.5 },
-  { campaigns: 25, avg: 4.0 },
-  { campaigns: 50, avg: 4.5 },
+  { campaigns: 30, avg: 4.0 },
+  { campaigns: 40, avg: 4.5 },
 ]
 
 const TYPE_META: Record<string, { abbr: string; color: string; label: string }> = {

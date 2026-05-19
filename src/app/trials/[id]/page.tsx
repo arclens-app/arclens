@@ -5,11 +5,13 @@ import ArcLayout from "@/components/ArcLayout"
 import { WalletAvatar } from "@/components/WalletAvatar"
 import { useArcStore } from "@/store/arc"
 
+type ProofType = "none" | "x_link" | "tx_hash" | "url" | "screenshot"
 interface Task {
   id: string
   title: string
   description: string
   contract_address?: string
+  proof_type?: ProofType
 }
 
 interface ReviewQuestion {
@@ -64,6 +66,7 @@ interface Completion {
   status:          string
   reward_delivered: boolean
   review_answers:  Record<string, string>
+  task_proofs:     Record<string, string>
   created_at:      string
 }
 
@@ -111,6 +114,13 @@ export default function CampaignDetailPage() {
   // Submission flow: 0..tasks.length-1 = task steps, tasks.length = review, tasks.length+1 = done
   const [flowStep, setFlowStep]         = useState(0)
   const [answers, setAnswers]           = useState<Record<string, string>>({})
+  // Tester-submitted proofs per task (Tower-style verification). Keyed by task.id.
+  // For text proofs (x_link/tx_hash/url) the value is the URL or hash string.
+  // For screenshot proofs the value is the imgbb URL returned by /api/upload.
+  const [proofs, setProofs]             = useState<Record<string, string>>({})
+  // Per-task upload state — keyed by task.id, true while imgbb upload is in flight
+  const [uploading, setUploading]       = useState<Record<string, boolean>>({})
+  const [uploadError, setUploadError]   = useState<string>("")
   const [submitting, setSubmitting]     = useState(false)
   const [submitError, setSubmitError]   = useState("")
   const [autoScore, setAutoScore]       = useState<number | null>(null)
@@ -120,10 +130,7 @@ export default function CampaignDetailPage() {
   const [testerProgress, setTesterProgress] = useState<{ label: string; campaigns_needed: number; score_needed: number } | null>(null)
 
   // Builder rating state
-  const [ratingWallet, setRatingWallet] = useState("")
-  const [ratingVal, setRatingVal]       = useState(0)
-  const [ratingImpact, setRatingImpact] = useState(false)
-  const [ratingLoading, setRatingLoading] = useState(false)
+  // Rating state lives entirely on the founder dashboard (/dashboard/[slug]).
 
   // Claim state
   const [myCompletion, setMyCompletion] = useState<Completion | null>(null)
@@ -215,9 +222,10 @@ export default function CampaignDetailPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          tester_wallet: wallet,
-          tx_hashes: [],
+          tester_wallet:  wallet,
+          tx_hashes:      [],
           review_answers: answers,
+          task_proofs:    proofs,
         }),
       })
       const data = await res.json()
@@ -234,29 +242,6 @@ export default function CampaignDetailPage() {
       setFlowStep(campaign!.tasks.length + 1)
     } finally {
       setSubmitting(false)
-    }
-  }
-
-  async function submitRating() {
-    if (!wallet || !ratingVal) return
-    setRatingLoading(true)
-    try {
-      await fetch(`/api/trials/${id}/rate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          tester_wallet:   ratingWallet,
-          rating:          ratingVal,
-          founder_wallet:  wallet,
-          impact_credited: ratingImpact,
-        }),
-      })
-      setRatingWallet("")
-      setRatingVal(0)
-      setRatingImpact(false)
-      load()
-    } finally {
-      setRatingLoading(false)
     }
   }
 
@@ -428,20 +413,16 @@ export default function CampaignDetailPage() {
               {/* Share + Leaderboard buttons. Leaderboard only appears when at
                   least one rated submission exists — empty campaigns hide it. */}
               <div style={{ display: "flex", gap: 6, flexShrink: 0, flexWrap: "wrap" }}>
-                {completions.some(c => c.builder_rating != null && c.status === "reviewed") && (
-                  <a
-                    href={`/trials/${campaign.slug || campaign.id}/leaderboard`}
-                    title="View top contributors"
-                    style={{ height: 32, padding: "0 12px", background: "transparent", border: "1px solid var(--bdr,rgba(255,255,255,0.08))", borderRadius: 7, color: "var(--t2,#6b7da8)", fontSize: 11, fontFamily: "var(--font-mono,monospace)", cursor: "pointer", whiteSpace: "nowrap", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6 }}
-                  >
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <line x1="4" y1="20" x2="4" y2="12"/>
-                      <line x1="12" y1="20" x2="12" y2="4"/>
-                      <line x1="20" y1="20" x2="20" y2="16"/>
-                    </svg>
-                    leaderboard
-                  </a>
-                )}
+                {/* Leaderboard link — always rendered so it's reachable even
+                    before any tester is rated. The destination page handles the
+                    empty state gracefully. Clean text-only pill. */}
+                <a
+                  href={`/trials/${campaign.slug || campaign.id}/leaderboard`}
+                  title="View top contributors"
+                  style={{ height: 32, padding: "0 14px", background: "transparent", border: "1px solid var(--bdr,rgba(255,255,255,0.08))", borderRadius: 7, color: "var(--t2,#6b7da8)", fontSize: 11, fontFamily: "var(--font-mono,monospace)", cursor: "pointer", whiteSpace: "nowrap", textDecoration: "none", display: "inline-flex", alignItems: "center" }}
+                >
+                  leaderboard
+                </a>
                 <button
                   title="Copy link"
                   onClick={async () => {
@@ -804,20 +785,161 @@ export default function CampaignDetailPage() {
                           <div style={{ fontSize: 11, color: "var(--t3,#2e3a5c)", fontFamily: "var(--font-mono,monospace)", marginBottom: 12, lineHeight: 1.6 }}>
                             Complete this step in the app, then mark it done below.
                           </div>
-                          <div style={{ display: "flex", gap: 8 }}>
-                            {flowStep > 0 && (
-                              <button
-                                onClick={() => setFlowStep(s => Math.max(0, s - 1))}
-                                style={{ height: 42, padding: "0 18px", background: "transparent", color: "var(--t2,#6b7da8)", border: "1px solid var(--bdr,rgba(255,255,255,0.06))", borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "var(--font-mono,monospace)" }}>
-                                ← Back
-                              </button>
-                            )}
-                            <button
-                              onClick={() => setFlowStep(s => s + 1)}
-                              style={{ flex: 1, height: 42, background: "#1a56ff", color: "#fff", border: "none", borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: "pointer", letterSpacing: "-0.01em" }}>
-                              {flowStep < totalSteps - 1 ? `Done — Next step →` : `Done — Share feedback →`}
-                            </button>
-                          </div>
+                          {/* Per-task proof — required by founder for verification.
+                              Text inputs for x_link/tx_hash/url; built-in file upload
+                              for screenshot (hosted on our /api/upload imgbb pipeline).
+                              SKIPPED entirely when the campaign uses internal on-chain
+                              verification (any contract address set) — ArcLens auto-
+                              checks Arc Testnet logs in that case. */}
+                          {(() => {
+                            const currentTask  = campaign.tasks[flowStep]
+                            const pt           = currentTask.proof_type || "none"
+                            const hasInternal  = !!campaign.contract_address || campaign.tasks.some(t => !!t.contract_address)
+                            if (pt === "none" || hasInternal) return null
+                            const value = proofs[currentTask.id] || ""
+                            const isUploading = !!uploading[currentTask.id]
+
+                            // Screenshot branch — file picker + preview, no manual URL pasting.
+                            if (pt === "screenshot") {
+                              const hasImage = !!value
+                              return (
+                                <div style={{ marginBottom: 12, padding: "11px 12px", background: "var(--surf2,#0e1224)",
+                                  border: `1px solid ${hasImage ? "rgba(0,184,122,0.3)" : "var(--bdr,rgba(255,255,255,0.06))"}`, borderRadius: 8 }}>
+                                  <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 8 }}>
+                                    <span style={{ fontSize: 10, fontFamily: "var(--font-mono,monospace)", color: "var(--t3,#2e3a5c)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                                      Proof — screenshot
+                                    </span>
+                                    {hasImage && (
+                                      <span style={{ fontSize: 9.5, fontFamily: "var(--font-mono,monospace)", color: "#00d990" }}>
+                                        ✓ uploaded
+                                      </span>
+                                    )}
+                                  </div>
+                                  {hasImage ? (
+                                    <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+                                      <img src={`/api/image-proxy?url=${encodeURIComponent(value)}`}
+                                        alt="proof"
+                                        style={{ width: 96, height: 72, objectFit: "cover", borderRadius: 6, border: "1px solid var(--bdr,rgba(255,255,255,0.06))" }} />
+                                      <div style={{ flex: 1, minWidth: 0 }}>
+                                        <div style={{ fontSize: 10.5, fontFamily: "var(--font-mono,monospace)", color: "var(--t2,#6b7da8)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginBottom: 8 }}>
+                                          {value.replace(/^https?:\/\//, "")}
+                                        </div>
+                                        <button type="button"
+                                          onClick={() => setProofs(p => { const n = { ...p }; delete n[currentTask.id]; return n })}
+                                          style={{ fontSize: 10, fontFamily: "var(--font-mono,monospace)", color: "#e03348", background: "transparent", border: "1px solid rgba(224,51,72,0.2)", padding: "4px 9px", borderRadius: 5, cursor: "pointer" }}>
+                                          Replace
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <label style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                                      height: 72, border: "1px dashed var(--bdr,rgba(255,255,255,0.12))", borderRadius: 7, cursor: isUploading ? "default" : "pointer",
+                                      fontSize: 12, color: isUploading ? "var(--t3,#2e3a5c)" : "var(--t2,#6b7da8)", background: "rgba(255,255,255,0.01)" }}>
+                                      {isUploading ? (
+                                        <span>Uploading…</span>
+                                      ) : (
+                                        <>
+                                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                            <polyline points="17 8 12 3 7 8"/>
+                                            <line x1="12" y1="3" x2="12" y2="15"/>
+                                          </svg>
+                                          <span>Click to upload screenshot · PNG/JPG/WebP, max 5 MB</span>
+                                        </>
+                                      )}
+                                      <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" style={{ display: "none" }}
+                                        disabled={isUploading}
+                                        onChange={async e => {
+                                          const file = e.target.files?.[0]
+                                          if (!file) return
+                                          setUploadError("")
+                                          setUploading(u => ({ ...u, [currentTask.id]: true }))
+                                          try {
+                                            const fd = new FormData()
+                                            fd.append("image", file)
+                                            const res = await fetch("/api/upload", { method: "POST", body: fd })
+                                            const data = await res.json()
+                                            if (!res.ok || !data?.url) {
+                                              setUploadError(data?.error || "Upload failed")
+                                            } else {
+                                              setProofs(p => ({ ...p, [currentTask.id]: data.url }))
+                                            }
+                                          } catch {
+                                            setUploadError("Upload failed — try again")
+                                          } finally {
+                                            setUploading(u => ({ ...u, [currentTask.id]: false }))
+                                          }
+                                          e.target.value = ""
+                                        }} />
+                                    </label>
+                                  )}
+                                  {uploadError && (
+                                    <div style={{ fontSize: 10, color: "#e03348", marginTop: 6, fontFamily: "var(--font-mono,monospace)" }}>{uploadError}</div>
+                                  )}
+                                </div>
+                              )
+                            }
+
+                            // Text-input branches (x_link / tx_hash / url)
+                            const meta = pt === "x_link"
+                              ? { label: "Proof — X post URL", placeholder: "https://x.com/yourhandle/status/...", validate: (v: string) => /^https?:\/\/(www\.)?(x|twitter)\.com\/[^/]+\/status\/\d+/i.test(v) }
+                              : pt === "tx_hash"
+                              ? { label: "Proof — transaction hash",  placeholder: "0x… (64 hex chars)",            validate: (v: string) => /^0x[a-fA-F0-9]{64}$/.test(v) }
+                              : { label: "Proof — URL", placeholder: "https://… (proof page)", validate: (v: string) => { try { const u = new URL(v); return u.protocol === "https:" || u.protocol === "http:" } catch { return false } } }
+                            const ok = !!value && meta.validate(value)
+                            return (
+                              <div style={{ marginBottom: 12, padding: "11px 12px", background: "var(--surf2,#0e1224)", border: `1px solid ${ok ? "rgba(0,184,122,0.3)" : value ? "rgba(224,51,72,0.3)" : "var(--bdr,rgba(255,255,255,0.06))"}`, borderRadius: 8 }}>
+                                <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 6 }}>
+                                  <span style={{ fontSize: 10, fontFamily: "var(--font-mono,monospace)", color: "var(--t3,#2e3a5c)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                                    {meta.label}
+                                  </span>
+                                  {value && (
+                                    <span style={{ fontSize: 9.5, fontFamily: "var(--font-mono,monospace)", color: ok ? "#00d990" : "#e03348" }}>
+                                      {ok ? "✓ valid format" : "invalid format"}
+                                    </span>
+                                  )}
+                                </div>
+                                <input
+                                  type="text"
+                                  value={value}
+                                  onChange={e => setProofs(p => ({ ...p, [currentTask.id]: e.target.value }))}
+                                  placeholder={meta.placeholder}
+                                  style={{ width: "100%", height: 34, background: "transparent", border: "none", outline: "none", fontSize: 12, fontFamily: "var(--font-mono,monospace)", color: "var(--t1,#e8ecff)", padding: 0, boxSizing: "border-box" }}
+                                />
+                              </div>
+                            )
+                          })()}
+                          {(() => {
+                            const currentTask = campaign.tasks[flowStep]
+                            const pt          = currentTask.proof_type || "none"
+                            const hasInternal = !!campaign.contract_address || campaign.tasks.some(t => !!t.contract_address)
+                            // Internal verification → no proof required at all.
+                            const proofOk     = hasInternal || pt === "none" || (() => {
+                              const v = proofs[currentTask.id] || ""
+                              if (!v) return false
+                              if (pt === "tx_hash")    return /^0x[a-fA-F0-9]{64}$/.test(v)
+                              if (pt === "x_link")     return /^https?:\/\/(www\.)?(x|twitter)\.com\/[^/]+\/status\/\d+/i.test(v)
+                              if (pt === "screenshot") return /^https?:\/\/([a-z0-9-]+\.)?ibb\.co\//i.test(v)
+                              try { const u = new URL(v); return u.protocol === "https:" || u.protocol === "http:" } catch { return false }
+                            })()
+                            return (
+                              <div style={{ display: "flex", gap: 8 }}>
+                                {flowStep > 0 && (
+                                  <button
+                                    onClick={() => setFlowStep(s => Math.max(0, s - 1))}
+                                    style={{ height: 42, padding: "0 18px", background: "transparent", color: "var(--t2,#6b7da8)", border: "1px solid var(--bdr,rgba(255,255,255,0.06))", borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "var(--font-mono,monospace)" }}>
+                                    ← Back
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => setFlowStep(s => s + 1)}
+                                  disabled={!proofOk}
+                                  style={{ flex: 1, height: 42, background: proofOk ? "#1a56ff" : "var(--surf2,#0e1224)", color: proofOk ? "#fff" : "var(--t2,#6b7da8)", border: proofOk ? "none" : "1px solid var(--bdr,rgba(255,255,255,0.06))", borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: proofOk ? "pointer" : "default", letterSpacing: "-0.01em" }}>
+                                  {!proofOk ? "Add proof to continue" : flowStep < totalSteps - 1 ? `Done — Next step →` : `Done — Share feedback →`}
+                                </button>
+                              </div>
+                            )
+                          })()}
                         </div>
                       ) : (
                         /* Feedback questions */
@@ -878,79 +1000,28 @@ export default function CampaignDetailPage() {
                 so they never compete for vertical space with the wizard. The
                 small pill in the header (added near share buttons) links there. */}
 
-            {/* ── Builder: Rate Testers ── */}
+            {/* Rating happens exclusively on the founder dashboard (/dashboard/[slug]).
+                The campaign page stays focused on the tester experience. Founders
+                viewing their own campaign here see a small link to the dashboard. */}
             {isOwner && completions.length > 0 && (
-              <div style={{ background: "var(--surf,#0a0e1a)", border: "1px solid var(--bdr,rgba(255,255,255,0.06))", borderRadius: 12, padding: "18px 20px" }}>
-                <div style={{ fontSize: 11, fontFamily: "var(--font-mono,monospace)", color: "var(--t2,#6b7da8)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 14 }}>
-                  Rate Testers
-                </div>
-                <div style={{ marginBottom: 12 }}>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 10 }}>
-                    {completions.map(c => (
-                      <button key={c.tester_wallet} onClick={() => setRatingWallet(ratingWallet === c.tester_wallet ? "" : c.tester_wallet)}
-                        style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", borderRadius: 8, cursor: "pointer", textAlign: "left", width: "100%",
-                          background: ratingWallet === c.tester_wallet ? "rgba(26,86,255,0.08)" : "var(--surf2,#0e1224)",
-                          border: `1px solid ${ratingWallet === c.tester_wallet ? "rgba(26,86,255,0.3)" : "var(--bdr,rgba(255,255,255,0.06))"}` }}>
-                        <WalletAvatar wallet={c.tester_wallet} size={28} />
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 11, fontFamily: "var(--font-mono,monospace)", color: "var(--t1,#e8ecff)" }}>
-                            {c.tester_wallet.slice(0, 8)}...{c.tester_wallet.slice(-6)}
-                          </div>
-                          <div style={{ fontSize: 10, color: "var(--t2,#6b7da8)", marginTop: 1 }}>
-                            Score {c.auto_score}/100{c.builder_rating ? ` · rated ${c.builder_rating}★` : " · unrated"}
-                          </div>
-                        </div>
-                        <a href={`/tester/${c.tester_wallet}`} onClick={e => e.stopPropagation()}
-                          style={{ fontSize: 9, fontFamily: "var(--font-mono,monospace)", color: "var(--t3,#2e3a5c)", textDecoration: "none", padding: "2px 6px", borderRadius: 4, border: "1px solid var(--bdr,rgba(255,255,255,0.06))", flexShrink: 0 }}>
-                          Profile
-                        </a>
-                      </button>
-                    ))}
+              <a href={`/dashboard/${campaign.slug || campaign.id}`}
+                style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "13px 18px",
+                  background: "var(--surf,#0a0e1a)", border: "1px solid var(--bdr,rgba(255,255,255,0.06))", borderRadius: 10,
+                  textDecoration: "none", transition: "border-color 0.12s" }}
+                onMouseEnter={e => (e.currentTarget.style.borderColor = "rgba(26,86,255,0.3)")}
+                onMouseLeave={e => (e.currentTarget.style.borderColor = "var(--bdr,rgba(255,255,255,0.06))")}>
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: "var(--t1,#e8ecff)", marginBottom: 2 }}>
+                    {completions.filter(c => c.builder_rating == null).length} submission{completions.filter(c => c.builder_rating == null).length === 1 ? "" : "s"} awaiting your rating
                   </div>
-                  {/* Show selected tester's feedback */}
-                  {ratingWallet && (() => {
-                    const sel = completions.find(c => c.tester_wallet === ratingWallet)
-                    if (!sel?.review_answers || !Object.keys(sel.review_answers).length) return null
-                    return (
-                      <div style={{ marginBottom: 14, background: "var(--bg,#060812)", border: "1px solid var(--bdr,rgba(255,255,255,0.06))", borderRadius: 8, padding: "12px 14px" }}>
-                        <div style={{ fontSize: 10, fontFamily: "var(--font-mono,monospace)", color: "var(--t3,#2e3a5c)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 }}>
-                          Tester Feedback · Auto score: {sel.auto_score}/100
-                        </div>
-                        {campaign.review_questions.map(q => {
-                          const ans = sel.review_answers[q.id]
-                          if (!ans) return null
-                          return (
-                            <div key={q.id} style={{ marginBottom: 10 }}>
-                              <div style={{ fontSize: 11, fontWeight: 600, color: "var(--t1,#e8ecff)", marginBottom: 4 }}>{q.label}</div>
-                              <div style={{ fontSize: 12, color: "var(--t2,#6b7da8)", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{ans}</div>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    )
-                  })()}
-                  <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-                    {[1, 2, 3, 4, 5].map(n => (
-                      <button
-                        key={n}
-                        onClick={() => setRatingVal(n)}
-                        style={{ flex: 1, height: 36, borderRadius: 8, background: ratingVal >= n ? "#c0882820" : "var(--surf2,#0e1224)", border: `1px solid ${ratingVal >= n ? "#c08828" : "var(--bdr,rgba(255,255,255,0.06))"}`, color: ratingVal >= n ? "#c08828" : "var(--t2,#6b7da8)", fontSize: 16, cursor: "pointer" }}
-                      >★</button>
-                    ))}
+                  <div style={{ fontSize: 11, fontFamily: "var(--font-mono,monospace)", color: "var(--t3,#2e3a5c)" }}>
+                    Rate testers and see all submissions on your founder dashboard
                   </div>
-                  <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--t2,#6b7da8)", cursor: "pointer", marginBottom: 12 }}>
-                    <input type="checkbox" checked={ratingImpact} onChange={e => setRatingImpact(e.target.checked)} />
-                    Credit this tester — their feedback shaped a change
-                  </label>
-                  <button
-                    onClick={submitRating}
-                    disabled={!ratingWallet || !ratingVal || ratingLoading}
-                    style={{ width: "100%", height: 38, background: ratingWallet && ratingVal ? "#1a56ff" : "var(--surf2,#0e1224)", color: ratingWallet && ratingVal ? "#fff" : "var(--t2,#6b7da8)", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: ratingWallet && ratingVal ? "pointer" : "default" }}
-                  >
-                    {ratingLoading ? "Saving..." : "Save Rating"}
-                  </button>
                 </div>
-              </div>
+                <span style={{ fontSize: 11, fontFamily: "var(--font-mono,monospace)", color: "#8aaeff", flexShrink: 0 }}>
+                  Open dashboard →
+                </span>
+              </a>
             )}
 
             {/* ── Owner: Edit Campaign ── */}

@@ -108,7 +108,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   try {
     const body = await req.json()
-    const { tester_wallet, tx_hashes = [], review_answers = {} } = body
+    const { tester_wallet, tx_hashes = [], review_answers = {}, task_proofs = {} } = body
 
     if (!tester_wallet?.trim()) {
       return NextResponse.json({ error: "Wallet required" }, { status: 400 })
@@ -167,6 +167,70 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: "You have already submitted this campaign" }, { status: 409 })
     }
 
+    // Validate task proofs — for any task whose proof_type isn't "none", the
+    // tester must submit a proof and it must match the expected format. This
+    // is Tower-style verification: the founder asked for X link / tx hash /
+    // URL as evidence the tester actually used the product. We sanitize and
+    // store only the verified shape.
+    //
+    // EXCLUSION: when the campaign has internal verification (any contract
+    // address set, campaign-level or per-task), ArcLens auto-checks on-chain
+    // participation via Arc RPC logs above — asking the tester for ALSO a
+    // manual proof would be redundant double-work. We compute hasContracts
+    // again here for the clearest gating signal.
+    const cleanedProofs: Record<string, string> = {}
+    const taskContractsForGate: string[] = (campaign.tasks || [])
+      .map((t: { contract_address?: string }) => t.contract_address || "")
+      .filter(Boolean)
+    const hasInternalVerification = !!campaign.contract_address || taskContractsForGate.length > 0
+    const proofs = (task_proofs && typeof task_proofs === "object") ? task_proofs as Record<string, unknown> : {}
+    for (const t of (campaign.tasks || []) as Array<{ id: string; proof_type?: string; title?: string }>) {
+      const pt = t.proof_type || "none"
+      // Internal verification handles this campaign — skip proof requirements
+      // even if proof_type was set on a task (could be stale founder edit).
+      if (hasInternalVerification) continue
+      if (pt === "none") continue
+      const raw = proofs[t.id]
+      const val = typeof raw === "string" ? raw.trim() : ""
+      const taskLabel = t.title || t.id
+      if (!val) {
+        return NextResponse.json({ error: `Proof required for step "${taskLabel}"` }, { status: 400 })
+      }
+      if (pt === "tx_hash") {
+        if (!/^0x[a-fA-F0-9]{64}$/.test(val)) {
+          return NextResponse.json({ error: `Step "${taskLabel}": tx hash must be 0x followed by 64 hex characters` }, { status: 400 })
+        }
+        cleanedProofs[t.id] = val.toLowerCase()
+      } else if (pt === "x_link") {
+        if (!/^https?:\/\/(www\.)?(x|twitter)\.com\/[^/]+\/status\/\d+/i.test(val)) {
+          return NextResponse.json({ error: `Step "${taskLabel}": must be a valid X / Twitter post URL` }, { status: 400 })
+        }
+        cleanedProofs[t.id] = val.slice(0, 500)
+      } else if (pt === "url") {
+        try {
+          const u = new URL(val)
+          if (u.protocol !== "https:" && u.protocol !== "http:") throw new Error("bad")
+          cleanedProofs[t.id] = val.slice(0, 500)
+        } catch {
+          return NextResponse.json({ error: `Step "${taskLabel}": must be a valid http(s) URL` }, { status: 400 })
+        }
+      } else if (pt === "screenshot") {
+        // Screenshots must come from our own /api/upload pipeline. We only
+        // accept imgbb-hosted URLs because the upload endpoint is the only
+        // route that produces them — it enforces MIME/size/rate limits and
+        // the host whitelist below blocks anyone trying to paste a random URL.
+        try {
+          const u = new URL(val)
+          const ok = u.hostname === "i.ibb.co" || u.hostname === "ibb.co"
+                  || u.hostname.endsWith(".ibb.co")
+          if (!ok || u.protocol !== "https:") throw new Error("bad host")
+          cleanedProofs[t.id] = val.slice(0, 500)
+        } catch {
+          return NextResponse.json({ error: `Step "${taskLabel}": upload a screenshot via the wizard (only ibb.co URLs are accepted)` }, { status: 400 })
+        }
+      }
+    }
+
     // Validate at least one review answer has meaningful content
     const totalWords = Object.values(review_answers as Record<string, string>)
       .join(" ").split(/\s+/).filter(Boolean).length
@@ -207,9 +271,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const provisionalScore = (auto_score / 100) * 5
     await pool.query(
       `INSERT INTO campaign_completions
-         (campaign_id, tester_wallet, tx_hashes, review_answers, auto_score, contract_verified, provisional_score)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [campaignNumericId, wallet, tx_hashes, JSON.stringify(review_answers), auto_score, contract_verified, provisionalScore]
+         (campaign_id, tester_wallet, tx_hashes, review_answers, task_proofs, auto_score, contract_verified, provisional_score)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [campaignNumericId, wallet, tx_hashes, JSON.stringify(review_answers), JSON.stringify(cleanedProofs), auto_score, contract_verified, provisionalScore]
     )
 
     // Atomic slot increment — prevents race condition when two testers submit simultaneously
@@ -239,14 +303,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
                                (tester_reputation.campaigns_completed + 1), 2),
          rank_points         = tester_reputation.rank_points + $3,
          rank                = CASE
-           -- Arc Proven: 50+ campaigns, avg 4.5+, currently Trusted
+           -- Arc Proven: 40+ campaigns, avg 4.5+, currently Trusted
            WHEN tester_reputation.rank = 3
-             AND (tester_reputation.campaigns_completed + 1) >= 50
+             AND (tester_reputation.campaigns_completed + 1) >= 40
              AND ROUND((tester_reputation.total_score + $2) / (tester_reputation.campaigns_completed + 1), 2) >= 4.5
              THEN 4
-           -- Trusted: 25+ campaigns, avg 4.0+, currently Verified
+           -- Trusted: 30+ campaigns, avg 4.0+, currently Verified
            WHEN tester_reputation.rank = 2
-             AND (tester_reputation.campaigns_completed + 1) >= 25
+             AND (tester_reputation.campaigns_completed + 1) >= 30
              AND ROUND((tester_reputation.total_score + $2) / (tester_reputation.campaigns_completed + 1), 2) >= 4.0
              THEN 3
            -- Verified: 10+ campaigns, avg 3.5+, currently Builder

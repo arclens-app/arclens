@@ -8,8 +8,8 @@ const RANK_LABELS = ["Scout", "Builder", "Verified", "Trusted", "Arc Proven"]
 const RANK_NEXT: Record<number, { campaigns: number; score: number } | null> = {
   0: { campaigns: 3,  score: 3.0 },
   1: { campaigns: 10, score: 3.5 },
-  2: { campaigns: 25, score: 4.0 },
-  3: { campaigns: 50, score: 4.3 },
+  2: { campaigns: 30, score: 4.0 },
+  3: { campaigns: 40, score: 4.5 },
   4: null,
 }
 
