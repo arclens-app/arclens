@@ -154,6 +154,13 @@ export default function CampaignDetailPage() {
   // Owner edit state
   const [editOpen, setEditOpen]             = useState(false)
   const [editForm, setEditForm]             = useState<Record<string, string>>({})
+  // Editable copies of tasks + review_questions. null = founder hasn't opened
+  // those sections yet, so we don't send them in the PUT (only changed fields
+  // go to the admin queue). When opened, we hydrate from the current campaign.
+  const [editTasks, setEditTasks]           = useState<Task[] | null>(null)
+  const [editQs, setEditQs]                 = useState<ReviewQuestion[] | null>(null)
+  const [tasksSectionOpen, setTasksSectionOpen]       = useState(false)
+  const [qsSectionOpen, setQsSectionOpen]             = useState(false)
   const [editSubmitting, setEditSubmitting] = useState(false)
   const [editSubmitted, setEditSubmitted]   = useState(false)
   const [editError, setEditError]           = useState("")
@@ -280,6 +287,20 @@ export default function CampaignDetailPage() {
     if (editForm.app_url?.trim()) changes.app_url = editForm.app_url.trim()
     if (editForm.reward_description?.trim()) changes.reward_description = editForm.reward_description.trim()
     if (editForm.contract_address !== undefined && editForm.contract_address !== "") changes.contract_address = editForm.contract_address.trim()
+    // Tasks + review_questions: only send if founder actually edited them
+    // (i.e., opened the section, which hydrates the editable copy). Compared
+    // by deep JSON equality so untouched edits don't queue a noop admin item.
+    if (editTasks && JSON.stringify(editTasks) !== JSON.stringify(campaign.tasks)) {
+      // Strip empty rows before submitting
+      const cleaned = editTasks.filter(t => t.title.trim() || t.description.trim())
+      if (cleaned.length === 0) { setEditError("Tasks can't all be empty"); return }
+      changes.tasks = cleaned
+    }
+    if (editQs && JSON.stringify(editQs) !== JSON.stringify(campaign.review_questions)) {
+      const cleaned = editQs.filter(q => q.label.trim())
+      if (cleaned.length === 0) { setEditError("Review questions can't all be empty"); return }
+      changes.review_questions = cleaned
+    }
     if (!Object.keys(changes).length) { setEditError("No changes entered"); return }
     setEditSubmitting(true)
     try {
@@ -1112,6 +1133,105 @@ export default function CampaignDetailPage() {
                         <EF label="Contract address" >
                           <input type="text" value={editForm.contract_address || ""} onChange={e => setEditForm(f => ({ ...f, contract_address: e.target.value.trim() }))} placeholder={campaign.contract_address || "0x... (leave blank to keep current)"} style={{ ...ei, fontFamily: "'DM Mono', monospace", fontSize: 11 }} />
                         </EF>
+
+                        {/* ── Tasks editor — collapsible, hydrates on open. Edits + new
+                             additions go to the admin queue along with the rest. ── */}
+                        <div style={{ background: "var(--surf2,#0e1224)", border: "1px solid var(--bdr,rgba(255,255,255,0.06))", borderRadius: 8, overflow: "hidden" }}>
+                          <button type="button"
+                            onClick={() => {
+                              if (!tasksSectionOpen && editTasks === null) setEditTasks(campaign.tasks.map(t => ({ ...t })))
+                              setTasksSectionOpen(o => !o)
+                            }}
+                            style={{ width: "100%", padding: "10px 12px", background: "transparent", border: "none", color: "var(--t1,#e8ecff)", fontSize: 12, fontWeight: 600, cursor: "pointer", textAlign: "left", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                            <span>Tasks · {(editTasks ?? campaign.tasks).length} step{(editTasks ?? campaign.tasks).length === 1 ? "" : "s"}</span>
+                            <span style={{ fontSize: 11, color: "var(--t3,#2e3a5c)", fontFamily: "var(--font-mono,monospace)" }}>{tasksSectionOpen ? "−" : "+"}</span>
+                          </button>
+                          {tasksSectionOpen && editTasks && (
+                            <div style={{ padding: "0 12px 12px", display: "flex", flexDirection: "column", gap: 8 }}>
+                              {editTasks.map((t, i) => (
+                                <div key={t.id} style={{ background: "var(--surf,#0a0e1a)", border: "1px solid var(--bdr,rgba(255,255,255,0.06))", borderRadius: 7, padding: "9px 10px" }}>
+                                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                                    <span style={{ fontSize: 9, fontFamily: "var(--font-mono,monospace)", color: "var(--t3,#2e3a5c)", flexShrink: 0 }}>{String(i + 1).padStart(2, "0")}</span>
+                                    <input type="text" value={t.title} placeholder="Step title"
+                                      onChange={e => setEditTasks(p => p?.map(x => x.id === t.id ? { ...x, title: e.target.value } : x) ?? null)}
+                                      style={{ flex: 1, background: "transparent", border: "none", outline: "none", fontSize: 12, fontWeight: 500, color: "var(--t1,#e8ecff)" }} />
+                                    {editTasks.length > 1 && (
+                                      <button type="button" onClick={() => setEditTasks(p => p?.filter(x => x.id !== t.id) ?? null)}
+                                        style={{ fontSize: 12, color: "#e03348", background: "transparent", border: "none", cursor: "pointer", padding: "0 4px" }}>✕</button>
+                                    )}
+                                  </div>
+                                  <input type="text" value={t.description} placeholder="What testers should do"
+                                    onChange={e => setEditTasks(p => p?.map(x => x.id === t.id ? { ...x, description: e.target.value } : x) ?? null)}
+                                    style={{ width: "100%", background: "transparent", border: "none", outline: "none", fontSize: 11, color: "var(--t2,#6b7da8)", marginLeft: 22, boxSizing: "border-box" }} />
+                                </div>
+                              ))}
+                              <button type="button"
+                                onClick={() => setEditTasks(p => [...(p ?? []), { id: "t" + Date.now().toString(36), title: "", description: "" }])}
+                                style={{ height: 32, background: "transparent", color: "var(--t3,#2e3a5c)", border: "1px dashed var(--bdr,rgba(255,255,255,0.12))", borderRadius: 7, fontSize: 11, cursor: "pointer", fontFamily: "var(--font-mono,monospace)" }}>
+                                + Add step
+                              </button>
+                              <div style={{ fontSize: 10, fontFamily: "var(--font-mono,monospace)", color: "var(--t3,#2e3a5c)", lineHeight: 1.6 }}>
+                                Task edits and new additions go to admin for review before they reach testers.
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* ── Review questions editor — same pattern ── */}
+                        <div style={{ background: "var(--surf2,#0e1224)", border: "1px solid var(--bdr,rgba(255,255,255,0.06))", borderRadius: 8, overflow: "hidden" }}>
+                          <button type="button"
+                            onClick={() => {
+                              if (!qsSectionOpen && editQs === null) setEditQs(campaign.review_questions.map(q => ({ ...q })))
+                              setQsSectionOpen(o => !o)
+                            }}
+                            style={{ width: "100%", padding: "10px 12px", background: "transparent", border: "none", color: "var(--t1,#e8ecff)", fontSize: 12, fontWeight: 600, cursor: "pointer", textAlign: "left", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                            <span>Review questions · {(editQs ?? campaign.review_questions).length}</span>
+                            <span style={{ fontSize: 11, color: "var(--t3,#2e3a5c)", fontFamily: "var(--font-mono,monospace)" }}>{qsSectionOpen ? "−" : "+"}</span>
+                          </button>
+                          {qsSectionOpen && editQs && (
+                            <div style={{ padding: "0 12px 12px", display: "flex", flexDirection: "column", gap: 8 }}>
+                              {editQs.map((q, i) => (
+                                <div key={q.id} style={{ background: "var(--surf,#0a0e1a)", border: "1px solid var(--bdr,rgba(255,255,255,0.06))", borderRadius: 7, padding: "9px 10px" }}>
+                                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                                    <span style={{ fontSize: 9, fontFamily: "var(--font-mono,monospace)", color: "var(--t3,#2e3a5c)", flexShrink: 0 }}>Q{i + 1}</span>
+                                    <input type="text" value={q.label} placeholder="Question for testers"
+                                      onChange={e => setEditQs(p => p?.map(x => x.id === q.id ? { ...x, label: e.target.value } : x) ?? null)}
+                                      style={{ flex: 1, background: "transparent", border: "none", outline: "none", fontSize: 12, fontWeight: 500, color: "var(--t1,#e8ecff)" }} />
+                                    {editQs.length > 1 && (
+                                      <button type="button" onClick={() => setEditQs(p => p?.filter(x => x.id !== q.id) ?? null)}
+                                        style={{ fontSize: 12, color: "#e03348", background: "transparent", border: "none", cursor: "pointer", padding: "0 4px" }}>✕</button>
+                                    )}
+                                  </div>
+                                  <input type="text" value={q.placeholder} placeholder="Placeholder text (hint for testers)"
+                                    onChange={e => setEditQs(p => p?.map(x => x.id === q.id ? { ...x, placeholder: e.target.value } : x) ?? null)}
+                                    style={{ width: "100%", background: "transparent", border: "none", outline: "none", fontSize: 11, color: "var(--t2,#6b7da8)", marginLeft: 22, boxSizing: "border-box" }} />
+                                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 6, marginLeft: 22 }}>
+                                    <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 10, color: "var(--t3,#2e3a5c)", fontFamily: "var(--font-mono,monospace)" }}>
+                                      <span>Min words</span>
+                                      <input type="number" min={0} max={500} value={q.min_words}
+                                        onChange={e => setEditQs(p => p?.map(x => x.id === q.id ? { ...x, min_words: Math.max(0, parseInt(e.target.value) || 0) } : x) ?? null)}
+                                        style={{ width: 50, height: 22, background: "var(--surf2,#0e1224)", border: "1px solid var(--bdr,rgba(255,255,255,0.06))", borderRadius: 4, padding: "0 6px", fontSize: 10, color: "var(--t1,#e8ecff)", outline: "none" }} />
+                                    </label>
+                                    <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 10, color: "var(--t3,#2e3a5c)", fontFamily: "var(--font-mono,monospace)", cursor: "pointer" }}>
+                                      <input type="checkbox" checked={q.required !== false}
+                                        onChange={e => setEditQs(p => p?.map(x => x.id === q.id ? { ...x, required: e.target.checked } : x) ?? null)} />
+                                      Required
+                                    </label>
+                                  </div>
+                                </div>
+                              ))}
+                              <button type="button"
+                                onClick={() => setEditQs(p => [...(p ?? []), { id: "q" + Date.now().toString(36), label: "", placeholder: "", min_words: 20, required: true }])}
+                                style={{ height: 32, background: "transparent", color: "var(--t3,#2e3a5c)", border: "1px dashed var(--bdr,rgba(255,255,255,0.12))", borderRadius: 7, fontSize: 11, cursor: "pointer", fontFamily: "var(--font-mono,monospace)" }}>
+                                + Add question
+                              </button>
+                              <div style={{ fontSize: 10, fontFamily: "var(--font-mono,monospace)", color: "var(--t3,#2e3a5c)", lineHeight: 1.6 }}>
+                                Question edits go to admin for review.
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
                         {editError && (
                           <div style={{ fontSize: 11, color: "#e03348", padding: "7px 10px", background: "rgba(224,51,72,0.08)", borderRadius: 6, fontFamily: "var(--font-mono,monospace)" }}>{editError}</div>
                         )}
