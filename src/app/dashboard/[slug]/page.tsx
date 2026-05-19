@@ -327,6 +327,23 @@ export default function DashboardPage() {
 
   if (!token && !project && !loading) return (
     <ArcLayout active="ecosystem">
+      {/* If the dashboard load failed because the connected wallet doesn't own
+          this project, show a clearer message above the magic-link form. The
+          founder can either switch wallets (most common) or use the email link. */}
+      {error && connectedWallet && (
+        <div style={{ maxWidth: 480, margin: "60px auto 0", padding: "14px 18px", background: "rgba(224,136,16,0.06)", border: "1px solid rgba(224,136,16,0.25)", borderRadius: 10 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "#e08810", marginBottom: 6 }}>Wrong wallet connected</div>
+          <div style={{ fontSize: 12, color: t2, lineHeight: 1.6, marginBottom: 4 }}>
+            Connected: <span style={{ fontFamily: mono, color: t1 }}>{connectedWallet.slice(0, 8)}…{connectedWallet.slice(-6)}</span>
+          </div>
+          <div style={{ fontSize: 12, color: t2, lineHeight: 1.6, marginBottom: 8 }}>
+            This dashboard is owned by a different wallet. Switch your wallet to the one that submitted this project, or use the email magic link below.
+          </div>
+          <div style={{ fontSize: 11, color: t3, fontFamily: mono }}>
+            {error}
+          </div>
+        </div>
+      )}
       <ClaimForm slug={slug} mono={mono} bdr={bdr} surf={surf} surf2={surf2} t1={t1} t2={t2} t3={t3} />
     </ArcLayout>
   )
