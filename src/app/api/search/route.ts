@@ -17,24 +17,8 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    // Try the OpenGradient AI server if available
-    const ogUrl = process.env.OG_SERVER_URL || "http://localhost:8765"
-    try {
-      const res = await fetch(ogUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query }),
-        signal: AbortSignal.timeout(4000),
-      })
-      if (res.ok) {
-        const data = await res.json()
-        return NextResponse.json(data)
-      }
-    } catch {
-      // OG server unavailable — fall through to basic classifier
-    }
-
-    // Basic intent classifier fallback
+    // Keyword intent classifier. (We previously had a TEE-backed AI fallback
+    // here but it added latency without measurable value — removed.)
     const q = query.toLowerCase()
     let filter = "recent_transfers"
     let explanation = "Showing recent USDC transfers on Arc Testnet."

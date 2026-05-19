@@ -50,9 +50,12 @@ export default function AdminPage() {
   const [projects, setProjects]       = useState<Project[]>([])
   const [payoutBal, setPayoutBal]     = useState<null | {
     address:    string
-    usdc:       number   // total USDC in the DCW (covers both gas and pending payouts)
-    committed:  number   // USDC promised to active campaigns but not yet paid out
-    free:       number   // usdc - committed; if negative the wallet is underwater
+    // null when Arcscan failed to return a balance — UI renders "—" + a clear
+    // "Couldn't read the live balance" message instead of misleading $0.
+    usdc:       number | null
+    committed:  number
+    free:       number | null
+    fetchError: string | null
     alerts:     { critical: boolean; low: boolean; underwater: boolean }
     thresholds: { low: number; crit: number }
   }>(null)
@@ -425,13 +428,18 @@ export default function AdminPage() {
           {/* Circle DCW payout wallet — USDC is the native gas + payout token on Arc,
               so one balance covers both. Free = total - committed-but-unpaid liabilities. */}
           {payoutBal && (() => {
-            const crit = payoutBal.alerts.critical
-            const low  = payoutBal.alerts.low
-            const underwater = payoutBal.alerts.underwater
-            const status = crit ? "critical" : underwater ? "underwater" : low ? "low" : "healthy"
-            const tone = (crit || underwater) ? "#e03348" : low ? "#d7c160" : "#00b87a"
-            const bg   = (crit || underwater) ? "rgba(224,51,72,0.08)" : low ? "rgba(255,200,0,0.06)" : "rgba(0,184,122,0.04)"
-            const bd   = (crit || underwater) ? "rgba(224,51,72,0.3)"  : low ? "rgba(255,200,0,0.2)"  : "rgba(0,184,122,0.15)"
+            // When Arcscan responded with an error, usdc / free are null and
+            // we render a clear "unavailable" state instead of misleading $0.
+            const stale = payoutBal.fetchError != null || payoutBal.usdc == null
+            const crit = !stale && payoutBal.alerts.critical
+            const low  = !stale && payoutBal.alerts.low
+            const underwater = !stale && payoutBal.alerts.underwater
+            const status = stale
+              ? "balance unavailable"
+              : (crit ? "critical" : underwater ? "underwater" : low ? "low" : "healthy")
+            const tone = stale ? "#d7c160" : (crit || underwater) ? "#e03348" : low ? "#d7c160" : "#00b87a"
+            const bg   = stale ? "rgba(255,200,0,0.04)" : (crit || underwater) ? "rgba(224,51,72,0.08)" : low ? "rgba(255,200,0,0.06)" : "rgba(0,184,122,0.04)"
+            const bd   = stale ? "rgba(255,200,0,0.2)"  : (crit || underwater) ? "rgba(224,51,72,0.3)"  : low ? "rgba(255,200,0,0.2)"  : "rgba(0,184,122,0.15)"
             const explorerUrl = `https://testnet.arcscan.app/address/${payoutBal.address}`
             const fmt = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
             return (
@@ -449,7 +457,9 @@ export default function AdminPage() {
                 <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(140px, 1fr))", gap:"16px", marginBottom:"12px" }}>
                   <div>
                     <div style={{ fontSize:"10px", fontFamily:mono, color:t3, marginBottom:"4px" }}>USDC on hand</div>
-                    <div style={{ fontSize:"22px", fontWeight:700, color:t1, fontFamily:mono }}>${fmt(payoutBal.usdc)}</div>
+                    <div style={{ fontSize:"22px", fontWeight:700, color: stale ? t3 : t1, fontFamily:mono }}>
+                      {stale ? "—" : `$${fmt(payoutBal.usdc)}`}
+                    </div>
                   </div>
                   <div>
                     <div style={{ fontSize:"10px", fontFamily:mono, color:t3, marginBottom:"4px" }}>Committed to campaigns</div>
@@ -457,11 +467,21 @@ export default function AdminPage() {
                   </div>
                   <div>
                     <div style={{ fontSize:"10px", fontFamily:mono, color:t3, marginBottom:"4px" }}>Free buffer</div>
-                    <div style={{ fontSize:"22px", fontWeight:700, color: underwater ? "#e03348" : payoutBal.free < 10 ? "#d7c160" : "#00b87a", fontFamily:mono }}>
-                      {underwater ? "−" : ""}${fmt(Math.abs(payoutBal.free))}
+                    <div style={{ fontSize:"22px", fontWeight:700,
+                      color: stale ? t3 : underwater ? "#e03348" : (payoutBal.free != null && payoutBal.free < 10 ? "#d7c160" : "#00b87a"),
+                      fontFamily:mono }}>
+                      {stale
+                        ? "—"
+                        : `${underwater ? "−" : ""}$${fmt(Math.abs(payoutBal.free ?? 0))}`}
                     </div>
                   </div>
                 </div>
+
+                {stale && (
+                  <div style={{ marginBottom:"12px", fontSize:"11px", color:tone, lineHeight:1.5 }}>
+                    Couldn't read the live balance from Arcscan ({payoutBal.fetchError || "unknown"}). The wallet is unchanged — just the read failed. Refresh in a few seconds to try again.
+                  </div>
+                )}
 
                 <div style={{ display:"flex", alignItems:"center", gap:"8px", padding:"8px 12px", background:surf2, border:"1px solid "+bdr, borderRadius:"8px", marginBottom:(crit||low||underwater) ? "12px" : 0 }}>
                   <span style={{ fontSize:"10px", fontFamily:mono, color:t3 }}>SEND USDC TO →</span>

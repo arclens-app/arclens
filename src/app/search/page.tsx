@@ -173,7 +173,7 @@ function SearchContent() {
         {/* SEARCH BAR */}
         <div style={{ marginBottom:"24px" }}>
           <div style={{ fontSize:"10px", fontFamily:mono, color:t3, letterSpacing:"0.1em", textTransform:"uppercase", marginBottom:"14px" }}>
-            AI-Powered Search · Powered by OpenGradient TEE
+            Arc Testnet Search
           </div>
           <div style={{ display:"flex", gap:"10px" }}>
             <input ref={inputRef}
@@ -255,11 +255,11 @@ function SearchContent() {
           )}
         </div>
 
-        {/* AI RESULT */}
+        {/* QUERY RESULT */}
         {aiResult && (
-          <div style={{ background:"rgba(124,92,252,0.05)", border:"1px solid rgba(124,92,252,0.15)", borderRadius:"12px", padding:"16px 20px", marginBottom:"20px" }}>
+          <div style={{ background:"rgba(26,86,255,0.05)", border:"1px solid rgba(26,86,255,0.15)", borderRadius:"12px", padding:"16px 20px", marginBottom:"20px" }}>
             <div style={{ display:"flex", alignItems:"center", gap:"10px", marginBottom:"10px" }}>
-              <div style={{ fontSize:"9px", fontFamily:mono, color:"#a080ff", textTransform:"uppercase", letterSpacing:"0.1em" }}>OpenGradient AI · TEE Verified</div>
+              <div style={{ fontSize:"9px", fontFamily:mono, color:"#8aaeff", textTransform:"uppercase", letterSpacing:"0.1em" }}>Result</div>
               <div style={{ width:"5px", height:"5px", borderRadius:"50%", background:usdc }}/>
               <div style={{ fontSize:"9px", fontFamily:mono, color:usdc }}>Live</div>
             </div>
