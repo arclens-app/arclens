@@ -209,7 +209,16 @@ export default function ProjectPage() {
 
   function share() {
     const url = `https://arclenz.xyz/ecosystem/${id}`
-    const text = `Check out ${project?.name} on ArcLens — ${project?.tagline}\n\n${url}`
+    // If the project has an X handle, lead with the @ (it's their brand on X).
+    // Otherwise lead with the project name. Either way, mention Arc Testnet
+    // (the chain they're listed on) and tag @arclens_app for the platform.
+    const raw = project?.twitter || ""
+    let ph = String(raw).trim()
+    const m = ph.match(/^https?:\/\/(?:www\.)?(?:x|twitter)\.com\/([^/?#]+)/i)
+    if (m) ph = m[1]
+    ph = ph.replace(/^@+/, "").trim()
+    const lead = ph ? `@${ph}` : project?.name
+    const text = `${lead} on Arc Testnet, listed in the @arclens_app ecosystem — ${project?.tagline}\n\n${url}`
     window.open(`https://x.com/intent/tweet?text=${encodeURIComponent(text)}`, "_blank")
   }
 
@@ -402,7 +411,13 @@ export default function ProjectPage() {
             <div style={{ padding: "16px", background: "rgba(0,184,122,0.06)", border: "1px solid rgba(0,184,122,0.2)", borderRadius: "8px", marginBottom: "20px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "12px" }}>
               <span style={{ fontSize: "13px", color: usdc }}>✓ Review submitted successfully</span>
               <button onClick={() => {
-                const text = `Just reviewed ${project?.name} on ArcLens — arclenz.xyz/ecosystem/${id}`
+                const raw = project?.twitter || ""
+                let ph = String(raw).trim()
+                const m = ph.match(/^https?:\/\/(?:www\.)?(?:x|twitter)\.com\/([^/?#]+)/i)
+                if (m) ph = m[1]
+                ph = ph.replace(/^@+/, "").trim()
+                const subject = ph ? `@${ph}` : project?.name
+                const text = `Just reviewed ${subject} on Arc Testnet via @arclens_app — arclenz.xyz/ecosystem/${id}`
                 window.open(`https://x.com/intent/tweet?text=${encodeURIComponent(text)}`, "_blank")
               }} style={{ height: "32px", padding: "0 14px", background: "#1a56ff", color: "#fff", fontSize: "12px", fontFamily: mono, border: "none", borderRadius: "6px", cursor: "pointer" }}>
                 Share on 𝕏

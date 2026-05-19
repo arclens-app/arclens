@@ -32,9 +32,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     const campaignRes = await pool.query(
       `SELECT
          c.*,
+         p.twitter AS project_twitter,
          (SELECT COUNT(*) FROM campaign_completions cc WHERE cc.campaign_id = c.id) AS completion_count,
          (SELECT COUNT(*) FROM campaign_completions cc WHERE cc.campaign_id = c.id AND cc.status = 'reviewed') AS reviewed_count
-       FROM campaigns c WHERE ${whereClause}`,
+       FROM campaigns c
+       LEFT JOIN projects p ON p.id = c.project_id
+       WHERE ${whereClause}`,
       [isNumeric ? Number(id) : id]
     )
 
