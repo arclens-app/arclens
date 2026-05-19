@@ -169,6 +169,15 @@ export default function CreateCampaignPage() {
   // entirely on the founder's product side.
   const [inviteCodesRaw, setInviteCodesRaw]     = useState("")
   const [inviteCodesNote, setInviteCodesNote]   = useState("")
+  // XP system — project-specific. Default off. When enabled, founder picks a
+  // mode and sets the XP pool. See `parsedInviteCodes` for the analogous opt-in
+  // pattern. Empty maxXp / xpEnabled=false → no XP awarded, classic flow.
+  const [xpEnabled, setXpEnabled]               = useState(false)
+  const [xpMode, setXpMode]                     = useState<"batch" | "per_question">("batch")
+  const [xpMax, setXpMax]                       = useState("")
+  // Per-question XP values for Mode B. Keyed by question.id. Founder sees a
+  // running sum vs xpMax and a clear error if they don't match.
+  const [xpPerQ, setXpPerQ]                     = useState<Record<string, string>>({})
   // Preview view: "card" mirrors the feed card; "journey" mirrors the full
   // detail page testers actually walk through (banner → tasks → feedback → submit).
   const [previewMode, setPreviewMode]           = useState<"card" | "journey">("journey")
@@ -223,12 +232,14 @@ export default function CreateCampaignPage() {
           tasks, questions, rewardType, rewardDesc, rewardUsdcAmount,
           totalSlots, expiresAt, isFcfs, minRank, campaignLogo, bannerPos, appUrl,
           inviteCodesRaw, inviteCodesNote,
+          xpEnabled, xpMode, xpMax, xpPerQ,
         }))
       } catch { /* storage full — silent */ }
     }, 600)
   }, [type, title, tagline, description, contractAddress, projectId, tasks, questions,
       rewardType, rewardDesc, rewardUsdcAmount, totalSlots, expiresAt, isFcfs, minRank,
-      campaignLogo, bannerPos, appUrl, inviteCodesRaw, inviteCodesNote])
+      campaignLogo, bannerPos, appUrl, inviteCodesRaw, inviteCodesNote,
+      xpEnabled, xpMode, xpMax, xpPerQ])
 
   useEffect(() => {
     if (mounted) saveDraft()
@@ -264,6 +275,10 @@ export default function CreateCampaignPage() {
         if (d.appUrl)           setAppUrl(d.appUrl)
         if (typeof d.inviteCodesRaw === "string")  setInviteCodesRaw(d.inviteCodesRaw)
         if (typeof d.inviteCodesNote === "string") setInviteCodesNote(d.inviteCodesNote)
+        if (typeof d.xpEnabled === "boolean") setXpEnabled(d.xpEnabled)
+        if (d.xpMode === "batch" || d.xpMode === "per_question") setXpMode(d.xpMode)
+        if (typeof d.xpMax === "string") setXpMax(d.xpMax)
+        if (d.xpPerQ && typeof d.xpPerQ === "object") setXpPerQ(d.xpPerQ)
         setDraftRestored(true)
       }
     } catch { /* corrupt draft — ignore */ }
@@ -364,6 +379,20 @@ export default function CreateCampaignPage() {
     if (rewardType === "usdc" && !totalSlots)        { setError("Set a slot count for USDC campaigns"); return }
     if (CONTRACT_REQUIRED.has(type) && !contractAddress.trim() && !externalVerify) { setError("A contract address is required for this campaign type — or enable external verification if you handle on-chain checks yourself"); return }
     if (contractAddress && !/^0x[a-fA-F0-9]{40}$/.test(contractAddress.trim())) { setError("Contract address must be a valid 0x address"); return }
+    // XP validation. Must be parseable + per-question sum must match max when Mode B.
+    if (xpEnabled) {
+      const max = parseInt(xpMax)
+      if (!Number.isFinite(max) || max < 1 || max > 10000) { setError("XP max must be 1 - 10000"); return }
+      if (xpMode === "per_question") {
+        let sum = 0
+        for (const q of questions) {
+          const v = parseInt(xpPerQ[q.id] || "")
+          if (!Number.isFinite(v) || v < 0) { setError("Each question needs a per-question XP value (0 or higher)"); return }
+          sum += v
+        }
+        if (sum !== max) { setError(`Per-question XP values must sum to ${max} (currently ${sum})`); return }
+      }
+    }
 
     let depositTxHash: string | null = null
     if (rewardType === "usdc" && rewardUsdcAmount && totalSlots) {
@@ -395,7 +424,7 @@ export default function CreateCampaignPage() {
           contract_address: contractAddress.trim() || null,
           campaign_logo: campaignLogo || null,
           app_url: appUrl.trim() || null,
-          tasks, review_questions: questions,
+          tasks,
           reward_type: rewardType, reward_description: rewardDesc.trim() || null,
           reward_usdc_amount: rewardType === "usdc" ? parseFloat(rewardUsdcAmount) : null,
           deposit_tx_hash: depositTxHash,
@@ -405,6 +434,13 @@ export default function CreateCampaignPage() {
           banner_position: `${bannerPos.x}% ${bannerPos.y}%`,
           invite_codes: parsedInviteCodes,
           invite_codes_note: inviteCodesNote.trim() || null,
+          // XP — only send when founder enabled it. Backend treats null as off.
+          max_xp_per_completion: xpEnabled && xpMax ? parseInt(xpMax) : null,
+          xp_mode: xpEnabled ? xpMode : "batch",
+          // Mode B: stamp xp_value onto each question (rest of question fields preserved).
+          review_questions: xpEnabled && xpMode === "per_question"
+            ? questions.map(q => ({ ...q, xp_value: parseInt(xpPerQ[q.id] || "0") || 0 }))
+            : questions,
         }),
       })
       const data = await res.json()
@@ -534,6 +570,7 @@ export default function CreateCampaignPage() {
                 setTotalSlots(""); setExpiresAt(""); setIsFcfs(true); setMinRank(0)
                 setCampaignLogo(null); setLogoPreview(null); setBannerPos({ x: 50, y: 50 }); setAppUrl("")
                 setInviteCodesRaw(""); setInviteCodesNote("")
+                setXpEnabled(false); setXpMode("batch"); setXpMax(""); setXpPerQ({})
               }} style={{ fontSize: 11, fontFamily: mono, color: "var(--t3,#2e3a5c)", background: "none", border: "none", cursor: "pointer", padding: 0, textDecoration: "underline" }}>
                 Clear draft
               </button>
@@ -1065,6 +1102,100 @@ export default function CreateCampaignPage() {
             </div>
           </Card>
 
+          {/* ── 07 XP rewards (optional, project-specific) ── */}
+          <Card step="07" title="Project XP for testers" sub="Optional. Award XP to testers based on how well they perform. XP feeds your project's leaderboard on /ecosystem/[your project]. Skip this and the leaderboard ranks by quality score.">
+            <label style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "12px 14px", background: xpEnabled ? "rgba(138,174,255,0.05)" : surf2, border: `1px solid ${xpEnabled ? "rgba(138,174,255,0.25)" : bdr}`, borderRadius: 8, cursor: "pointer", marginBottom: 12 }}>
+              <input type="checkbox" checked={xpEnabled} onChange={e => setXpEnabled(e.target.checked)} style={{ marginTop: 2, accentColor: "#8aaeff" }} />
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: xpEnabled ? "#8aaeff" : t1 }}>Enable XP for this campaign</div>
+                <div style={{ fontSize: 11, color: t2, lineHeight: 1.6, marginTop: 3 }}>
+                  XP is scoped to this project only — testers earn XP for your leaderboard, no global ArcLens XP. You decide what XP unlocks.
+                </div>
+              </div>
+            </label>
+
+            {xpEnabled && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                {/* Mode toggle */}
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: t2, letterSpacing: "0.04em", textTransform: "uppercase", fontFamily: mono, marginBottom: 8 }}>Review mode</div>
+                  <div className="twoColGrid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                    {[
+                      { id: "batch",        label: "Batch (Mode A)",         desc: "One overall ★ rating drives XP. Quickest for founders." },
+                      { id: "per_question", label: "Per-question (Mode B)",  desc: "Rate each answer individually. Weighted XP per question." },
+                    ].map(m => (
+                      <button key={m.id} type="button" onClick={() => setXpMode(m.id as "batch" | "per_question")}
+                        style={{
+                          textAlign: "left", padding: "11px 13px",
+                          background: xpMode === m.id ? "rgba(138,174,255,0.08)" : surf2,
+                          border: `1px solid ${xpMode === m.id ? "rgba(138,174,255,0.4)" : bdr}`,
+                          borderRadius: 9, cursor: "pointer",
+                        }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: xpMode === m.id ? "#8aaeff" : t1, marginBottom: 3 }}>{m.label}</div>
+                        <div style={{ fontSize: 10.5, color: t2, lineHeight: 1.5 }}>{m.desc}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Max XP input */}
+                <Field
+                  label="Max XP per submission"
+                  hint={xpMode === "per_question" ? "Must equal the sum of per-question XP below" : "Tester earns (rating / 5) × this amount"}
+                  required
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <input type="number" value={xpMax} onChange={e => setXpMax(e.target.value)}
+                      placeholder="e.g. 60" min={1} max={10000}
+                      style={{ ...inp, flex: 1 }} />
+                    <span style={{ fontSize: 11, fontFamily: mono, color: t3, flexShrink: 0 }}>XP</span>
+                  </div>
+                </Field>
+
+                {/* Per-question XP weights (Mode B only) */}
+                {xpMode === "per_question" && (() => {
+                  const parsedMax = parseInt(xpMax) || 0
+                  const sum = questions.reduce((s, q) => s + (parseInt(xpPerQ[q.id] || "") || 0), 0)
+                  const balanced = parsedMax > 0 && sum === parsedMax
+                  return (
+                    <div>
+                      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 8 }}>
+                        <span style={{ fontSize: 11, fontWeight: 600, color: t2, letterSpacing: "0.04em", textTransform: "uppercase", fontFamily: mono }}>
+                          XP per question
+                        </span>
+                        <span style={{ fontSize: 10, fontFamily: mono, color: balanced ? "#00d990" : sum > parsedMax ? "#e03348" : "#e08810" }}>
+                          {sum} / {parsedMax} XP
+                        </span>
+                      </div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                        {questions.map((q, i) => (
+                          <div key={q.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", background: surf2, border: "1px solid " + bdr, borderRadius: 8 }}>
+                            <div style={{ width: 22, height: 22, borderRadius: 5, background: "rgba(0,184,122,0.08)", border: "1px solid rgba(0,184,122,0.2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 700, color: "#00b87a", fontFamily: mono, flexShrink: 0 }}>Q{i + 1}</div>
+                            <span style={{ flex: 1, fontSize: 11, color: q.label.trim() ? t1 : t3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              {q.label.trim() || `Question ${i + 1}…`}
+                            </span>
+                            <input type="number" min={0} value={xpPerQ[q.id] || ""}
+                              onChange={e => setXpPerQ(p => ({ ...p, [q.id]: e.target.value }))}
+                              placeholder="0"
+                              style={{ width: 70, height: 30, background: surf, border: "1px solid " + bdr, borderRadius: 6, padding: "0 8px", fontSize: 12, fontFamily: mono, color: t1, outline: "none", textAlign: "right" }} />
+                            <span style={{ fontSize: 9, fontFamily: mono, color: t3, flexShrink: 0 }}>XP</span>
+                          </div>
+                        ))}
+                      </div>
+                      {!balanced && parsedMax > 0 && (
+                        <div style={{ marginTop: 8, fontSize: 10.5, color: sum > parsedMax ? "#e03348" : "#e08810", fontFamily: mono }}>
+                          {sum > parsedMax
+                            ? `Over by ${sum - parsedMax} XP — reduce some question values.`
+                            : `${parsedMax - sum} XP remaining — distribute across questions.`}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
+              </div>
+            )}
+          </Card>
+
           {/* ── Submit ── */}
           {error && (
             <div ref={errorRef} style={{ fontSize: 13, color: "#e03348", padding: "12px 16px", background: "rgba(224,51,72,0.08)", borderRadius: 8, border: "1px solid rgba(224,51,72,0.2)" }}>{error}</div>
@@ -1589,6 +1720,13 @@ export default function CreateCampaignPage() {
                     pills.push({ k: "Contract", v: `${contractAddress.slice(0, 6)}…${contractAddress.slice(-4)}`, color: "#00d990" })
                   }
                   if (externalVerify)   pills.push({ k: "Verify",   v: "External", color: "#8aaeff" })
+                  if (xpEnabled && xpMax) {
+                    pills.push({
+                      k: "XP",
+                      v: `${xpMax} ${xpMode === "per_question" ? "(per-Q)" : "max"}`,
+                      color: "#8aaeff",
+                    })
+                  }
                   return (
                     <div style={{ marginTop: 14, padding: "11px 14px", background: "#0a0e1a", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 10, display: "flex", flexWrap: "wrap", gap: 6 }}>
                       {pills.map(p => (

@@ -49,19 +49,22 @@ interface Campaign {
   contract_address: string | null
   app_url: string | null
   slug: string | null
-  invite_codes:      string[] | null
-  invite_codes_note: string | null
+  invite_codes:           string[] | null
+  invite_codes_note:      string | null
+  max_xp_per_completion:  number | null
+  xp_mode:                "batch" | "per_question" | null
 }
 
 interface Completion {
-  tester_wallet: string
-  auto_score: number
-  builder_rating: number | null
-  quality_score: number | null
-  status: string
+  tester_wallet:   string
+  auto_score:      number
+  builder_rating:  number | null
+  quality_score:   number | null
+  xp_earned:       number | null
+  status:          string
   reward_delivered: boolean
-  review_answers: Record<string, string>
-  created_at: string
+  review_answers:  Record<string, string>
+  created_at:      string
 }
 
 const TYPE_META: Record<string, { label: string; color: string; abbr: string }> = {
@@ -465,18 +468,28 @@ export default function CampaignDetailPage() {
             </div>
           </div>
           {/* Stat bar */}
-          <div style={{ display: "grid", gridTemplateColumns: `repeat(${campaign.expires_at ? 3 : 2}, 1fr)`, borderTop: "1px solid var(--bdr,rgba(255,255,255,0.06))" }}>
-            {[
+          {(() => {
+            const items: { label: string; value: string; color: string }[] = [
               { label: "slots left", value: slotsLeft !== null ? (slotsLeft === 0 ? "Full" : String(slotsLeft)) : "Open", color: slotsLeft === 0 ? "#e03348" : "#00b87a" },
               { label: "completed",  value: String(campaign.completion_count), color: "var(--t1,#e8ecff)" },
-              ...(campaign.expires_at ? [{ label: "closes", value: new Date(campaign.expires_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }), color: "var(--t2,#6b7da8)" }] : []),
-            ].map((s, i, arr) => (
+            ]
+            if (campaign.max_xp_per_completion != null) {
+              items.push({ label: "max xp", value: String(campaign.max_xp_per_completion), color: "#8aaeff" })
+            }
+            if (campaign.expires_at) {
+              items.push({ label: "closes", value: new Date(campaign.expires_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }), color: "var(--t2,#6b7da8)" })
+            }
+            return (
+          <div style={{ display: "grid", gridTemplateColumns: `repeat(${items.length}, 1fr)`, borderTop: "1px solid var(--bdr,rgba(255,255,255,0.06))" }}>
+            {items.map((s, i, arr) => (
               <div key={i} style={{ padding: "18px 0", textAlign: "center", borderRight: i < arr.length - 1 ? "1px solid var(--bdr,rgba(255,255,255,0.06))" : "none" }}>
                 <div style={{ fontSize: 22, fontWeight: 600, color: s.color, fontFamily: "var(--font-mono,monospace)", lineHeight: 1, letterSpacing: "-0.02em" }}>{s.value}</div>
                 <div style={{ fontSize: 9, color: "var(--t3,#2e3a5c)", textTransform: "uppercase", letterSpacing: "0.1em", marginTop: 7, fontFamily: "var(--font-mono,monospace)" }}>{s.label}</div>
               </div>
             ))}
           </div>
+          )
+          })()}
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr)", gap: 20, alignItems: "start" }}
@@ -639,6 +652,24 @@ export default function CampaignDetailPage() {
                     <div style={{ fontSize: 13, color: "var(--t2,#6b7da8)", marginBottom: 10 }}>
                       Quality score: <strong style={{ color: "var(--t1,#e8ecff)" }}>{autoScore}/100</strong>
                     </div>
+                    {/* If this campaign has XP, show the tester their earned XP
+                        once the builder has rated. Before rating, show the max
+                        they can earn so they know what's on the line. */}
+                    {campaign.max_xp_per_completion != null && (() => {
+                      const mine = completions.find(c => c.tester_wallet.toLowerCase() === wallet?.toLowerCase())
+                      const earned = mine?.xp_earned != null && mine.xp_earned > 0 ? mine.xp_earned : null
+                      return (
+                        <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "6px 14px", marginBottom: 12,
+                          background: earned ? "rgba(138,174,255,0.08)" : "rgba(138,174,255,0.04)",
+                          border: "1px solid rgba(138,174,255,0.25)", borderRadius: 7 }}>
+                          <span style={{ fontSize: 11, fontFamily: "var(--font-mono,monospace)", color: "#8aaeff", letterSpacing: "0.04em" }}>
+                            {earned != null
+                              ? `+${earned} XP earned for ${campaign.project_name || "this project"}`
+                              : `Up to ${campaign.max_xp_per_completion} XP — awarded after the builder rates`}
+                          </span>
+                        </div>
+                      )
+                    })()}
                     {contractVerified !== null && (
                       <div style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "5px 12px", borderRadius: 6, marginBottom: 12,
                         background: contractVerified ? "rgba(0,184,122,0.08)" : "rgba(107,125,168,0.06)",

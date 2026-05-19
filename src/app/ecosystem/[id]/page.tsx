@@ -55,6 +55,7 @@ interface LeaderboardRow {
   avg_quality:          string | number
   avg_rating:           string | number
   total_score:          number
+  total_xp:             number | string | null
   last_active:          string
 }
 
@@ -113,6 +114,7 @@ export default function ProjectPage() {
   const [reviews, setReviews]     = useState<Review[]>([])
   const [leaderboard, setLeaderboard] = useState<LeaderboardRow[]>([])
   const [campaignsRun, setCampaignsRun] = useState<number>(0)
+  const [usingXp, setUsingXp]         = useState<boolean>(false)
   const [lbShowAll, setLbShowAll]     = useState(false)
   const [showReviewForm, setShowReviewForm] = useState(false)
   const [reviewForm, setReviewForm] = useState({ category: "Product Experience", rating: 5, text: "", isPublic: true, contact: "" })
@@ -139,6 +141,7 @@ export default function ProjectPage() {
         setRelated(data.related || [])
         setLeaderboard(data.leaderboard || [])
         setCampaignsRun(data.campaignsRun || 0)
+        setUsingXp(!!data.usingXp)
 
         // Record view
         const deviceId = getDeviceId()
@@ -533,10 +536,20 @@ export default function ProjectPage() {
                           <div style={{ fontSize: "11px", color: "#c08828", fontFamily: mono, fontWeight: 600 }}>{avgR.toFixed(1)}★</div>
                           <div style={{ fontSize: "8.5px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.08em", marginTop: "2px" }}>avg rating</div>
                         </div>
-                        <div style={{ textAlign: "right", minWidth: "60px" }}>
-                          <div style={{ fontSize: "13px", fontWeight: 700, color: scoreColor, fontFamily: mono }}>{avgQ}</div>
-                          <div style={{ fontSize: "8.5px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.08em", marginTop: "2px" }}>avg quality</div>
-                        </div>
+                        {/* XP column when the project opted in to XP, otherwise avg quality. */}
+                        {usingXp ? (
+                          <div style={{ textAlign: "right", minWidth: "60px" }}>
+                            <div style={{ fontSize: "13px", fontWeight: 700, color: "#8aaeff", fontFamily: mono }}>
+                              {Number(row.total_xp || 0).toLocaleString()}
+                            </div>
+                            <div style={{ fontSize: "8.5px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.08em", marginTop: "2px" }}>total xp</div>
+                          </div>
+                        ) : (
+                          <div style={{ textAlign: "right", minWidth: "60px" }}>
+                            <div style={{ fontSize: "13px", fontWeight: 700, color: scoreColor, fontFamily: mono }}>{avgQ}</div>
+                            <div style={{ fontSize: "8.5px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.08em", marginTop: "2px" }}>avg quality</div>
+                          </div>
+                        )}
                       </div>
                     </a>
                   )

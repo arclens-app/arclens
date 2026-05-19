@@ -12,7 +12,12 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejec
 //   bait-and-switch (high reward to attract testers → silently nerf after).
 // - Anything not in either list is locked once the campaign exists.
 const COSMETIC = new Set(["tagline", "description", "app_url", "banner_position", "campaign_logo", "reward_description", "invite_codes", "invite_codes_note"])
-const MATERIAL = new Set(["expires_at", "total_slots", "contract_address"])
+// `max_xp_per_completion` is material because changing the XP pool retro-
+// actively shifts what already-rated testers earned relative to new ones.
+// `xp_mode` and per-question xp_value (inside review_questions JSONB) stay
+// fully locked — switching modes or weighting mid-campaign would invalidate
+// existing rated submissions.
+const MATERIAL = new Set(["expires_at", "total_slots", "contract_address", "max_xp_per_completion"])
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -145,6 +150,13 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         return NextResponse.json({ error: "Contract address must be a valid 0x address" }, { status: 400 })
       }
       material.contract_address = addr || null
+    }
+    if (material.max_xp_per_completion !== undefined) {
+      const n = parseInt(String(material.max_xp_per_completion))
+      if (!Number.isFinite(n) || n < 1 || n > 10000) {
+        return NextResponse.json({ error: "max_xp_per_completion must be 1 - 10000" }, { status: 400 })
+      }
+      material.max_xp_per_completion = n
     }
 
     // Trim and length-cap invite_codes_note. Empty string clears the note.

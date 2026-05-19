@@ -43,6 +43,7 @@ export default function DashboardPage() {
   const [expandedTesters, setExpandedTesters]           = useState<Set<string>>(new Set())
   const [dashRatingWallet, setDashRatingWallet]         = useState("")
   const [dashRatingVal, setDashRatingVal]               = useState(0)
+  const [dashRatingPerQ, setDashRatingPerQ]             = useState<Record<string, number>>({})
   const [dashRatingImpact, setDashRatingImpact]         = useState(false)
   const [dashRatingLoading, setDashRatingLoading]       = useState(false)
   const [dashRatingMsg, setDashRatingMsg]               = useState<string | null>(null)
@@ -184,19 +185,36 @@ export default function DashboardPage() {
   }
 
   async function submitDashRating() {
-    if (!dashRatingWallet || !dashRatingVal || !selectedCampaignId) return
+    if (!dashRatingWallet || !selectedCampaignId) return
+    // Mode B: every question must be rated 1-5 before submit. Mode A: just one rating.
+    const camp = campaignDetail?.campaign
+    const isModeB = camp?.xp_mode === "per_question" && camp?.max_xp_per_completion != null
+    if (isModeB) {
+      const qs = camp?.review_questions || []
+      const missing = qs.find((q: { id: string }) => !dashRatingPerQ[q.id] || dashRatingPerQ[q.id] < 1)
+      if (missing) return  // button is disabled anyway
+    } else {
+      if (!dashRatingVal) return
+    }
     setDashRatingLoading(true)
     setDashRatingMsg(null)
     try {
       const res = await fetch(`/api/trials/${selectedCampaignId}/rate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tester_wallet: dashRatingWallet, rating: dashRatingVal, founder_wallet: connectedWallet, impact_credited: dashRatingImpact }),
+        body: JSON.stringify({
+          tester_wallet:    dashRatingWallet,
+          rating:           isModeB ? null : dashRatingVal,
+          founder_wallet:   connectedWallet,
+          impact_credited:  dashRatingImpact,
+          per_question_ratings: isModeB ? dashRatingPerQ : undefined,
+        }),
       })
       if (res.ok) {
         setDashRatingMsg("✓ Rating saved")
         setDashRatingWallet("")
         setDashRatingVal(0)
+        setDashRatingPerQ({})
         setDashRatingImpact(false)
         openCampaign(selectedCampaignId)
         if (connectedWallet) {
@@ -750,7 +768,7 @@ export default function DashboardPage() {
                                       </button>
                                     )}
                                     {!comp.builder_rating && (
-                                      <button onClick={() => { setDashRatingWallet(isRating ? "" : comp.tester_wallet); setDashRatingVal(0) }}
+                                      <button onClick={() => { setDashRatingWallet(isRating ? "" : comp.tester_wallet); setDashRatingVal(0); setDashRatingPerQ({}) }}
                                         style={{ height: "28px", padding: "0 10px", background: isRating ? "rgba(192,136,40,0.12)" : "transparent", color: isRating ? "#c08828" : t2, fontSize: "10px", fontFamily: mono, border: "1px solid " + (isRating ? "rgba(192,136,40,0.25)" : bdr), borderRadius: "5px", cursor: "pointer" }}>
                                         {isRating ? "Cancel" : "Rate ★"}
                                       </button>
@@ -774,34 +792,88 @@ export default function DashboardPage() {
                                   </div>
                                 )}
 
-                                {/* Rating panel */}
-                                {isRating && (
-                                  <div style={{ padding: "14px 20px", borderTop: "1px solid " + bdr, background: "rgba(192,136,40,0.03)" }}>
-                                    <div style={{ fontSize: "10px", fontFamily: mono, color: t3, marginBottom: "10px", textTransform: "uppercase", letterSpacing: "0.08em" }}>Rate this tester's contribution</div>
-                                    <div style={{ display: "flex", gap: "8px", marginBottom: "10px" }}>
-                                      {[1, 2, 3, 4, 5].map(n => (
-                                        <button key={n} onClick={() => setDashRatingVal(n)}
-                                          style={{ width: "36px", height: "36px", borderRadius: "8px", background: dashRatingVal >= n ? "rgba(192,136,40,0.2)" : surf2, border: `1px solid ${dashRatingVal >= n ? "rgba(192,136,40,0.4)" : bdr}`, color: dashRatingVal >= n ? "#c08828" : t3, fontSize: "16px", cursor: "pointer", flexShrink: 0 }}>
-                                          ★
+                                {/* Rating panel — branches on the campaign's xp_mode.
+                                    Mode A (default): single overall ★ rating.
+                                    Mode B: founder rates each question separately so per-
+                                    question XP weights translate into earned XP. */}
+                                {isRating && (() => {
+                                  const isModeB = camp?.xp_mode === "per_question" && camp?.max_xp_per_completion != null
+                                  const qs: Array<{ id: string; label: string; xp_value?: number }> = (camp?.review_questions || []) as any
+                                  const allRated  = isModeB ? qs.every(q => (dashRatingPerQ[q.id] || 0) >= 1) : (dashRatingVal > 0)
+                                  // Live XP preview so founder sees what tester will earn.
+                                  const xpPreview = isModeB
+                                    ? Math.round(qs.reduce((s, q) => s + ((dashRatingPerQ[q.id] || 0) / 5) * (Number(q.xp_value) || 0), 0))
+                                    : (camp?.max_xp_per_completion != null ? Math.round((dashRatingVal / 5) * camp.max_xp_per_completion) : 0)
+                                  return (
+                                    <div style={{ padding: "14px 20px", borderTop: "1px solid " + bdr, background: "rgba(192,136,40,0.03)" }}>
+                                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "10px" }}>
+                                        <div style={{ fontSize: "10px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                                          {isModeB ? `Rate each answer (Mode B · ${camp?.max_xp_per_completion} XP pool)` : "Rate this tester's contribution"}
+                                        </div>
+                                        {camp?.max_xp_per_completion != null && allRated && (
+                                          <div style={{ fontSize: "10px", fontFamily: mono, color: "#8aaeff", padding: "2px 8px", borderRadius: 4, background: "rgba(138,174,255,0.08)", border: "1px solid rgba(138,174,255,0.25)" }}>
+                                            Awards {xpPreview} XP
+                                          </div>
+                                        )}
+                                      </div>
+
+                                      {isModeB ? (
+                                        <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginBottom: "12px" }}>
+                                          {qs.map((q, qi) => (
+                                            <div key={q.id} style={{ padding: "9px 12px", background: surf2, border: "1px solid " + bdr, borderRadius: 8 }}>
+                                              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 7, gap: 8 }}>
+                                                <span style={{ fontSize: "11px", color: t1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                                  <span style={{ color: t3, fontFamily: mono, marginRight: 6 }}>Q{qi + 1}</span>
+                                                  {q.label}
+                                                </span>
+                                                <span style={{ fontSize: "9.5px", fontFamily: mono, color: t3, flexShrink: 0 }}>
+                                                  {q.xp_value || 0} XP max
+                                                </span>
+                                              </div>
+                                              <div style={{ display: "flex", gap: "5px" }}>
+                                                {[1, 2, 3, 4, 5].map(n => {
+                                                  const active = (dashRatingPerQ[q.id] || 0) >= n
+                                                  return (
+                                                    <button key={n} onClick={() => setDashRatingPerQ(p => ({ ...p, [q.id]: n }))}
+                                                      style={{ width: "28px", height: "28px", borderRadius: "6px",
+                                                        background: active ? "rgba(192,136,40,0.2)" : surf, border: `1px solid ${active ? "rgba(192,136,40,0.4)" : bdr}`,
+                                                        color: active ? "#c08828" : t3, fontSize: "13px", cursor: "pointer" }}>
+                                                      ★
+                                                    </button>
+                                                  )
+                                                })}
+                                              </div>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      ) : (
+                                        <div style={{ display: "flex", gap: "8px", marginBottom: "10px" }}>
+                                          {[1, 2, 3, 4, 5].map(n => (
+                                            <button key={n} onClick={() => setDashRatingVal(n)}
+                                              style={{ width: "36px", height: "36px", borderRadius: "8px", background: dashRatingVal >= n ? "rgba(192,136,40,0.2)" : surf2, border: `1px solid ${dashRatingVal >= n ? "rgba(192,136,40,0.4)" : bdr}`, color: dashRatingVal >= n ? "#c08828" : t3, fontSize: "16px", cursor: "pointer", flexShrink: 0 }}>
+                                              ★
+                                            </button>
+                                          ))}
+                                          <span style={{ fontSize: "12px", color: t3, fontFamily: mono, lineHeight: "36px", marginLeft: "4px" }}>
+                                            {dashRatingVal > 0 ? ["","Poor","Fair","Good","Great","Excellent"][dashRatingVal] : ""}
+                                          </span>
+                                        </div>
+                                      )}
+
+                                      <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "11px", color: t2, cursor: "pointer", marginBottom: "10px" }}>
+                                        <input type="checkbox" checked={dashRatingImpact} onChange={e => setDashRatingImpact(e.target.checked)} />
+                                        Credit this tester — their feedback shaped a real product change
+                                      </label>
+                                      <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                                        <button onClick={submitDashRating} disabled={!allRated || dashRatingLoading}
+                                          style={{ height: "32px", padding: "0 16px", background: allRated ? "#1a56ff" : surf2, color: allRated ? "#fff" : t3, border: "none", borderRadius: "6px", fontSize: "12px", fontFamily: mono, cursor: allRated ? "pointer" : "default", fontWeight: 600 }}>
+                                          {dashRatingLoading ? "Saving..." : "Save Rating"}
                                         </button>
-                                      ))}
-                                      <span style={{ fontSize: "12px", color: t3, fontFamily: mono, lineHeight: "36px", marginLeft: "4px" }}>
-                                        {dashRatingVal > 0 ? ["","Poor","Fair","Good","Great","Excellent"][dashRatingVal] : ""}
-                                      </span>
+                                        {dashRatingMsg && <span style={{ fontSize: "11px", color: green, fontFamily: mono }}>{dashRatingMsg}</span>}
+                                      </div>
                                     </div>
-                                    <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "11px", color: t2, cursor: "pointer", marginBottom: "10px" }}>
-                                      <input type="checkbox" checked={dashRatingImpact} onChange={e => setDashRatingImpact(e.target.checked)} />
-                                      Credit this tester — their feedback shaped a real product change
-                                    </label>
-                                    <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                                      <button onClick={submitDashRating} disabled={!dashRatingVal || dashRatingLoading}
-                                        style={{ height: "32px", padding: "0 16px", background: dashRatingVal ? "#1a56ff" : surf2, color: dashRatingVal ? "#fff" : t3, border: "none", borderRadius: "6px", fontSize: "12px", fontFamily: mono, cursor: dashRatingVal ? "pointer" : "default", fontWeight: 600 }}>
-                                        {dashRatingLoading ? "Saving..." : "Save Rating"}
-                                      </button>
-                                      {dashRatingMsg && <span style={{ fontSize: "11px", color: green, fontFamily: mono }}>{dashRatingMsg}</span>}
-                                    </div>
-                                  </div>
-                                )}
+                                  )
+                                })()}
                               </div>
                             )
                           })}

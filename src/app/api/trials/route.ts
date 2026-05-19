@@ -105,6 +105,7 @@ export async function POST(req: NextRequest) {
       project_id, creator_wallet,
       expires_at,
       invite_codes, invite_codes_note,
+      max_xp_per_completion, xp_mode,
     } = body
 
     if (!title?.trim())         return NextResponse.json({ error: "Title required" }, { status: 400 })
@@ -112,6 +113,42 @@ export async function POST(req: NextRequest) {
     if (!creator_wallet?.trim()) return NextResponse.json({ error: "Wallet required" }, { status: 400 })
     if (!tasks?.length)         return NextResponse.json({ error: "At least one task required" }, { status: 400 })
     if (!review_questions?.length) return NextResponse.json({ error: "At least one review question required" }, { status: 400 })
+
+    // ── XP validation ────────────────────────────────────────────────────────
+    // Tower's project-specific XP system. Two opt-in modes:
+    //   batch (Mode A, default):  founder rates ★1-5 once, XP = (rating/5) × max_xp.
+    //   per_question (Mode B):    founder rates each Q ★1-5, XP per Q = (rating/5) × xp_value.
+    // Both are opt-in — leave max_xp_per_completion null and campaigns rank by
+    // quality_score the same as before.
+    const wantsXp     = max_xp_per_completion != null && max_xp_per_completion !== ""
+    const xpMode      = wantsXp ? (xp_mode === "per_question" ? "per_question" : "batch") : "batch"
+    let   xpMax: number | null = null
+
+    if (wantsXp) {
+      const n = parseInt(String(max_xp_per_completion))
+      if (!Number.isFinite(n) || n < 1 || n > 10000) {
+        return NextResponse.json({ error: "max_xp_per_completion must be between 1 and 10000" }, { status: 400 })
+      }
+      xpMax = n
+
+      // Mode B: every question must have an xp_value, and the sum must equal max_xp
+      // (no implicit weighting — founder is explicit so we don't surprise testers).
+      if (xpMode === "per_question") {
+        const values: number[] = []
+        for (const q of review_questions) {
+          const v = Number(q?.xp_value)
+          if (!Number.isFinite(v) || v < 0 || v > 10000) {
+            return NextResponse.json({ error: "Each question needs an xp_value between 0 and 10000 in per-question mode" }, { status: 400 })
+          }
+          values.push(Math.floor(v))
+          q.xp_value = Math.floor(v)
+        }
+        const sum = values.reduce((s, n) => s + n, 0)
+        if (sum !== xpMax) {
+          return NextResponse.json({ error: `Per-question XP values must sum to ${xpMax} (currently ${sum})` }, { status: 400 })
+        }
+      }
+    }
 
     // Gate: creator must have at least one approved and live project on Arc Ecosystem
     const projGate = await pool.query(
@@ -184,8 +221,9 @@ export async function POST(req: NextRequest) {
           campaign_logo, banner_position, app_url, slug,
           total_slots, is_fcfs, min_rank,
           project_id, project_name, project_logo,
-          creator_wallet, expires_at, invite_codes, invite_codes_note, status)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,'pending_approval')
+          creator_wallet, expires_at, invite_codes, invite_codes_note,
+          max_xp_per_completion, xp_mode, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,'pending_approval')
        RETURNING id, slug`,
       [
         title.trim(),
@@ -213,6 +251,8 @@ export async function POST(req: NextRequest) {
         expires_at || null,
         JSON.stringify(normalizedCodes),
         typeof invite_codes_note === "string" ? invite_codes_note.trim().slice(0, 500) || null : null,
+        xpMax,
+        xpMode,
       ]
     )
 
