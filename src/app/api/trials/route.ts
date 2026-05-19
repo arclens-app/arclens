@@ -104,7 +104,7 @@ export async function POST(req: NextRequest) {
       total_slots, is_fcfs, min_rank,
       project_id, creator_wallet,
       expires_at,
-      invite_codes,
+      invite_codes, invite_codes_note,
     } = body
 
     if (!title?.trim())         return NextResponse.json({ error: "Title required" }, { status: 400 })
@@ -184,8 +184,8 @@ export async function POST(req: NextRequest) {
           campaign_logo, banner_position, app_url, slug,
           total_slots, is_fcfs, min_rank,
           project_id, project_name, project_logo,
-          creator_wallet, expires_at, invite_codes, status)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,'pending_approval')
+          creator_wallet, expires_at, invite_codes, invite_codes_note, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,'pending_approval')
        RETURNING id, slug`,
       [
         title.trim(),
@@ -212,6 +212,7 @@ export async function POST(req: NextRequest) {
         creator_wallet.toLowerCase(),
         expires_at || null,
         JSON.stringify(normalizedCodes),
+        typeof invite_codes_note === "string" ? invite_codes_note.trim().slice(0, 500) || null : null,
       ]
     )
 

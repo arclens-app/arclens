@@ -54,8 +54,43 @@ export async function GET(
       [project.category, project.id]
     )
 
+    // All-time leaderboard for this project — aggregates across every campaign
+    // it has run. Only builder-rated, reviewed completions count so unrated
+    // spam can't claim a spot on a public board.
+    let leaderboard: any[] = []
+    let campaignsRun = 0
+    try {
+      const lbRes = await pool.query(
+        `SELECT
+           cc.tester_wallet,
+           COUNT(*)::int                                AS campaigns_completed,
+           AVG(cc.quality_score)::numeric(6,2)          AS avg_quality,
+           AVG(cc.builder_rating)::numeric(4,2)         AS avg_rating,
+           SUM(cc.quality_score)::int                   AS total_score,
+           MAX(cc.created_at)                           AS last_active
+         FROM campaign_completions cc
+         JOIN campaigns c ON c.id = cc.campaign_id
+         WHERE c.project_id = $1
+           AND cc.status = 'reviewed'
+           AND cc.builder_rating IS NOT NULL
+         GROUP BY cc.tester_wallet
+         ORDER BY total_score DESC, avg_quality DESC
+         LIMIT 20`,
+        [project.id]
+      )
+      leaderboard = lbRes.rows
+      const campCount = await pool.query(
+        `SELECT COUNT(*)::int AS n FROM campaigns WHERE project_id = $1 AND status IN ('active','ended')`,
+        [project.id]
+      )
+      campaignsRun = campCount.rows[0]?.n || 0
+    } catch (e) {
+      // Don't fail the page if the leaderboard query has a hiccup
+      console.error("[Ecosystem GET id] leaderboard query failed", e)
+    }
+
     return NextResponse.json(
-      { project: { ...project, txCount }, related: related.rows },
+      { project: { ...project, txCount }, related: related.rows, leaderboard, campaignsRun },
       { headers: { "Cache-Control": "public, s-maxage=30, stale-while-revalidate=60" } }
     )
   } catch (err) {

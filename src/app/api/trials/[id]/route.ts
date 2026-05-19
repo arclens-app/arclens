@@ -11,7 +11,7 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejec
 // - MATERIAL: queued in pending_campaign_updates for admin approval. Stops
 //   bait-and-switch (high reward to attract testers → silently nerf after).
 // - Anything not in either list is locked once the campaign exists.
-const COSMETIC = new Set(["tagline", "description", "app_url", "banner_position", "campaign_logo", "reward_description", "invite_codes"])
+const COSMETIC = new Set(["tagline", "description", "app_url", "banner_position", "campaign_logo", "reward_description", "invite_codes", "invite_codes_note"])
 const MATERIAL = new Set(["expires_at", "total_slots", "contract_address"])
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -145,6 +145,12 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         return NextResponse.json({ error: "Contract address must be a valid 0x address" }, { status: 400 })
       }
       material.contract_address = addr || null
+    }
+
+    // Trim and length-cap invite_codes_note. Empty string clears the note.
+    if (cosmetic.invite_codes_note !== undefined) {
+      const s = typeof cosmetic.invite_codes_note === "string" ? cosmetic.invite_codes_note.trim().slice(0, 500) : ""
+      cosmetic.invite_codes_note = s || null
     }
 
     // Normalize invite_codes — dedupe case-insensitively, trim, cap.

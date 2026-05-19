@@ -354,7 +354,13 @@ export default function DashboardPage() {
             {/* Logo */}
             <div style={{ width: "56px", height: "56px", borderRadius: "12px", overflow: "hidden", flexShrink: 0, background: `${accentColor}12`, border: `1px solid ${accentColor}30`, display: "flex", alignItems: "center", justifyContent: "center" }}>
               {project.logo_url
-                ? <img src={project.logo_url} alt={project.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={e => (e.currentTarget.style.display = "none")} />
+                ? <img
+                    src={project.logo_url.startsWith("blob:") || project.logo_url.startsWith("data:")
+                      ? project.logo_url
+                      : `/api/image-proxy?url=${encodeURIComponent(project.logo_url)}`}
+                    alt={project.name}
+                    style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                    onError={e => (e.currentTarget.style.display = "none")} />
                 : <span style={{ fontSize: "22px", fontWeight: 700, color: accentColor }}>{project.name?.[0]}</span>
               }
             </div>
@@ -668,6 +674,12 @@ export default function DashboardPage() {
                           </div>
                         )}
 
+                        {/* Top contributors — builder-rated submissions only,
+                            ranked by quality + builder_rating tiebreak. */}
+                        <FounderLeaderboard completions={completions} surf={surf} surf2={surf2} bdr={bdr} t1={t1} t2={t2} t3={t3} green={green} mono={mono} />
+
+
+
                         {/* Tester submissions */}
                         <div style={{ background: surf, border: "1px solid " + bdr, borderRadius: "12px", overflow: "hidden" }}>
                           <div style={{ padding: "14px 20px", borderBottom: "1px solid " + bdr, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -869,6 +881,84 @@ export default function DashboardPage() {
         </div>
       </div>
     </ArcLayout>
+  )
+}
+
+// Pro rank color treatment — gold/silver/bronze for top 3, dimmed text for rest.
+// Cleaner than emoji medals (Stripe/Linear style, no decorative graphics).
+function rankColor(rank: number, fallback: string): string {
+  if (rank === 1) return "#d4a447"  // gold
+  if (rank === 2) return "#a5b0c5"  // silver
+  if (rank === 3) return "#b88762"  // bronze
+  return fallback
+}
+
+function FounderLeaderboard({ completions, surf, surf2, bdr, t1, t2, t3, green, mono }: any) {
+  const [showAll, setShowAll] = useState(false)
+  const SHOW_LIMIT = 5
+
+  const ranked = (completions || [])
+    .filter((c: any) => c.builder_rating != null && c.status === "reviewed")
+    .slice()
+    .sort((a: any, b: any) => {
+      const qa = Number(a.quality_score) || 0
+      const qb = Number(b.quality_score) || 0
+      if (qb !== qa) return qb - qa
+      return (Number(b.builder_rating) || 0) - (Number(a.builder_rating) || 0)
+    })
+
+  if (ranked.length === 0) return null
+  const visible = showAll ? ranked : ranked.slice(0, SHOW_LIMIT)
+  const hasMore = ranked.length > SHOW_LIMIT
+
+  return (
+    <div id="leaderboard" style={{ background: surf, border: "1px solid " + bdr, borderRadius: "12px", overflow: "hidden", scrollMarginTop: "24px" }}>
+      <div style={{ padding: "14px 20px", borderBottom: "1px solid " + bdr, display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px", flexWrap: "wrap" }}>
+        <div style={{ fontSize: "11px", fontFamily: mono, color: t2, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+          Top Contributors · this campaign
+        </div>
+        <div style={{ fontSize: "10px", fontFamily: mono, color: t3 }}>
+          {ranked.length} rated · ranked by quality
+        </div>
+      </div>
+      <div>
+        {visible.map((c: any, i: number) => {
+          const rank        = i + 1
+          const scoreColor  = (Number(c.quality_score) || 0) > 70 ? green : (Number(c.quality_score) || 0) > 40 ? "#e08810" : t2
+          const rkColor     = rankColor(rank, t3)
+          return (
+            <div key={c.tester_wallet} style={{ display: "flex", alignItems: "center", gap: "12px", padding: "11px 20px",
+                  borderBottom: i < visible.length - 1 || hasMore ? "1px solid " + bdr : "none" }}>
+              <div style={{ width: "32px", fontSize: "12px", fontFamily: mono, color: rkColor, fontWeight: 700, flexShrink: 0, letterSpacing: "0.04em" }}>
+                {"#" + rank}
+              </div>
+              <WalletAvatar wallet={c.tester_wallet} size={28} />
+              <a href={`/tester/${c.tester_wallet}`}
+                style={{ fontSize: "12px", fontFamily: mono, color: t1, textDecoration: "none", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {c.tester_wallet.slice(0, 8)}…{c.tester_wallet.slice(-4)}
+              </a>
+              <div style={{ fontSize: "11px", fontFamily: mono, color: "#c08828", flexShrink: 0 }}>
+                {"★".repeat(c.builder_rating)}<span style={{ opacity: 0.25 }}>{"★".repeat(5 - c.builder_rating)}</span>
+              </div>
+              <div style={{ minWidth: "48px", textAlign: "right", flexShrink: 0 }}>
+                <span style={{ fontSize: "13px", fontWeight: 700, color: scoreColor, fontFamily: mono }}>{Math.round(Number(c.quality_score) || 0)}</span>
+                <span style={{ fontSize: "9px", fontFamily: mono, color: t3, marginLeft: "3px" }}>/100</span>
+              </div>
+            </div>
+          )
+        })}
+        {hasMore && (
+          <button onClick={() => setShowAll(s => !s)}
+            style={{ width: "100%", padding: "11px 20px", background: surf2, border: "none", borderTop: "1px solid " + bdr,
+                     color: "#8aaeff", fontSize: "11px", fontFamily: mono, cursor: "pointer", letterSpacing: "0.04em",
+                     transition: "background 0.12s" }}
+            onMouseEnter={e => (e.currentTarget.style.background = "rgba(26,86,255,0.06)")}
+            onMouseLeave={e => (e.currentTarget.style.background = surf2)}>
+            {showAll ? "Show less" : `View all ${ranked.length} contributors →`}
+          </button>
+        )}
+      </div>
+    </div>
   )
 }
 
