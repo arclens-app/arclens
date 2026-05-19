@@ -142,13 +142,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
          total_score  = GREATEST(0, total_score - $1 + $2),
          avg_score    = ROUND(GREATEST(0, total_score - $1 + $2) / NULLIF(campaigns_completed, 0), 2),
          impact_count = impact_count + $3,
+         -- Rank ladder (lowered for an early platform — most testers are still
+         -- at Scout while the campaign pool grows). Adjusted top: 50→40, and
+         -- second-to-top: 25→30 to make the ceiling reachable.
          rank = CASE
            WHEN rank = 3
-             AND campaigns_completed >= 50
+             AND campaigns_completed >= 40
              AND ROUND(GREATEST(0, total_score - $1 + $2) / NULLIF(campaigns_completed, 0), 2) >= 4.5
              THEN 4
            WHEN rank = 2
-             AND campaigns_completed >= 25
+             AND campaigns_completed >= 30
              AND ROUND(GREATEST(0, total_score - $1 + $2) / NULLIF(campaigns_completed, 0), 2) >= 4.0
              THEN 3
            WHEN rank = 1

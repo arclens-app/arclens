@@ -45,14 +45,29 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     const campaignId = campaignRes.rows[0].id
     const creatorWallet = campaignRes.rows[0].creator_wallet
 
-    // Auto-finalize submissions not rated within 7 days — provisional_score becomes the final quality_score
+    // Auto-finalize: if a founder hasn't rated within 7 days, fall back to the
+    // tester's provisional_score (derived from auto_score at submission time)
+    // as the final quality_score. Also assign a default builder_rating + XP so
+    // the tester appears on leaderboards and earns a fair share of XP even
+    // when the founder ghosts — otherwise XP campaigns silently zero them out.
+    //   builder_rating = round(provisional_score), clamped to [1,5]
+    //   xp_earned      = round((provisional / 5) × campaign.max_xp_per_completion)
     pool.query(
-      `UPDATE campaign_completions
-       SET quality_score = provisional_score, status = 'reviewed', reviewed_at = NOW()
-       WHERE campaign_id = $1
-         AND status = 'submitted'
-         AND created_at < NOW() - INTERVAL '7 days'
-         AND provisional_score IS NOT NULL`,
+      `UPDATE campaign_completions cc
+         SET quality_score  = cc.provisional_score,
+             builder_rating = GREATEST(1, LEAST(5, ROUND(cc.provisional_score)::int)),
+             xp_earned      = COALESCE(
+                                ROUND((cc.provisional_score / 5.0) * c.max_xp_per_completion)::int,
+                                0
+                              ),
+             status         = 'reviewed',
+             reviewed_at    = NOW()
+       FROM campaigns c
+       WHERE cc.campaign_id = c.id
+         AND cc.campaign_id = $1
+         AND cc.status      = 'submitted'
+         AND cc.created_at  < NOW() - INTERVAL '7 days'
+         AND cc.provisional_score IS NOT NULL`,
       [campaignId]
     ).catch(() => {})
 

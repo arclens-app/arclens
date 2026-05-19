@@ -194,6 +194,21 @@ export async function POST(req: NextRequest) {
       slug = `${baseSlug}-${++suffix}`
     }
 
+    // Sanitize per-task `proof_type` — used for verification campaigns (Tower's
+    // aggregator-DEX flow where on-chain contract verification doesn't apply,
+    // so the founder asks for X links / tx hashes / generic URLs as evidence).
+    //
+    // Enum: "none" | "x_link" | "tx_hash" | "url"
+    const ALLOWED_PROOF = new Set(["none", "x_link", "tx_hash", "url", "screenshot"])
+    if (Array.isArray(tasks)) {
+      for (const t of tasks) {
+        if (t && typeof t === "object") {
+          const pt = typeof t.proof_type === "string" ? t.proof_type : "none"
+          t.proof_type = ALLOWED_PROOF.has(pt) ? pt : "none"
+        }
+      }
+    }
+
     // Normalize invite codes — trim, cap length, dedupe case-insensitively.
     // ArcLens stores them verbatim and displays to testers; we don't validate
     // or enforce usage (Tower's DEX handles redemption).

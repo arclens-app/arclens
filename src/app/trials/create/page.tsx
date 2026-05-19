@@ -8,7 +8,8 @@ import type { DragEndEvent } from "@dnd-kit/core"
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
 
-interface Task { id: string; title: string; description: string; contract_address?: string }
+type ProofType = "none" | "x_link" | "tx_hash" | "url" | "screenshot"
+interface Task { id: string; title: string; description: string; contract_address?: string; proof_type?: ProofType }
 interface ReviewQuestion { id: string; label: string; placeholder: string; min_words: number; required: boolean }
 interface Project { id: number; name: string; logo_url: string | null }
 
@@ -893,6 +894,31 @@ export default function CreateCampaignPage() {
                                 {taskContractValid && (
                                   <div style={{ width: 5, height: 5, borderRadius: "50%", background: "#00b87a", flexShrink: 0 }} />
                                 )}
+                              </div>
+                            )}
+
+                            {/* Per-task proof requirement — only shown when ArcLens
+                                is NOT doing internal on-chain verification. If the
+                                campaign type uses internal verification (contract
+                                fields visible above), the founder doesn't need to
+                                ask for manual proofs — we auto-check Arc Testnet
+                                logs. Proofs are for external-verification flows
+                                (aggregator DEXes / UX-only campaigns / etc). */}
+                            {(externalVerify || CONTRACT_HIDDEN.has(type)) && (
+                              <div style={{ padding: "8px 14px 10px 64px", borderTop: "1px solid " + bdr, display: "flex", alignItems: "center", gap: 8 }}>
+                                <span style={{ fontSize: 9, fontFamily: mono, color: t3, flexShrink: 0, textTransform: "uppercase", letterSpacing: "0.08em" }}>Proof</span>
+                                <select
+                                  value={task.proof_type || "none"}
+                                  onChange={e => setTasks(p => p.map(tt => tt.id === task.id ? { ...tt, proof_type: e.target.value as ProofType } : tt))}
+                                  style={{ flex: 1, background: "transparent", border: "none", outline: "none", fontSize: 11, fontFamily: mono,
+                                    color: task.proof_type && task.proof_type !== "none" ? "#8aaeff" : t3, cursor: "pointer" }}
+                                >
+                                  <option value="none">None — no proof required</option>
+                                  <option value="x_link">X (Twitter) post link</option>
+                                  <option value="tx_hash">Transaction hash</option>
+                                  <option value="screenshot">Screenshot upload (image)</option>
+                                  <option value="url">Custom URL (any link)</option>
+                                </select>
                               </div>
                             )}
                           </div>

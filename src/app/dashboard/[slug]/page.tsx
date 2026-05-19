@@ -776,9 +776,75 @@ export default function DashboardPage() {
                                   </div>
                                 </div>
 
-                                {/* Feedback answers */}
+                                {/* Feedback answers + submitted proofs */}
                                 {expanded && hasAnswers && (
                                   <div style={{ padding: "14px 20px 16px", borderTop: "1px solid " + bdr, background: surf2 }}>
+
+                                    {/* Submitted proofs — only render if the campaign required any */}
+                                    {(() => {
+                                      const proofTasks = (camp.tasks || []).filter((t: any) => t.proof_type && t.proof_type !== "none")
+                                      if (proofTasks.length === 0) return null
+                                      return (
+                                        <div style={{ marginBottom: "16px", padding: "10px 12px", background: "rgba(138,174,255,0.04)", border: "1px solid rgba(138,174,255,0.18)", borderRadius: "7px" }}>
+                                          <div style={{ fontSize: "10px", fontFamily: mono, color: "#8aaeff", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "8px" }}>Submitted proofs</div>
+                                          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                                            {proofTasks.map((t: any) => {
+                                              const value: string = (comp.task_proofs || {})[t.id] || ""
+                                              const linkHref = !value
+                                                ? null
+                                                : t.proof_type === "tx_hash"
+                                                  ? `https://testnet.arcscan.app/tx/${value}`
+                                                  : value
+                                              const labelType = t.proof_type === "x_link"     ? "X post"
+                                                              : t.proof_type === "tx_hash"    ? "Tx hash"
+                                                              : t.proof_type === "screenshot" ? "Screenshot"
+                                                              : "URL"
+                                              const isScreenshot = t.proof_type === "screenshot" && !!value
+
+                                              return (
+                                                <div key={t.id} style={{ display: "flex", alignItems: isScreenshot ? "flex-start" : "center", gap: "10px", fontSize: "11px", flexWrap: "wrap", padding: isScreenshot ? "6px 0" : 0 }}>
+                                                  <span style={{ fontFamily: mono, color: t3, minWidth: "70px", paddingTop: isScreenshot ? "4px" : 0 }}>{labelType}</span>
+                                                  {/* Screenshot proofs render as inline thumbnails — much faster
+                                                      review than clicking through a generic URL. The proxy keeps
+                                                      ad-blocker friendliness (i.ibb.co is allowlisted). */}
+                                                  {isScreenshot ? (
+                                                    <div style={{ display: "flex", gap: 10, alignItems: "center", flex: 1, minWidth: 0 }}>
+                                                      <a href={value} target="_blank" rel="noopener noreferrer" style={{ flexShrink: 0 }}>
+                                                        <img src={`/api/image-proxy?url=${encodeURIComponent(value)}`}
+                                                          alt={t.title || "proof screenshot"}
+                                                          style={{ width: 56, height: 42, objectFit: "cover", borderRadius: 5, border: "1px solid " + bdr, cursor: "zoom-in", display: "block" }} />
+                                                      </a>
+                                                      <div style={{ flex: 1, minWidth: 0 }}>
+                                                        <div style={{ color: t2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.title || t.id}</div>
+                                                        <a href={value} target="_blank" rel="noopener noreferrer"
+                                                          style={{ fontFamily: mono, fontSize: "10px", color: "#8aaeff", textDecoration: "none" }}>
+                                                          Open full size ↗
+                                                        </a>
+                                                      </div>
+                                                    </div>
+                                                  ) : (
+                                                    <>
+                                                      <span style={{ color: t2, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                                        {t.title || t.id}:
+                                                      </span>
+                                                      {linkHref ? (
+                                                        <a href={linkHref} target="_blank" rel="noopener noreferrer"
+                                                          style={{ fontFamily: mono, color: "#8aaeff", textDecoration: "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "60%" }}>
+                                                          {value} ↗
+                                                        </a>
+                                                      ) : (
+                                                        <span style={{ fontFamily: mono, color: "#e08810" }}>(missing)</span>
+                                                      )}
+                                                    </>
+                                                  )}
+                                                </div>
+                                              )
+                                            })}
+                                          </div>
+                                        </div>
+                                      )
+                                    })()}
+
                                     {camp.review_questions?.map((q: any) => {
                                       const ans = comp.review_answers?.[q.id]
                                       if (!ans) return null
