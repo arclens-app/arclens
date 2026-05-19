@@ -165,6 +165,12 @@ export default function CampaignDetailPage() {
   const [editQs, setEditQs]                 = useState<ReviewQuestion[] | null>(null)
   const [tasksSectionOpen, setTasksSectionOpen]       = useState(false)
   const [qsSectionOpen, setQsSectionOpen]             = useState(false)
+  const [draftRestored, setDraftRestored]   = useState(false)
+  // Re-auth state — surfaces a "Sign in to save" button when the PUT fails
+  // with 401 (session cookie expired or absent). Re-mints via personal_sign
+  // and retries the edit silently, so the founder doesn't lose any work.
+  const [needsReauth, setNeedsReauth]       = useState(false)
+  const [reauthing, setReauthing]           = useState(false)
 
   // Drag-and-drop reorder for the edit-panel tasks list. Pointer sensor with
   // 6px activation distance so clicking the title input doesn't accidentally
@@ -211,6 +217,42 @@ export default function CampaignDetailPage() {
       }
     }
   }, [wallet, campaign])
+
+  // Restore edit-panel draft when the campaign loads. Founders who refresh
+  // mid-edit (or hit a 401 and reload) get their changes back. Cleared after
+  // a successful submit.
+  useEffect(() => {
+    if (!campaign || draftRestored) return
+    try {
+      const raw = localStorage.getItem(`arclens-edit-${campaign.id}`)
+      if (raw) {
+        const d = JSON.parse(raw)
+        if (d.editForm   && typeof d.editForm === "object")  setEditForm(d.editForm)
+        if (Array.isArray(d.editTasks))                      setEditTasks(d.editTasks)
+        if (Array.isArray(d.editQs))                         setEditQs(d.editQs)
+      }
+    } catch { /* corrupt draft — ignore */ }
+    setDraftRestored(true)
+  }, [campaign, draftRestored])
+
+  // Auto-save the edit draft on every change. Debounced naturally by React's
+  // state update cadence; localStorage writes are cheap.
+  useEffect(() => {
+    if (!campaign || !draftRestored) return
+    try {
+      // Only save when there's actually something to save
+      const hasFormEdits  = Object.values(editForm).some(v => typeof v === "string" && v.trim())
+      const hasTaskEdits  = editTasks !== null
+      const hasQEdits     = editQs    !== null
+      if (!hasFormEdits && !hasTaskEdits && !hasQEdits) {
+        localStorage.removeItem(`arclens-edit-${campaign.id}`)
+        return
+      }
+      localStorage.setItem(`arclens-edit-${campaign.id}`, JSON.stringify({
+        editForm, editTasks, editQs, savedAt: Date.now(),
+      }))
+    } catch { /* storage full — silent */ }
+  }, [editForm, editTasks, editQs, campaign, draftRestored])
 
   async function load() {
     setLoading(true)
@@ -299,6 +341,51 @@ export default function CampaignDetailPage() {
     } catch { }
   }
 
+  // Re-mint the session cookie via personal_sign and resubmit the edit.
+  // Tower-style scenario: the founder's 7-day session expired, they tried to
+  // save changes, server returned 401. Instead of dropping the form state we
+  // surface a single "Sign in to save" button that runs this flow.
+  async function reauthAndRetry() {
+    if (!wallet) { setEditError("Wallet not detected. Reconnect your wallet."); return }
+    if (typeof window === "undefined" || !(window as any).ethereum) {
+      setEditError("No browser wallet detected. Open this page with MetaMask / Rabby connected.")
+      return
+    }
+    setReauthing(true)
+    setEditError("")
+    try {
+      const nonce     = (crypto.randomUUID?.() || Math.random().toString(36).slice(2)).replace(/-/g, "")
+      const timestamp = Date.now()
+      const message   = `Sign in to ArcLens\nWallet: ${wallet}\nTimestamp: ${timestamp}\nNonce: ${nonce}`
+      const signature = await (window as any).ethereum.request({
+        method: "personal_sign",
+        params: [message, wallet],
+      })
+      const res = await fetch("/api/auth/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ type: "wallet", address: wallet, signature, timestamp, nonce }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        setEditError(data?.error || "Sign-in failed — try again.")
+        return
+      }
+      // Session minted — clear the prompt and retry the original save.
+      setNeedsReauth(false)
+      await submitCampaignEdit()
+    } catch (e: any) {
+      if (e?.code === 4001 || /reject/i.test(e?.message || "")) {
+        setEditError("Sign-in cancelled. Click 'Sign in to save' to try again.")
+      } else {
+        setEditError("Sign-in failed: " + (e?.message || "unknown error"))
+      }
+    } finally {
+      setReauthing(false)
+    }
+  }
+
   async function submitCampaignEdit() {
     if (!wallet || !campaign) return
     setEditError("")
@@ -328,6 +415,7 @@ export default function CampaignDetailPage() {
     }
     if (!Object.keys(changes).length) { setEditError("No changes entered"); return }
     setEditSubmitting(true)
+    setNeedsReauth(false)
     try {
       const res  = await fetch(`/api/trials/${id}`, {
         method:  "PUT",
@@ -336,7 +424,16 @@ export default function CampaignDetailPage() {
         body:    JSON.stringify({ creator_wallet: wallet, changes }),
       })
       const data = await res.json()
+      // Session expired / wallet not signed in. Don't clear the form — show
+      // a Sign-In button that re-mints the session and retries the PUT.
+      if (res.status === 401) {
+        setNeedsReauth(true)
+        setEditError("Your sign-in expired. Sign in again to save these changes.")
+        return
+      }
       if (!res.ok) { setEditError(data.error || "Submission failed"); return }
+      // Successful save — clear the saved draft.
+      try { if (campaign) localStorage.removeItem(`arclens-edit-${campaign.id}`) } catch {}
       // Backend now distinguishes "applied live" (cosmetic) from "queued for admin" (material).
       // Surface that distinction so founders know exactly what happened.
       setEditSubmitted(true)
@@ -1310,7 +1407,24 @@ export default function CampaignDetailPage() {
                           )}
                         </div>
 
-                        {editError && (
+                        {/* Re-auth prompt — shows when PUT returned 401. The
+                            form state stays intact; this button signs a new
+                            message and retries the save automatically. */}
+                        {needsReauth && (
+                          <div style={{ padding: "11px 14px", background: "rgba(224,136,16,0.07)", border: "1px solid rgba(224,136,16,0.25)", borderRadius: 8 }}>
+                            <div style={{ fontSize: 12, fontWeight: 600, color: "#e08810", marginBottom: 4 }}>
+                              Your sign-in expired
+                            </div>
+                            <div style={{ fontSize: 11, color: "var(--t2,#6b7da8)", lineHeight: 1.55, marginBottom: 10 }}>
+                              Your changes are still here — they won't be lost. Sign in once and we'll save automatically.
+                            </div>
+                            <button onClick={reauthAndRetry} disabled={reauthing}
+                              style={{ height: 32, padding: "0 14px", background: reauthing ? "var(--surf2,#0e1224)" : "#1a56ff", color: reauthing ? "var(--t2,#6b7da8)" : "#fff", border: "none", borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: reauthing ? "default" : "pointer" }}>
+                              {reauthing ? "Signing in..." : "Sign in to save"}
+                            </button>
+                          </div>
+                        )}
+                        {editError && !needsReauth && (
                           <div style={{ fontSize: 11, color: "#e03348", padding: "7px 10px", background: "rgba(224,51,72,0.08)", borderRadius: 6, fontFamily: "var(--font-mono,monospace)" }}>{editError}</div>
                         )}
                         <button onClick={submitCampaignEdit} disabled={editSubmitting}
