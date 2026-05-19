@@ -12,12 +12,14 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejec
 //   bait-and-switch (high reward to attract testers → silently nerf after).
 // - Anything not in either list is locked once the campaign exists.
 const COSMETIC = new Set(["tagline", "description", "app_url", "banner_position", "campaign_logo", "reward_description", "invite_codes", "invite_codes_note"])
-// `max_xp_per_completion` is material because changing the XP pool retro-
-// actively shifts what already-rated testers earned relative to new ones.
-// `xp_mode` and per-question xp_value (inside review_questions JSONB) stay
-// fully locked — switching modes or weighting mid-campaign would invalidate
-// existing rated submissions.
-const MATERIAL = new Set(["expires_at", "total_slots", "contract_address", "max_xp_per_completion"])
+// `max_xp_per_completion` is material — changing the XP pool retroactively
+// shifts what already-rated testers earned vs new ones.
+// `tasks` and `review_questions` are material so founders can fix typos,
+// rewrite for clarity, or add new steps mid-campaign — admin reviews via
+// the pending_campaign_updates queue to prevent bait-and-switch.
+// `xp_mode` and per-question xp_value stay fully locked — switching them
+// mid-campaign would invalidate already-rated submissions.
+const MATERIAL = new Set(["expires_at", "total_slots", "contract_address", "max_xp_per_completion", "tasks", "review_questions"])
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -175,6 +177,80 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         return NextResponse.json({ error: "max_xp_per_completion must be 1 - 10000" }, { status: 400 })
       }
       material.max_xp_per_completion = n
+    }
+
+    // Validate + sanitize tasks array. Founders can edit existing tasks, add
+    // new ones, or remove. Admin reviews via the queue. We enforce structure
+    // here so a malformed payload never reaches the admin reviewer.
+    const ALLOWED_PROOF = new Set(["none", "x_link", "tx_hash", "url", "screenshot"])
+    if (material.tasks !== undefined) {
+      if (!Array.isArray(material.tasks) || material.tasks.length === 0) {
+        return NextResponse.json({ error: "Tasks must be a non-empty array" }, { status: 400 })
+      }
+      if (material.tasks.length > 50) {
+        return NextResponse.json({ error: "Max 50 tasks per campaign" }, { status: 400 })
+      }
+      const seenIds = new Set<string>()
+      const cleanedTasks: any[] = []
+      for (const t of material.tasks) {
+        if (!t || typeof t !== "object") {
+          return NextResponse.json({ error: "Each task must be an object" }, { status: 400 })
+        }
+        const id    = String((t as any).id || "").trim().slice(0, 32)
+        const title = String((t as any).title || "").trim().slice(0, 160)
+        const desc  = String((t as any).description || "").trim().slice(0, 600)
+        if (!id || !title) {
+          return NextResponse.json({ error: "Each task needs an id and a title" }, { status: 400 })
+        }
+        if (seenIds.has(id)) {
+          return NextResponse.json({ error: `Duplicate task id "${id}"` }, { status: 400 })
+        }
+        seenIds.add(id)
+        // Pass-through fields we know are safe; reject unknown keys
+        const proofTypeRaw = String((t as any).proof_type || "none")
+        const proofType    = ALLOWED_PROOF.has(proofTypeRaw) ? proofTypeRaw : "none"
+        const contractRaw  = String((t as any).contract_address || "").trim()
+        const contract     = contractRaw && /^0x[a-fA-F0-9]{40}$/.test(contractRaw) ? contractRaw : null
+        cleanedTasks.push({
+          id, title, description: desc,
+          proof_type: proofType,
+          ...(contract ? { contract_address: contract } : {}),
+        })
+      }
+      material.tasks = JSON.stringify(cleanedTasks)
+    }
+
+    // Validate + sanitize review_questions. Same shape as tasks, with xp_value
+    // forbidden in edits (only set at campaign create — changing weights mid-
+    // campaign would invalidate already-rated submissions). Strip if present.
+    if (material.review_questions !== undefined) {
+      if (!Array.isArray(material.review_questions) || material.review_questions.length === 0) {
+        return NextResponse.json({ error: "Review questions must be a non-empty array" }, { status: 400 })
+      }
+      if (material.review_questions.length > 20) {
+        return NextResponse.json({ error: "Max 20 review questions per campaign" }, { status: 400 })
+      }
+      const seenQIds = new Set<string>()
+      const cleanedQs: any[] = []
+      for (const q of material.review_questions) {
+        if (!q || typeof q !== "object") {
+          return NextResponse.json({ error: "Each question must be an object" }, { status: 400 })
+        }
+        const id          = String((q as any).id || "").trim().slice(0, 32)
+        const label       = String((q as any).label || "").trim().slice(0, 200)
+        const placeholder = String((q as any).placeholder || "").trim().slice(0, 200)
+        if (!id || !label) {
+          return NextResponse.json({ error: "Each question needs an id and a label" }, { status: 400 })
+        }
+        if (seenQIds.has(id)) {
+          return NextResponse.json({ error: `Duplicate question id "${id}"` }, { status: 400 })
+        }
+        seenQIds.add(id)
+        const minWords = Math.max(0, Math.min(500, parseInt(String((q as any).min_words)) || 20))
+        const required = (q as any).required !== false
+        cleanedQs.push({ id, label, placeholder, min_words: minWords, required })
+      }
+      material.review_questions = JSON.stringify(cleanedQs)
     }
 
     // Trim and length-cap invite_codes_note. Empty string clears the note.
