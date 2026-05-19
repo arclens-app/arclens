@@ -4,6 +4,10 @@ import { useParams, useRouter } from "next/navigation"
 import ArcLayout from "@/components/ArcLayout"
 import { WalletAvatar } from "@/components/WalletAvatar"
 import { useArcStore } from "@/store/arc"
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from "@dnd-kit/core"
+import type { DragEndEvent } from "@dnd-kit/core"
+import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from "@dnd-kit/sortable"
+import { CSS } from "@dnd-kit/utilities"
 
 type ProofType = "none" | "x_link" | "tx_hash" | "url" | "screenshot"
 interface Task {
@@ -161,6 +165,25 @@ export default function CampaignDetailPage() {
   const [editQs, setEditQs]                 = useState<ReviewQuestion[] | null>(null)
   const [tasksSectionOpen, setTasksSectionOpen]       = useState(false)
   const [qsSectionOpen, setQsSectionOpen]             = useState(false)
+
+  // Drag-and-drop reorder for the edit-panel tasks list. Pointer sensor with
+  // 6px activation distance so clicking the title input doesn't accidentally
+  // start a drag. Keyboard sensor makes it accessible.
+  const editDndSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  )
+  function onEditTaskDragEnd(e: DragEndEvent) {
+    const { active, over } = e
+    if (!over || active.id === over.id) return
+    setEditTasks(prev => {
+      if (!prev) return prev
+      const from = prev.findIndex(t => t.id === active.id)
+      const to   = prev.findIndex(t => t.id === over.id)
+      if (from < 0 || to < 0) return prev
+      return arrayMove(prev, from, to)
+    })
+  }
   const [editSubmitting, setEditSubmitting] = useState(false)
   const [editSubmitted, setEditSubmitted]   = useState(false)
   const [editError, setEditError]           = useState("")
@@ -1158,60 +1181,75 @@ export default function CampaignDetailPage() {
                           </button>
                           {tasksSectionOpen && editTasks && (
                             <div style={{ padding: "0 12px 12px", display: "flex", flexDirection: "column", gap: 8 }}>
-                              {editTasks.map((t, i) => {
-                                const proofType = (t.proof_type as ProofType | undefined) || "none"
-                                const contractValid = !!t.contract_address && /^0x[a-fA-F0-9]{40}$/.test(t.contract_address)
-                                return (
-                                <div key={t.id} style={{ background: "var(--surf,#0a0e1a)", border: "1px solid var(--bdr,rgba(255,255,255,0.06))", borderRadius: 7, padding: "9px 10px" }}>
-                                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                                    <span style={{ fontSize: 9, fontFamily: "var(--font-mono,monospace)", color: "var(--t3,#2e3a5c)", flexShrink: 0 }}>{String(i + 1).padStart(2, "0")}</span>
-                                    <input type="text" value={t.title} placeholder="Step title"
-                                      onChange={e => setEditTasks(p => p?.map(x => x.id === t.id ? { ...x, title: e.target.value } : x) ?? null)}
-                                      style={{ flex: 1, background: "transparent", border: "none", outline: "none", fontSize: 12, fontWeight: 500, color: "var(--t1,#e8ecff)" }} />
-                                    {editTasks.length > 1 && (
-                                      <button type="button" onClick={() => setEditTasks(p => p?.filter(x => x.id !== t.id) ?? null)}
-                                        style={{ fontSize: 12, color: "#e03348", background: "transparent", border: "none", cursor: "pointer", padding: "0 4px" }}>✕</button>
-                                    )}
+                              <DndContext sensors={editDndSensors} collisionDetection={closestCenter} onDragEnd={onEditTaskDragEnd}>
+                                <SortableContext items={editTasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
+                                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                                    {editTasks.map((t, i) => {
+                                      const proofType = (t.proof_type as ProofType | undefined) || "none"
+                                      const contractValid = !!t.contract_address && /^0x[a-fA-F0-9]{40}$/.test(t.contract_address)
+                                      return (
+                                        <SortableEditTaskRow key={t.id} id={t.id}>
+                                          {({ listeners, setActivatorNodeRef, isDragging }) => (
+                                            <div style={{ background: "var(--surf,#0a0e1a)", border: `1px solid ${isDragging ? "rgba(26,86,255,0.4)" : "var(--bdr,rgba(255,255,255,0.06))"}`, borderRadius: 7, padding: "9px 10px" }}>
+                                              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                                                <button
+                                                  ref={setActivatorNodeRef}
+                                                  {...listeners}
+                                                  type="button"
+                                                  aria-label={`Reorder step ${i + 1}`}
+                                                  style={{ width: 12, height: 22, background: "transparent", border: "none", color: "var(--t3,#2e3a5c)", cursor: "grab", padding: 0, fontSize: 12, lineHeight: 1, fontFamily: "var(--font-mono,monospace)", flexShrink: 0, touchAction: "none" }}
+                                                >⋮⋮</button>
+                                                <span style={{ fontSize: 9, fontFamily: "var(--font-mono,monospace)", color: "var(--t3,#2e3a5c)", flexShrink: 0 }}>{String(i + 1).padStart(2, "0")}</span>
+                                                <input type="text" value={t.title} placeholder="Step title"
+                                                  onChange={e => setEditTasks(p => p?.map(x => x.id === t.id ? { ...x, title: e.target.value } : x) ?? null)}
+                                                  style={{ flex: 1, background: "transparent", border: "none", outline: "none", fontSize: 12, fontWeight: 500, color: "var(--t1,#e8ecff)" }} />
+                                                {editTasks.length > 1 && (
+                                                  <button type="button" onClick={() => setEditTasks(p => p?.filter(x => x.id !== t.id) ?? null)}
+                                                    style={{ fontSize: 12, color: "#e03348", background: "transparent", border: "none", cursor: "pointer", padding: "0 4px" }}>✕</button>
+                                                )}
+                                              </div>
+                                              <input type="text" value={t.description} placeholder="What testers should do"
+                                                onChange={e => setEditTasks(p => p?.map(x => x.id === t.id ? { ...x, description: e.target.value } : x) ?? null)}
+                                                style={{ width: "calc(100% - 34px)", background: "transparent", border: "none", outline: "none", fontSize: 11, color: "var(--t2,#6b7da8)", marginLeft: 34, boxSizing: "border-box" }} />
+                                              <div style={{ marginTop: 8, marginLeft: 34, paddingTop: 8, borderTop: "1px solid var(--bdr,rgba(255,255,255,0.04))", display: "flex", flexDirection: "column", gap: 6 }}>
+                                                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                                  <span style={{ fontSize: 9, fontFamily: "var(--font-mono,monospace)", color: "var(--t3,#2e3a5c)", textTransform: "uppercase", letterSpacing: "0.06em", flexShrink: 0, width: 60 }}>Proof</span>
+                                                  <select value={proofType}
+                                                    onChange={e => setEditTasks(p => p?.map(x => x.id === t.id ? { ...x, proof_type: e.target.value as ProofType } : x) ?? null)}
+                                                    style={{ flex: 1, background: "transparent", border: "none", outline: "none", fontSize: 10.5, fontFamily: "var(--font-mono,monospace)", color: proofType !== "none" ? "#8aaeff" : "var(--t3,#2e3a5c)", cursor: "pointer" }}>
+                                                    <option value="none">None — no proof required</option>
+                                                    <option value="x_link">X (Twitter) post link</option>
+                                                    <option value="tx_hash">Transaction hash</option>
+                                                    <option value="screenshot">Screenshot upload</option>
+                                                    <option value="url">Custom URL</option>
+                                                  </select>
+                                                </div>
+                                                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                                  <span style={{ fontSize: 9, fontFamily: "var(--font-mono,monospace)", color: "var(--t3,#2e3a5c)", textTransform: "uppercase", letterSpacing: "0.06em", flexShrink: 0, width: 60 }}>Contract</span>
+                                                  <input type="text" value={t.contract_address || ""} placeholder="0x… (optional — for internal verification)"
+                                                    onChange={e => setEditTasks(p => p?.map(x => x.id === t.id ? { ...x, contract_address: e.target.value.trim() } : x) ?? null)}
+                                                    style={{ flex: 1, background: "transparent", border: "none", outline: "none", fontSize: 10.5, fontFamily: "var(--font-mono,monospace)",
+                                                      color: contractValid ? "#00d990" : t.contract_address ? "#e03348" : "var(--t3,#2e3a5c)" }} />
+                                                  {contractValid && (
+                                                    <div style={{ width: 5, height: 5, borderRadius: "50%", background: "#00d990", flexShrink: 0 }} />
+                                                  )}
+                                                </div>
+                                              </div>
+                                            </div>
+                                          )}
+                                        </SortableEditTaskRow>
+                                      )
+                                    })}
                                   </div>
-                                  <input type="text" value={t.description} placeholder="What testers should do"
-                                    onChange={e => setEditTasks(p => p?.map(x => x.id === t.id ? { ...x, description: e.target.value } : x) ?? null)}
-                                    style={{ width: "100%", background: "transparent", border: "none", outline: "none", fontSize: 11, color: "var(--t2,#6b7da8)", marginLeft: 22, boxSizing: "border-box" }} />
-                                  {/* Verification controls — founders can change proof type
-                                      and per-task contract per step. Both go through the
-                                      admin queue along with title/description edits. */}
-                                  <div style={{ marginTop: 8, marginLeft: 22, paddingTop: 8, borderTop: "1px solid var(--bdr,rgba(255,255,255,0.04))", display: "flex", flexDirection: "column", gap: 6 }}>
-                                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                      <span style={{ fontSize: 9, fontFamily: "var(--font-mono,monospace)", color: "var(--t3,#2e3a5c)", textTransform: "uppercase", letterSpacing: "0.06em", flexShrink: 0, width: 60 }}>Proof</span>
-                                      <select value={proofType}
-                                        onChange={e => setEditTasks(p => p?.map(x => x.id === t.id ? { ...x, proof_type: e.target.value as ProofType } : x) ?? null)}
-                                        style={{ flex: 1, background: "transparent", border: "none", outline: "none", fontSize: 10.5, fontFamily: "var(--font-mono,monospace)", color: proofType !== "none" ? "#8aaeff" : "var(--t3,#2e3a5c)", cursor: "pointer" }}>
-                                        <option value="none">None — no proof required</option>
-                                        <option value="x_link">X (Twitter) post link</option>
-                                        <option value="tx_hash">Transaction hash</option>
-                                        <option value="screenshot">Screenshot upload</option>
-                                        <option value="url">Custom URL</option>
-                                      </select>
-                                    </div>
-                                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                      <span style={{ fontSize: 9, fontFamily: "var(--font-mono,monospace)", color: "var(--t3,#2e3a5c)", textTransform: "uppercase", letterSpacing: "0.06em", flexShrink: 0, width: 60 }}>Contract</span>
-                                      <input type="text" value={t.contract_address || ""} placeholder="0x… (optional — for internal verification)"
-                                        onChange={e => setEditTasks(p => p?.map(x => x.id === t.id ? { ...x, contract_address: e.target.value.trim() } : x) ?? null)}
-                                        style={{ flex: 1, background: "transparent", border: "none", outline: "none", fontSize: 10.5, fontFamily: "var(--font-mono,monospace)",
-                                          color: contractValid ? "#00d990" : t.contract_address ? "#e03348" : "var(--t3,#2e3a5c)" }} />
-                                      {contractValid && (
-                                        <div style={{ width: 5, height: 5, borderRadius: "50%", background: "#00d990", flexShrink: 0 }} />
-                                      )}
-                                    </div>
-                                  </div>
-                                </div>
-                              )})}
+                                </SortableContext>
+                              </DndContext>
                               <button type="button"
                                 onClick={() => setEditTasks(p => [...(p ?? []), { id: "t" + Date.now().toString(36), title: "", description: "" }])}
                                 style={{ height: 32, background: "transparent", color: "var(--t3,#2e3a5c)", border: "1px dashed var(--bdr,rgba(255,255,255,0.12))", borderRadius: 7, fontSize: 11, cursor: "pointer", fontFamily: "var(--font-mono,monospace)" }}>
                                 + Add step
                               </button>
                               <div style={{ fontSize: 10, fontFamily: "var(--font-mono,monospace)", color: "var(--t3,#2e3a5c)", lineHeight: 1.6 }}>
-                                Task edits and new additions go to admin for review before they reach testers.
+                                Drag the ⋮⋮ handle to reorder. Edits + reorders + new additions all go to admin for review.
                               </div>
                             </div>
                           )}
@@ -1459,6 +1497,37 @@ function rankColor(rank: number, fallback: string): string {
   if (rank === 2) return "#a5b0c5"
   if (rank === 3) return "#b88762"
   return fallback
+}
+
+// Drag-handle wrapper for the Edit Campaign tasks list. Same render-prop
+// pattern as the create-page SortableTaskRow so the handle (only) starts
+// the drag — clicks on title/description inputs still focus normally.
+function SortableEditTaskRow({
+  id,
+  children,
+}: {
+  id: string
+  children: (handle: {
+    listeners: ReturnType<typeof useSortable>["listeners"]
+    setActivatorNodeRef: ReturnType<typeof useSortable>["setActivatorNodeRef"]
+    isDragging: boolean
+  }) => React.ReactNode
+}) {
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id })
+  return (
+    <div
+      ref={setNodeRef}
+      {...attributes}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.6 : 1,
+        zIndex: isDragging ? 10 : "auto",
+      }}
+    >
+      {children({ listeners, setActivatorNodeRef, isDragging })}
+    </div>
+  )
 }
 
 // Public per-campaign leaderboard. Builder-rated submissions only — keeps
