@@ -55,6 +55,19 @@ interface Campaign {
   invite_codes_note:      string | null
   max_xp_per_completion:  number | null
   xp_mode:                "batch" | "per_question" | null
+  project_twitter:        string | null
+}
+
+// Normalize Twitter/X handle: accepts "@handle", "handle", or any x.com/twitter.com
+// URL form and returns just the handle (no leading @). Returns null when empty.
+function normalizeXHandle(raw: string | null | undefined): string | null {
+  if (!raw) return null
+  let s = String(raw).trim()
+  if (!s) return null
+  const m = s.match(/^https?:\/\/(?:www\.)?(?:x|twitter)\.com\/([^/?#]+)/i)
+  if (m) s = m[1]
+  s = s.replace(/^@+/, "").trim()
+  return s || null
 }
 
 interface Completion {
@@ -329,7 +342,7 @@ export default function CampaignDetailPage() {
 
   return (
     <ArcLayout active="trials">
-      <div style={{ padding: "24px 16px", maxWidth: 860, margin: "0 auto" }}>
+      <div className="forge-page-wrap" style={{ padding: "24px 16px", maxWidth: 860, margin: "0 auto" }}>
 
         {/* ── Back ── */}
         <button onClick={() => router.push("/trials")} style={{ fontSize: 12, color: "var(--t2,#6b7da8)", background: "none", border: "none", cursor: "pointer", marginBottom: 20, padding: 0 }}>
@@ -397,9 +410,9 @@ export default function CampaignDetailPage() {
               flexWrap lets the share buttons drop below the title block on
               narrow phones so they never overlap or get cut off. */}
           <div style={{ padding: "24px 28px 24px" }}>
-            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 14, flexWrap: "wrap" }}>
+            <div className="forge-title-row" style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 14, flexWrap: "wrap" }}>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <h1 style={{ fontSize: 26, fontWeight: 600, color: "var(--t1,#e8ecff)", margin: "0 0 8px", letterSpacing: "-0.025em", lineHeight: 1.2 }}>{campaign.title}</h1>
+                <h1 className="forge-title" style={{ fontSize: 26, fontWeight: 600, color: "var(--t1,#e8ecff)", margin: "0 0 8px", letterSpacing: "-0.025em", lineHeight: 1.2 }}>{campaign.title}</h1>
                 {campaign.tagline && <p style={{ fontSize: 14, color: "var(--t2,#6b7da8)", margin: "0 0 16px", lineHeight: 1.65, maxWidth: 640 }}>{campaign.tagline}</p>}
                 <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                   <span style={{ fontSize: 10, fontFamily: "var(--font-mono,monospace)", background: `${tm.color}15`, color: tm.color, border: `1px solid ${tm.color}25`, padding: "4px 10px", borderRadius: 5, letterSpacing: "0.03em" }}>{tm.label}</span>
@@ -437,7 +450,17 @@ export default function CampaignDetailPage() {
                 </button>
                 <a
                   href={typeof window !== "undefined"
-                    ? `https://x.com/intent/tweet?text=${encodeURIComponent(`${campaign.title} on ArcLens — testing campaign with ${campaign.reward_type === "usdc" ? `$${campaign.reward_usdc_amount} USDC` : "rewards"} per tester. Join in:`)}&url=${encodeURIComponent(window.location.href)}`
+                    ? (() => {
+                        // Neutral share copy. Always tags @arclens_app and mentions
+                        // Arc Testnet (the actual chain campaigns run on). If the
+                        // project has an X handle, the title becomes credit enough
+                        // — we don't repeat the name "by @same_name" (which read
+                        // as nonsense when handle matches project name).
+                        const ph = normalizeXHandle(campaign.project_twitter)
+                        const by = ph ? ` by @${ph}` : ""
+                        const text = `${campaign.title}${by} — an Arc Testnet campaign live on @arclens_app. Join in:`
+                        return `https://x.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(window.location.href)}`
+                      })()
                     : "#"
                   }
                   target="_blank" rel="noopener noreferrer"
@@ -461,7 +484,7 @@ export default function CampaignDetailPage() {
               items.push({ label: "closes", value: new Date(campaign.expires_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }), color: "var(--t2,#6b7da8)" })
             }
             return (
-          <div style={{ display: "grid", gridTemplateColumns: `repeat(${items.length}, 1fr)`, borderTop: "1px solid var(--bdr,rgba(255,255,255,0.06))" }}>
+          <div className="forge-stat-bar" style={{ display: "grid", gridTemplateColumns: `repeat(${items.length}, 1fr)`, borderTop: "1px solid var(--bdr,rgba(255,255,255,0.06))" }}>
             {items.map((s, i, arr) => (
               <div key={i} style={{ padding: "18px 0", textAlign: "center", borderRight: i < arr.length - 1 ? "1px solid var(--bdr,rgba(255,255,255,0.06))" : "none" }}>
                 <div style={{ fontSize: 22, fontWeight: 600, color: s.color, fontFamily: "var(--font-mono,monospace)", lineHeight: 1, letterSpacing: "-0.02em" }}>{s.value}</div>
@@ -1064,7 +1087,7 @@ export default function CampaignDetailPage() {
                             <div style={{ fontSize: 10, fontFamily: "var(--font-mono,monospace)", color: "var(--t3,#2e3a5c)", marginTop: 4 }}>Submit a revised request below</div>
                           </div>
                         )}
-                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                        <div className="forge-edit-2col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                           <EF label="Extend deadline">
                             <input type="date" value={editForm.expires_at || ""} onChange={e => setEditForm(f => ({ ...f, expires_at: e.target.value }))} style={ei} />
                           </EF>
@@ -1078,7 +1101,7 @@ export default function CampaignDetailPage() {
                         <EF label="Description">
                           <textarea value={editForm.description || ""} onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))} rows={3} placeholder="Updated description..." style={{ ...ei, height: "auto", padding: "8px 10px", resize: "vertical", lineHeight: 1.6, fontFamily: "inherit" }} />
                         </EF>
-                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                        <div className="forge-edit-2col" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                           <EF label="App URL">
                             <input type="url" value={editForm.app_url || ""} onChange={e => setEditForm(f => ({ ...f, app_url: e.target.value }))} placeholder={campaign.app_url || "https://"} style={ei} />
                           </EF>
@@ -1174,18 +1197,79 @@ export default function CampaignDetailPage() {
         </div>
       </div>
 
-      {/* Mobile-only overrides — additive media queries that only fire below
-          560px width so desktop renders the same as it does today. */}
+      {/* Mobile-only overrides — kept as a single style block at the page root
+          so they cascade everywhere. Below 680px the main 2-col layout already
+          stacks via globals.css; everything below tightens individual cards. */}
       <style>{`
+        /* Tighten the entire page padding + title size on phones */
         @media (max-width: 560px) {
+          .forge-page-wrap {
+            padding: 18px 12px !important;
+          }
+          /* Stack title above share buttons on narrow viewports — otherwise
+             flex-wrap doesn't kick in (title shrinks to a tiny column and the
+             share group hogs the right). */
+          .forge-title-row {
+            flex-direction: column !important;
+            align-items: stretch !important;
+            gap: 12px !important;
+          }
+          .forge-title-row > div:first-child {
+            order: 0;
+          }
+          .forge-title-row > div:last-child {
+            order: 1;
+            justify-content: flex-start !important;
+          }
+          .forge-title {
+            font-size: 22px !important;
+          }
+          .forge-tagline {
+            font-size: 13px !important;
+          }
+          /* Stat bar: 2-up grid instead of cramming 3-4 cols into 360px */
+          .forge-stat-bar {
+            grid-template-columns: repeat(2, 1fr) !important;
+          }
+          .forge-stat-bar > div {
+            padding: 14px 0 !important;
+          }
+          .forge-stat-bar > div > div:first-child {
+            font-size: 18px !important;
+          }
+          /* Hero banner stays 16:9 — let it occupy proportional height. The
+             aspect ratio naturally gives ~200px height at 360px width which
+             is the sweet spot. No artificial cap below 560px. */
+          .heroBanner {
+            max-height: none !important;
+          }
+          /* Card paddings tighten so content gets more width */
+          .forge-card {
+            padding: 14px 14px !important;
+          }
+          /* Wizard task card number badge shrinks */
+          .forge-step-num {
+            width: 30px !important;
+            height: 30px !important;
+            font-size: 11px !important;
+          }
+          /* Edit Campaign 2-col fields stack on phones */
+          .forge-edit-2col {
+            grid-template-columns: 1fr !important;
+          }
           .rankCompareGrid {
             grid-template-columns: 1fr !important;
           }
           .rankCompareGrid > div:nth-child(2) {
             display: none !important;
           }
-          .heroBanner {
-            max-height: 260px !important;
+        }
+        @media (max-width: 380px) {
+          .forge-title {
+            font-size: 19px !important;
+          }
+          .forge-stat-bar > div > div:first-child {
+            font-size: 16px !important;
           }
         }
       `}</style>
