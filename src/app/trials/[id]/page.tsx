@@ -876,6 +876,8 @@ export default function CampaignDetailPage() {
                         appUrl={campaign.app_url}
                         productName={campaign.project_name}
                         note={campaign.invite_codes_note || null}
+                        walletConnected={!!wallet}
+                        onConnect={connectWallet}
                       />
                     )}
                     {/* How this works — shown only before the first step */}
@@ -1761,7 +1763,7 @@ function TopContributorsLeaderboard({ completions }: { completions: Completion[]
 // up into place on mount (~200ms) and the panel ends with a big primary CTA
 // pointing to the product so the workflow — copy code → go use it there →
 // come back — is unmissable.
-function InviteCodesPanel({ codes, appUrl, productName, note }: { codes: string[]; appUrl: string | null; productName: string | null; note: string | null }) {
+function InviteCodesPanel({ codes, appUrl, productName, note, walletConnected, onConnect }: { codes: string[]; appUrl: string | null; productName: string | null; note: string | null; walletConnected: boolean; onConnect: () => void }) {
   const [copiedCode, setCopiedCode] = useState<string | null>(null)
   const mono = "'DM Mono', monospace"
 
@@ -1776,6 +1778,34 @@ function InviteCodesPanel({ codes, appUrl, productName, note }: { codes: string[
   // Derive button label: prefer the project name (e.g. "Tower Exchange"), fall
   // back to a generic "Open product" if the campaign didn't set one.
   const ctaLabel = productName ? `Open ${productName}` : "Open product"
+
+  // Gate: codes are hidden until the tester connects a wallet. Stops drive-by
+  // scraping — only people actually starting the campaign see the codes. The
+  // count is shown so they know access exists, but the values stay locked.
+  if (!walletConnected) {
+    return (
+      <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--bdr,rgba(255,255,255,0.06))", background: "rgba(0,184,122,0.04)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8, flexWrap: "wrap" }}>
+          <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#00b87a", flexShrink: 0 }} />
+          <div style={{ fontSize: 11, fontFamily: mono, color: "#00b87a", letterSpacing: "0.06em", textTransform: "uppercase", fontWeight: 600 }}>
+            Closed-beta access · locked
+          </div>
+          <span style={{ marginLeft: "auto", fontSize: 10, fontFamily: mono, color: "#00b87a", padding: "2px 8px", borderRadius: 4, background: "rgba(0,184,122,0.1)", border: "1px solid rgba(0,184,122,0.2)" }}>
+            {codes.length} code{codes.length === 1 ? "" : "s"} available
+          </span>
+        </div>
+        <div style={{ fontSize: 12, color: "var(--t2,#6b7da8)", marginBottom: 12, lineHeight: 1.6 }}>
+          Connect your wallet to reveal an invite code. Codes are only shown to participants — connect to claim your access.
+        </div>
+        <button onClick={onConnect}
+          style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%", height: 42,
+            background: "linear-gradient(135deg, #1a56ff 0%, #2563ff 100%)", color: "#fff", border: "none", borderRadius: 9,
+            fontSize: 13, fontWeight: 700, cursor: "pointer", letterSpacing: "-0.01em" }}>
+          Connect wallet to reveal code →
+        </button>
+      </div>
+    )
+  }
 
   return (
     <div style={{ padding: "14px 20px", borderBottom: "1px solid var(--bdr,rgba(255,255,255,0.06))", background: "rgba(0,184,122,0.04)" }}>

@@ -705,8 +705,37 @@ export default function AdminPage() {
                             <div style={{ display:"flex", flexDirection:"column", gap:"8px", marginBottom:"14px" }}>
                               {Object.entries(ch).map(([field, value]) => (
                                 <div key={field} style={{ display:"grid", gridTemplateColumns:"120px 1fr", gap:"10px", alignItems:"start" }}>
-                                  <span style={{ fontSize:"10px", fontFamily:mono, color:"#8aaeff", padding:"3px 8px", background:"rgba(26,86,255,0.1)", borderRadius:"4px", border:"1px solid rgba(26,86,255,0.2)", textAlign:"center" }}>{field}</span>
-                                  <span style={{ fontSize:"12px", color:t1, padding:"3px 8px", background:"rgba(0,184,122,0.04)", border:"1px solid rgba(0,184,122,0.12)", borderRadius:"4px", wordBreak:"break-all" }}>{String(value)}</span>
+                                  <span style={{ fontSize:"10px", fontFamily:mono, color:"#8aaeff", padding:"3px 8px", background:"rgba(26,86,255,0.1)", borderRadius:"4px", border:"1px solid rgba(26,86,255,0.2)", textAlign:"center", height:"fit-content" }}>{field}</span>
+                                  {/* Render arrays of objects (tasks / review_questions) as a
+                                      readable list instead of "[object Object]". */}
+                                  {Array.isArray(value) ? (
+                                    <div style={{ display:"flex", flexDirection:"column", gap:"4px" }}>
+                                      {value.map((item: any, i: number) => (
+                                        <div key={i} style={{ fontSize:"11px", color:t1, padding:"5px 8px", background:"rgba(0,184,122,0.04)", border:"1px solid rgba(0,184,122,0.12)", borderRadius:"4px", lineHeight:1.5 }}>
+                                          {(item && typeof item === "object") ? (
+                                            <>
+                                              <span style={{ color:t3, fontFamily:mono, fontSize:"9px", marginRight:"6px" }}>{i + 1}.</span>
+                                              <span style={{ fontWeight:600 }}>{item.title || item.label || item.id || "(untitled)"}</span>
+                                              {item.proof_type && item.proof_type !== "none" && (
+                                                <span style={{ color:"#8aaeff", fontFamily:mono, fontSize:"9px", marginLeft:"6px" }}>· proof: {item.proof_type}</span>
+                                              )}
+                                              {item.contract_address && (
+                                                <span style={{ color:"#00d990", fontFamily:mono, fontSize:"9px", marginLeft:"6px" }}>· {String(item.contract_address).slice(0,10)}…</span>
+                                              )}
+                                              {item.xp_value != null && (
+                                                <span style={{ color:"#c08828", fontFamily:mono, fontSize:"9px", marginLeft:"6px" }}>· {item.xp_value} XP</span>
+                                              )}
+                                              {(item.description || item.placeholder) && (
+                                                <div style={{ color:t2, fontSize:"10px", marginTop:"2px", marginLeft:"16px" }}>{item.description || item.placeholder}</div>
+                                              )}
+                                            </>
+                                          ) : String(item)}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <span style={{ fontSize:"12px", color:t1, padding:"3px 8px", background:"rgba(0,184,122,0.04)", border:"1px solid rgba(0,184,122,0.12)", borderRadius:"4px", wordBreak:"break-all" }}>{String(value)}</span>
+                                  )}
                                 </div>
                               ))}
                             </div>
