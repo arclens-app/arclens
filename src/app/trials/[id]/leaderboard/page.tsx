@@ -9,6 +9,7 @@ interface Completion {
   auto_score:      number
   builder_rating:  number | null
   quality_score:   number | null
+  xp_earned:       number | null
   status:          string
   task_proofs:     Record<string, string> | null
   created_at:      string
@@ -21,13 +22,14 @@ interface CampaignTask {
 }
 
 interface Campaign {
-  id:           number
-  slug:         string | null
-  title:        string
-  project_name: string | null
-  type:         string
-  reward_type:  string
-  tasks:        CampaignTask[]
+  id:                     number
+  slug:                   string | null
+  title:                  string
+  project_name:           string | null
+  type:                   string
+  reward_type:            string
+  tasks:                  CampaignTask[]
+  max_xp_per_completion:  number | null
 }
 
 const TYPE_COLOR: Record<string, string> = {
@@ -98,10 +100,19 @@ export default function CampaignLeaderboardPage() {
 
   const tmColor = TYPE_COLOR[campaign.type] || "#1a56ff"
 
+  // When the campaign uses XP, rank by XP earned (what testers care about and
+  // what matches the project leaderboard). Otherwise rank by quality score.
+  const usingXp = campaign.max_xp_per_completion != null
+
   const ranked = completions
     .filter(c => c.builder_rating != null && c.status === "reviewed")
     .slice()
     .sort((a, b) => {
+      if (usingXp) {
+        const xa = Number(a.xp_earned) || 0
+        const xb = Number(b.xp_earned) || 0
+        if (xb !== xa) return xb - xa
+      }
       const qa = Number(a.quality_score) || 0
       const qb = Number(b.quality_score) || 0
       if (qb !== qa) return qb - qa
@@ -113,6 +124,8 @@ export default function CampaignLeaderboardPage() {
     ? Math.round(ranked.reduce((s, c) => s + (Number(c.quality_score) || 0), 0) / total)
     : 0
   const topScore    = total > 0 ? Math.round(Number(ranked[0].quality_score) || 0) : 0
+  const topXp       = total > 0 ? (Number(ranked[0].xp_earned) || 0) : 0
+  const totalXp     = ranked.reduce((s, c) => s + (Number(c.xp_earned) || 0), 0)
 
   return (
     <ArcLayout active="trials">
@@ -133,7 +146,7 @@ export default function CampaignLeaderboardPage() {
             Top Contributors
           </h1>
           <p style={{ fontSize: 13, color: t2, margin: 0, lineHeight: 1.7, maxWidth: 560 }}>
-            Builder-rated submissions ranked by quality score. Only reviewed entries count — unrated noise can't claim a spot.
+            Builder-rated submissions ranked by {usingXp ? "XP earned" : "quality score"}. Only reviewed entries count — unrated noise can't claim a spot.
           </p>
         </div>
 
@@ -142,8 +155,15 @@ export default function CampaignLeaderboardPage() {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10, marginBottom: 22 }}>
             {[
               { label: "Contributors", value: total.toString(), color: tmColor },
-              { label: "Avg quality",  value: avgQuality + "/100", color: avgQuality > 70 ? "#00b87a" : avgQuality > 40 ? "#e08810" : t2 },
-              { label: "Top score",    value: topScore + "/100",   color: "#d4a447" },
+              ...(usingXp
+                ? [
+                    { label: "XP awarded", value: totalXp.toLocaleString(), color: "#8aaeff" },
+                    { label: "Top XP",     value: topXp.toLocaleString(),   color: "#d4a447" },
+                  ]
+                : [
+                    { label: "Avg quality", value: avgQuality + "/100", color: avgQuality > 70 ? "#00b87a" : avgQuality > 40 ? "#e08810" : t2 },
+                    { label: "Top score",   value: topScore + "/100",   color: "#d4a447" },
+                  ]),
             ].map(s => (
               <div key={s.label} style={{ background: surf, border: "1px solid " + bdr, borderRadius: 10, padding: "12px 14px" }}>
                 <div style={{ fontSize: 9, fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 4 }}>{s.label}</div>
@@ -165,11 +185,12 @@ export default function CampaignLeaderboardPage() {
               <div style={{ fontSize: 9, fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.1em" }}>Rank</div>
               <div style={{ fontSize: 9, fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.1em" }}>Tester</div>
               <div style={{ fontSize: 9, fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.1em", textAlign: "right" }}>Rating</div>
-              <div style={{ fontSize: 9, fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.1em", textAlign: "right", minWidth: 60 }}>Score</div>
+              <div style={{ fontSize: 9, fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.1em", textAlign: "right", minWidth: 60 }}>{usingXp ? "XP" : "Score"}</div>
             </div>
             {ranked.map((c, i) => {
               const rank       = i + 1
               const qs         = Math.round(Number(c.quality_score) || 0)
+              const xp         = Number(c.xp_earned) || 0
               const scoreColor = qs > 70 ? "#00b87a" : qs > 40 ? "#e08810" : t2
               const rkColor    = rankColor(rank, t3)
               return (
@@ -192,8 +213,17 @@ export default function CampaignLeaderboardPage() {
                     {"★".repeat(c.builder_rating || 0)}<span style={{ opacity: 0.25 }}>{"★".repeat(5 - (c.builder_rating || 0))}</span>
                   </div>
                   <div style={{ textAlign: "right", minWidth: 60 }}>
-                    <span style={{ fontSize: 14, fontWeight: 700, color: scoreColor, fontFamily: mono }}>{qs}</span>
-                    <span style={{ fontSize: 9, fontFamily: mono, color: t3, marginLeft: 3 }}>/100</span>
+                    {usingXp ? (
+                      <>
+                        <span style={{ fontSize: 14, fontWeight: 700, color: "#8aaeff", fontFamily: mono }}>{xp.toLocaleString()}</span>
+                        <span style={{ fontSize: 9, fontFamily: mono, color: t3, marginLeft: 3 }}>XP</span>
+                      </>
+                    ) : (
+                      <>
+                        <span style={{ fontSize: 14, fontWeight: 700, color: scoreColor, fontFamily: mono }}>{qs}</span>
+                        <span style={{ fontSize: 9, fontFamily: mono, color: t3, marginLeft: 3 }}>/100</span>
+                      </>
+                    )}
                   </div>
                 </a>
               )
