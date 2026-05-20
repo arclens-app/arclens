@@ -78,13 +78,20 @@ export async function GET(
            AVG(cc.builder_rating)::numeric(4,2)         AS avg_rating,
            SUM(cc.quality_score)::int                   AS total_score,
            SUM(cc.xp_earned)::int                       AS total_xp,
-           MAX(cc.created_at)                           AS last_active
+           MAX(cc.created_at)                           AS last_active,
+           -- Join the tester's platform-wide reputation so the project
+           -- leaderboard can show ArcLens rank + avg_score next to their
+           -- project XP. Same star rating powers both, so a tester high
+           -- on Tower XP is naturally already climbing the ArcLens ladder.
+           COALESCE(tr.rank, 0)::int                    AS platform_rank,
+           COALESCE(tr.avg_score, 0)::numeric(4,2)      AS platform_avg
          FROM campaign_completions cc
          JOIN campaigns c ON c.id = cc.campaign_id
+         LEFT JOIN tester_reputation tr ON tr.wallet = cc.tester_wallet
          WHERE c.project_id = $1
            AND cc.status = 'reviewed'
            AND cc.builder_rating IS NOT NULL
-         GROUP BY cc.tester_wallet
+         GROUP BY cc.tester_wallet, tr.rank, tr.avg_score
          ORDER BY ${usingXp ? "total_xp DESC, " : ""}total_score DESC, avg_quality DESC
          LIMIT 20`,
         [project.id]

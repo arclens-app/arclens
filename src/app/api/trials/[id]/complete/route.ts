@@ -231,6 +231,79 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       }
     }
 
+    // ── Tamper-proofing: reject reused tx hashes / X posts ────────────────────
+    // A transaction hash and an X post URL are both globally unique artifacts.
+    // Two testers submitting the same one (or one tester reusing another's)
+    // means copy-paste fraud. We scope the uniqueness check to THIS campaign —
+    // the same tx could legitimately appear across different projects' campaigns.
+    // Screenshot URLs are inherently unique per upload (imgbb), so no check.
+    if (!hasInternalVerification) {
+      // Build the set of "uniqueness keys" the current submission introduces.
+      // tx_hash → the lowercased hash. x_link → the numeric status id (so the
+      // same tweet with/without ?s=20 etc. still collides).
+      const xStatusId = (url: string): string | null => {
+        const m = url.match(/(?:x|twitter)\.com\/[^/]+\/status\/(\d+)/i)
+        return m ? m[1] : null
+      }
+      const taskProofType: Record<string, string> = {}
+      for (const t of (campaign.tasks || []) as Array<{ id: string; proof_type?: string }>) {
+        taskProofType[t.id] = t.proof_type || "none"
+      }
+
+      const myKeys: { taskId: string; key: string; kind: string }[] = []
+      for (const [taskId, val] of Object.entries(cleanedProofs)) {
+        const pt = taskProofType[taskId]
+        if (pt === "tx_hash")      myKeys.push({ taskId, key: "tx:" + val.toLowerCase(), kind: "tx" })
+        else if (pt === "x_link")  { const sid = xStatusId(val); if (sid) myKeys.push({ taskId, key: "x:" + sid, kind: "x" }) }
+      }
+
+      // (a) Within-submission reuse: each distinct step demands a distinct
+      // proof. Pasting one tx hash into swap + bridge + recurring-order is
+      // gaming — they only did one action. Reject before touching the DB.
+      const selfSeen = new Set<string>()
+      for (const mk of myKeys) {
+        if (selfSeen.has(mk.key)) {
+          const label = mk.kind === "tx" ? "transaction hash" : "X post"
+          return NextResponse.json({
+            error: `You used the same ${label} for more than one step. Each step needs its own proof — complete each action separately.`,
+            duplicate_proof: true,
+          }, { status: 409 })
+        }
+        selfSeen.add(mk.key)
+      }
+
+      // (b) Cross-tester reuse: someone else already submitted this exact proof.
+      if (myKeys.length > 0) {
+        // Pull every prior completion's proofs for this campaign (excluding the
+        // current wallet so a re-submit of one's own proof isn't blocked — the
+        // dup-check above already prevents re-submission anyway).
+        const prior = await pool.query(
+          `SELECT task_proofs FROM campaign_completions
+            WHERE campaign_id = $1 AND tester_wallet != $2`,
+          [campaignNumericId, wallet]
+        )
+        const usedKeys = new Set<string>()
+        for (const row of prior.rows) {
+          const tp = row.task_proofs || {}
+          for (const v of Object.values(tp as Record<string, string>)) {
+            if (typeof v !== "string") continue
+            if (/^0x[a-fA-F0-9]{64}$/.test(v)) usedKeys.add("tx:" + v.toLowerCase())
+            const sid = xStatusId(v)
+            if (sid) usedKeys.add("x:" + sid)
+          }
+        }
+        for (const mk of myKeys) {
+          if (usedKeys.has(mk.key)) {
+            const label = mk.kind === "tx" ? "transaction hash" : "X post"
+            return NextResponse.json({
+              error: `That ${label} has already been submitted by another tester for this campaign. Each proof must be unique — submit your own.`,
+              duplicate_proof: true,
+            }, { status: 409 })
+          }
+        }
+      }
+    }
+
     // Validate at least one review answer has meaningful content
     const totalWords = Object.values(review_answers as Record<string, string>)
       .join(" ").split(/\s+/).filter(Boolean).length

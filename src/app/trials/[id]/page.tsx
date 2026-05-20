@@ -399,6 +399,24 @@ export default function CampaignDetailPage() {
     if (editForm.app_url?.trim()) changes.app_url = editForm.app_url.trim()
     if (editForm.reward_description?.trim()) changes.reward_description = editForm.reward_description.trim()
     if (editForm.contract_address !== undefined && editForm.contract_address !== "") changes.contract_address = editForm.contract_address.trim()
+    // Invite codes — instant cosmetic edit. The textarea holds the raw text;
+    // parse into a deduped array only if the founder touched the field.
+    if (editForm.invite_codes_text !== undefined) {
+      const parsed: string[] = []
+      const seen = new Set<string>()
+      for (const raw of editForm.invite_codes_text.split(/[\n,;\s]+/)) {
+        const c = raw.trim().slice(0, 64)
+        if (!c) continue
+        const k = c.toUpperCase()
+        if (seen.has(k)) continue
+        seen.add(k); parsed.push(c)
+        if (parsed.length >= 200) break
+      }
+      changes.invite_codes = parsed
+    }
+    if (editForm.invite_codes_note !== undefined) {
+      changes.invite_codes_note = editForm.invite_codes_note.trim().slice(0, 500)
+    }
     // Tasks + review_questions: only send if founder actually edited them
     // (i.e., opened the section, which hydrates the editable copy). Compared
     // by deep JSON equality so untouched edits don't queue a noop admin item.
@@ -1262,6 +1280,26 @@ export default function CampaignDetailPage() {
                         </div>
                         <EF label="Contract address" >
                           <input type="text" value={editForm.contract_address || ""} onChange={e => setEditForm(f => ({ ...f, contract_address: e.target.value.trim() }))} placeholder={campaign.contract_address || "0x... (leave blank to keep current)"} style={{ ...ei, fontFamily: "'DM Mono', monospace", fontSize: 11 }} />
+                        </EF>
+
+                        {/* Invite codes — instant cosmetic edit. Hydrate the textarea
+                            from the current campaign codes on first focus so the
+                            founder edits the live set rather than starting blank. */}
+                        <EF label="Invite codes (one per line)">
+                          <textarea
+                            value={editForm.invite_codes_text ?? (Array.isArray(campaign.invite_codes) ? campaign.invite_codes.join("\n") : "")}
+                            onChange={e => setEditForm(f => ({ ...f, invite_codes_text: e.target.value }))}
+                            rows={4}
+                            placeholder={"TWR-A1B2-C3D4\nTWR-E5F6-G7H8\n(paste codes — one per line, applies instantly)"}
+                            style={{ ...ei, height: "auto", padding: "8px 10px", resize: "vertical", minHeight: 70, lineHeight: 1.6, fontFamily: "'DM Mono', monospace", fontSize: 11 }}
+                          />
+                        </EF>
+                        <EF label="Invite codes note (shown to testers)">
+                          <input type="text"
+                            value={editForm.invite_codes_note ?? (campaign.invite_codes_note || "")}
+                            onChange={e => setEditForm(f => ({ ...f, invite_codes_note: e.target.value.slice(0, 500) }))}
+                            placeholder="e.g. Each code can be used up to 11 times"
+                            style={ei} />
                         </EF>
 
                         {/* ── Tasks editor — collapsible, hydrates on open. Edits + new

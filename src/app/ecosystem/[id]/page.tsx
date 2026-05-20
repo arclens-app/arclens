@@ -57,7 +57,12 @@ interface LeaderboardRow {
   total_score:          number
   total_xp:             number | string | null
   last_active:          string
+  platform_rank:        number   // 0-4: Scout/Builder/Verified/Trusted/Arc Proven
+  platform_avg:         string | number
 }
+
+const PLATFORM_RANK_LABELS = ["Scout", "Builder", "Verified", "Trusted", "Arc Proven"]
+const PLATFORM_RANK_COLORS = ["#6b7da8", "#8aaeff", "#00d990", "#c08828", "#d4a447"]
 
 const CAT_COLOR: Record<string, string> = {
   Infrastructure: "#1a56ff", DeFi: "#00d990", NFT: "#c08828",
@@ -539,9 +544,28 @@ export default function ProjectPage() {
                       <div style={{ width: "36px", fontSize: "12px", fontFamily: mono, fontWeight: 700, color: rkColor, flexShrink: 0, letterSpacing: "0.04em" }}>
                         {"#" + rank}
                       </div>
-                      <span style={{ fontSize: "13px", fontFamily: mono, color: t1, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {row.tester_wallet.slice(0, 8)}…{row.tester_wallet.slice(-4)}
-                      </span>
+                      <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: "8px" }}>
+                        <span style={{ fontSize: "13px", fontFamily: mono, color: t1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {row.tester_wallet.slice(0, 8)}…{row.tester_wallet.slice(-4)}
+                        </span>
+                        {/* ArcLens rank chip — small, neutral. Tester is climbing
+                            the platform-wide ladder naturally as they earn project XP
+                            here. The two systems remain separate but visibly correlate. */}
+                        {(() => {
+                          const pr = Number(row.platform_rank) || 0
+                          if (pr === 0) return null
+                          const label = PLATFORM_RANK_LABELS[pr] || "Scout"
+                          const color = PLATFORM_RANK_COLORS[pr] || t3
+                          return (
+                            <span title={`ArcLens rank · ${label} · avg ${Number(row.platform_avg).toFixed(2)}`}
+                              style={{ fontSize: "9px", fontFamily: mono, padding: "2px 6px", borderRadius: "4px",
+                                background: color + "12", color, border: `1px solid ${color}30`, flexShrink: 0,
+                                letterSpacing: "0.04em", textTransform: "uppercase" }}>
+                              {label}
+                            </span>
+                          )
+                        })()}
+                      </div>
                       <div style={{ display: "flex", alignItems: "center", gap: "16px", flexShrink: 0 }}>
                         <div style={{ textAlign: "right", minWidth: "60px" }}>
                           <div style={{ fontSize: "11px", fontWeight: 600, color: t1, fontFamily: mono }}>{row.campaigns_completed}</div>
