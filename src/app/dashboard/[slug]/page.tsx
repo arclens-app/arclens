@@ -827,7 +827,7 @@ export default function DashboardPage() {
                                                   {isScreenshot ? (
                                                     <div style={{ display: "flex", gap: 10, alignItems: "center", flex: 1, minWidth: 0 }}>
                                                       <a href={value} target="_blank" rel="noopener noreferrer" style={{ flexShrink: 0 }}>
-                                                        <img src={`/api/image-proxy?url=${encodeURIComponent(value)}`}
+                                                        <img src={/\.blob\.vercel-storage\.com\//i.test(value) ? value : `/api/image-proxy?url=${encodeURIComponent(value)}`}
                                                           alt={t.title || "proof screenshot"}
                                                           style={{ width: 56, height: 42, objectFit: "cover", borderRadius: 5, border: "1px solid " + bdr, cursor: "zoom-in", display: "block" }} />
                                                       </a>

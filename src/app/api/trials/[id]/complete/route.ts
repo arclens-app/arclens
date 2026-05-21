@@ -215,18 +215,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           return NextResponse.json({ error: `Step "${taskLabel}": must be a valid http(s) URL` }, { status: 400 })
         }
       } else if (pt === "screenshot") {
-        // Screenshots must come from our own /api/upload pipeline. We only
-        // accept imgbb-hosted URLs because the upload endpoint is the only
-        // route that produces them — it enforces MIME/size/rate limits and
-        // the host whitelist below blocks anyone trying to paste a random URL.
+        // Screenshots must come from our own /api/upload pipeline. We accept
+        // Vercel Blob (primary host) and imgbb (fallback) — the only two hosts
+        // our upload route produces. The whitelist blocks anyone pasting a
+        // random URL straight into the field.
         try {
           const u = new URL(val)
           const ok = u.hostname === "i.ibb.co" || u.hostname === "ibb.co"
                   || u.hostname.endsWith(".ibb.co")
+                  || u.hostname.endsWith(".blob.vercel-storage.com")
           if (!ok || u.protocol !== "https:") throw new Error("bad host")
           cleanedProofs[t.id] = val.slice(0, 500)
         } catch {
-          return NextResponse.json({ error: `Step "${taskLabel}": upload a screenshot via the wizard (only ibb.co URLs are accepted)` }, { status: 400 })
+          return NextResponse.json({ error: `Step "${taskLabel}": upload a screenshot via the wizard (don't paste an external link)` }, { status: 400 })
         }
       }
     }

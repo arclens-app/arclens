@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { rateLimit, getIp } from "@/lib/ratelimit"
+import { put } from "@vercel/blob"
 
 // 5 MB — anything larger is almost certainly not a profile picture or logo
 const MAX_BYTES = 5 * 1024 * 1024
@@ -24,11 +25,6 @@ export async function POST(req: NextRequest) {
       { error: `Too many uploads from your network. Try again in ~${mins} min, or use a different connection.` },
       { status: 429, headers: { "Retry-After": String(Math.ceil(rl.resetIn / 1000)) } }
     )
-  }
-
-  if (!process.env.IMGBB_API_KEY) {
-    console.error("[upload] IMGBB_API_KEY missing")
-    return NextResponse.json({ error: "Image hosting isn't configured. Contact support." }, { status: 500 })
   }
 
   let formData: FormData
@@ -56,16 +52,42 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "That file isn't a supported image (JPG, PNG, WebP, GIF)." }, { status: 415 })
   }
 
-  // Convert to base64
-  const bytes  = await file.arrayBuffer()
-  const base64 = Buffer.from(bytes).toString("base64")
+  const bytes = await file.arrayBuffer()
+  const safeName = (file.name || "upload").replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 60)
 
-  // Upload to Imgbb with a timeout so a slow/dead imgbb doesn't hang the
-  // tester's submit indefinitely.
+  // ── Primary: Vercel Blob ──────────────────────────────────────────────────
+  // Platform-native, no third-party rate caps. imgbb's free key gets throttled
+  // at campaign scale (220+ testers uploading proof screenshots), which was
+  // surfacing as "image host is busy". Blob scales with the deployment.
+  // A random suffix keeps filenames unique so two testers' "screenshot.png"
+  // don't collide.
+  if (process.env.BLOB_READ_WRITE_TOKEN) {
+    try {
+      const ext  = (safeName.match(/\.[a-z0-9]+$/i)?.[0] || ".png")
+      const rand = Math.random().toString(36).slice(2, 10)
+      const blob = await put(`uploads/${Date.now()}-${rand}${ext}`, bytes, {
+        access: "public",
+        contentType: file.type || "image/png",
+        // Pass the token explicitly rather than relying on the SDK's import-time
+        // env read — guarantees it resolves regardless of when the var is injected.
+        token: process.env.BLOB_READ_WRITE_TOKEN,
+      })
+      return NextResponse.json({ url: blob.url })
+    } catch (e) {
+      console.error("[upload] vercel blob failed, falling back to imgbb", e)
+      // fall through to imgbb
+    }
+  }
+
+  // ── Fallback: imgbb ───────────────────────────────────────────────────────
+  if (!process.env.IMGBB_API_KEY) {
+    return NextResponse.json({ error: "Image hosting isn't configured. Contact support." }, { status: 500 })
+  }
+  const base64 = Buffer.from(bytes).toString("base64")
   const body = new URLSearchParams()
   body.append("key", process.env.IMGBB_API_KEY)
   body.append("image", base64)
-  body.append("name", (file.name || "proof").replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 60))
+  body.append("name", safeName)
 
   try {
     const controller = new AbortController()

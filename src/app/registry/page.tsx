@@ -62,6 +62,44 @@ export default function RegistryPage() {
     if (accounts[0]) setWalletAddr(accounts[0])
   }
 
+  // The verify API authorizes by the signed session cookie (one sign-in covers
+  // every protected action), NOT by the address in the request body. If the
+  // founder connected a wallet here but the cookie still holds an OLD wallet
+  // from a prior sign-in, the server sees a mismatch and rejects with "wrong
+  // deployer" even though the connected wallet IS the deployer. So before
+  // submitting we make the session match the connected wallet: reuse it if it's
+  // already correct (no popup), otherwise do the one deferred personal_sign.
+  async function ensureSession(rawAddr: string): Promise<{ ok: boolean; error?: string }> {
+    const addr = rawAddr.toLowerCase()
+    try {
+      const cur = await fetch("/api/auth/session", { credentials: "include" }).then(r => r.json()).catch(() => null)
+      if (cur?.signedIn && cur.address?.toLowerCase() === addr) return { ok: true }
+
+      const eth = (window as any).ethereum
+      if (!eth) return { ok: false, error: "Wallet not detected — connect MetaMask or Rabby." }
+
+      const timestamp = Date.now()
+      const nonce     = crypto.randomUUID()
+      const message   = `Sign in to ArcLens\nWallet: ${addr}\nTimestamp: ${timestamp}\nNonce: ${nonce}`
+      const signature: string = await eth.request({ method: "personal_sign", params: [message, addr] })
+      if (!signature) return { ok: false, error: "Signature cancelled." }
+
+      const res = await fetch("/api/auth/session", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ type: "wallet", address: addr, signature, timestamp, nonce }),
+      })
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        return { ok: false, error: d.error || "Sign-in failed — try again." }
+      }
+      return { ok: true }
+    } catch (e: any) {
+      return { ok: false, error: e?.code === 4001 ? "Signature rejected in wallet." : "Couldn't sign in — try again." }
+    }
+  }
+
   async function checkDeployer() {
     if (!addr || !/^0x[0-9a-fA-F]{40}$/.test(addr.trim())) {
       alert("Enter a valid contract address first"); return
@@ -118,9 +156,17 @@ export default function RegistryPage() {
     }
     setSubmitting(true)
     try {
+      // Make the session cookie match the connected (deployer) wallet before
+      // the server checks it — otherwise a stale cookie causes "wrong deployer".
+      const sess = await ensureSession(walletAddr)
+      if (!sess.ok) {
+        setStatus("error"); setStatusMsg(sess.error || "Sign in with the deployer wallet to claim."); setSubmitting(false); return
+      }
+
       const res  = await fetch("/api/verify", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
           address:     addr.trim(),
           name:        name.trim(),
