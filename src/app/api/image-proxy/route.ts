@@ -11,6 +11,7 @@ export async function GET(req: NextRequest) {
   const allowed = [
     "i.ibb.co",
     "ibb.co",
+    "blob.vercel-storage.com",
     "assets.coingecko.com",
     "arclens.app",
     "cloudflare-ipfs.com",
@@ -34,6 +35,20 @@ export async function GET(req: NextRequest) {
     return new NextResponse("Invalid URL", { status: 400 })
   }
 
+  // 1x1 transparent PNG — served on any upstream failure so the browser shows
+  // a blank pixel instead of a broken-image icon, and (crucially) so we return
+  // 200 not 5xx. A rate-limited imgbb was making this route emit a 502 per
+  // screenshot load, which tripped Vercel's error-spike alerting (56 in 5 min).
+  const fallbackPixel = () => {
+    const binary = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+      "base64",
+    )
+    return new NextResponse(binary, {
+      headers: { "Content-Type": "image/png", "Cache-Control": "public, max-age=60" },
+    })
+  }
+
   try {
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 8000)
@@ -54,7 +69,8 @@ export async function GET(req: NextRequest) {
     clearTimeout(timeout)
 
     if (!res.ok) {
-      return new NextResponse("Failed to fetch image", { status: 502 })
+      console.error("[image-proxy] upstream", res.status, url)
+      return fallbackPixel()
     }
 
     const buffer = await res.arrayBuffer()
@@ -70,15 +86,6 @@ export async function GET(req: NextRequest) {
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e)
     console.error("[image-proxy] failed:", url, msg)
-
-    const pixel = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
-    const binary = Buffer.from(pixel, "base64")
-
-    return new NextResponse(binary, {
-      headers: {
-        "Content-Type": "image/png",
-        "Cache-Control": "public, max-age=60",
-      },
-    })
+    return fallbackPixel()
   }
 }

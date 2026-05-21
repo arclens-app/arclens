@@ -77,6 +77,9 @@ const RANK_COLORS = ["#6b7da8", "#1a56ff", "#00b87a", "#c08828", "#ec4899"]
 
 function imgSrc(url: string | null) {
   if (!url) return null
+  // Vercel Blob URLs are clean CDN links not blocked by ad-blockers — serve
+  // them directly and skip the proxy round-trip. Only legacy imgbb needs it.
+  if (/\.blob\.vercel-storage\.com\//i.test(url)) return url
   return `/api/image-proxy?url=${encodeURIComponent(url)}`
 }
 

@@ -1003,7 +1003,7 @@ export default function CampaignDetailPage() {
                                   </div>
                                   {hasImage ? (
                                     <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
-                                      <img src={`/api/image-proxy?url=${encodeURIComponent(value)}`}
+                                      <img src={/\.blob\.vercel-storage\.com\//i.test(value) ? value : `/api/image-proxy?url=${encodeURIComponent(value)}`}
                                         alt="proof"
                                         style={{ width: 96, height: 72, objectFit: "cover", borderRadius: 6, border: "1px solid var(--bdr,rgba(255,255,255,0.06))" }} />
                                       <div style={{ flex: 1, minWidth: 0 }}>
@@ -1105,7 +1105,7 @@ export default function CampaignDetailPage() {
                               if (!v) return false
                               if (pt === "tx_hash")    return /^0x[a-fA-F0-9]{64}$/.test(v)
                               if (pt === "x_link")     return /^https?:\/\/(www\.)?(x|twitter)\.com\/[^/]+\/status\/\d+/i.test(v)
-                              if (pt === "screenshot") return /^https?:\/\/([a-z0-9-]+\.)?ibb\.co\//i.test(v)
+                              if (pt === "screenshot") return /^https?:\/\/([a-z0-9-]+\.)?ibb\.co\//i.test(v) || /\.blob\.vercel-storage\.com\//i.test(v)
                               try { const u = new URL(v); return u.protocol === "https:" || u.protocol === "http:" } catch { return false }
                             })()
                             return (

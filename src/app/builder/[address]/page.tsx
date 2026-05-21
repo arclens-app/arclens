@@ -55,6 +55,7 @@ function dicebear(address: string) {
 function proxiedAvatar(url: string | null | undefined): string | null {
   if (!url) return null
   if (url.startsWith("blob:") || url.startsWith("data:")) return url
+  if (/\.blob\.vercel-storage\.com\//i.test(url)) return url
   return `/api/image-proxy?url=${encodeURIComponent(url)}`
 }
 

@@ -5,6 +5,7 @@ import ArcLayout from "@/components/ArcLayout"
 
 function imgSrc(url: string | null): string | null {
   if (!url) return null
+  if (/\.blob\.vercel-storage\.com\//i.test(url)) return url
   return `/api/image-proxy?url=${encodeURIComponent(url)}`
 }
 

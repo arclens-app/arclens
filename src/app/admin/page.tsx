@@ -1329,7 +1329,7 @@ export default function AdminPage() {
                                                               {isShot ? (
                                                                 <div style={{ display: "flex", gap: 8, alignItems: "center", flex: 1, minWidth: 0 }}>
                                                                   <a href={value} target="_blank" rel="noopener noreferrer" style={{ flexShrink: 0 }}>
-                                                                    <img src={`/api/image-proxy?url=${encodeURIComponent(value)}`} alt=""
+                                                                    <img src={/\.blob\.vercel-storage\.com\//i.test(value) ? value : `/api/image-proxy?url=${encodeURIComponent(value)}`} alt=""
                                                                       style={{ width: 48, height: 36, objectFit: "cover", borderRadius: 4, border: "1px solid " + bdr, display: "block", cursor: "zoom-in" }} />
                                                                   </a>
                                                                   <div style={{ flex: 1, minWidth: 0 }}>
