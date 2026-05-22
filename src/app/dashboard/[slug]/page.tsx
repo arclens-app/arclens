@@ -41,6 +41,7 @@ export default function DashboardPage() {
   const [campaignDetail, setCampaignDetail]             = useState<{ campaign: any; completions: any[] } | null>(null)
   const [campaignDetailLoading, setCampaignDetailLoading] = useState(false)
   const [expandedTesters, setExpandedTesters]           = useState<Set<string>>(new Set())
+  const [showRatedSubs, setShowRatedSubs]               = useState(false)
   const [dashRatingWallet, setDashRatingWallet]         = useState("")
   const [dashRatingVal, setDashRatingVal]               = useState(0)
   const [dashRatingPerQ, setDashRatingPerQ]             = useState<Record<string, number>>({})
@@ -176,6 +177,19 @@ export default function DashboardPage() {
     } finally { setCampaignDetailLoading(false) }
   }
 
+  // Re-fetch campaign data WITHOUT blanking the panel — used after a rating so
+  // the founder never sees a full-panel "Loading…" flash. The optimistic local
+  // update has already moved the row out of the queue; this just reconciles the
+  // server-computed XP/score quietly in the background.
+  async function refreshCampaignSilently(id: number | null) {
+    if (!id) return
+    try {
+      const res  = await fetch(`/api/trials/${id}`)
+      const data = await res.json()
+      if (data.campaign) setCampaignDetail(data)
+    } catch { /* keep the optimistic state on a transient failure */ }
+  }
+
   function toggleTester(wallet: string) {
     setExpandedTesters(prev => {
       const next = new Set(prev)
@@ -212,11 +226,24 @@ export default function DashboardPage() {
       })
       if (res.ok) {
         setDashRatingMsg("✓ Rating saved")
+        const ratedWallet = dashRatingWallet
+        const ratingVal   = isModeB ? null : dashRatingVal
         setDashRatingWallet("")
         setDashRatingVal(0)
         setDashRatingPerQ({})
         setDashRatingImpact(false)
-        openCampaign(selectedCampaignId)
+        // Optimistic: mark this submission rated locally so it leaves the queue
+        // instantly and smoothly. Mode B's exact rating is server-computed, so
+        // we set a truthy placeholder and let the silent refetch correct it.
+        setCampaignDetail(prev => prev ? {
+          ...prev,
+          completions: (prev.completions || []).map((c: any) =>
+            c.tester_wallet === ratedWallet
+              ? { ...c, builder_rating: ratingVal != null ? ratingVal : (c.builder_rating || 5), status: "reviewed" }
+              : c
+          ),
+        } : prev)
+        refreshCampaignSilently(selectedCampaignId)
         if (connectedWallet) {
           fetch(`/api/trials?creator=${connectedWallet}`).then(r => r.json()).then(d => setForgeCampaigns(d.campaigns || [])).catch(() => {})
         }
@@ -650,6 +677,11 @@ export default function DashboardPage() {
                     const camp        = campaignDetail.campaign
                     const completions = campaignDetail.completions || []
                     const unrated     = completions.filter((c: any) => !c.builder_rating)
+                    const rated       = completions.filter((c: any) => c.builder_rating)
+                    // Default to the action queue: hide already-rated testers so
+                    // the founder sees only what still needs their review. Rated
+                    // ones stay one click away (and remain in the leaderboard).
+                    const visibleSubs = showRatedSubs ? completions : unrated
 
                     return (
                       <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
@@ -717,29 +749,42 @@ export default function DashboardPage() {
 
                         {/* Tester submissions */}
                         <div style={{ background: surf, border: "1px solid " + bdr, borderRadius: "12px", overflow: "hidden" }}>
-                          <div style={{ padding: "14px 20px", borderBottom: "1px solid " + bdr, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                          <div style={{ padding: "14px 20px", borderBottom: "1px solid " + bdr, display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px", flexWrap: "wrap" }}>
                             <div style={{ fontSize: "11px", fontFamily: mono, color: t2, textTransform: "uppercase", letterSpacing: "0.08em" }}>
                               Tester Submissions · {completions.length}
                             </div>
-                            {unrated.length > 0 && (
-                              <div style={{ fontSize: "10px", fontFamily: mono, color: "#e08810", background: "rgba(224,136,16,0.08)", border: "1px solid rgba(224,136,16,0.2)", padding: "2px 8px", borderRadius: "4px" }}>
-                                {unrated.length} awaiting your rating
-                              </div>
-                            )}
+                            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                              {unrated.length > 0 && (
+                                <div style={{ fontSize: "10px", fontFamily: mono, color: "#e08810", background: "rgba(224,136,16,0.08)", border: "1px solid rgba(224,136,16,0.2)", padding: "2px 8px", borderRadius: "4px" }}>
+                                  {unrated.length} awaiting your rating
+                                </div>
+                              )}
+                              {rated.length > 0 && (
+                                <button onClick={() => setShowRatedSubs(v => !v)}
+                                  style={{ fontSize: "10px", fontFamily: mono, color: showRatedSubs ? t1 : t2, background: showRatedSubs ? surf2 : "transparent", border: "1px solid " + bdr, padding: "3px 9px", borderRadius: "4px", cursor: "pointer" }}>
+                                  {showRatedSubs ? `Hide ${rated.length} rated` : `Show ${rated.length} rated ✓`}
+                                </button>
+                              )}
+                            </div>
                           </div>
 
                           {completions.length === 0 ? (
                             <div style={{ padding: "48px", textAlign: "center", color: t3, fontFamily: mono, fontSize: "11px" }}>
                               No submissions yet — share your campaign link to get testers
                             </div>
-                          ) : completions.map((comp: any, i: number) => {
+                          ) : visibleSubs.length === 0 ? (
+                            <div style={{ padding: "48px", textAlign: "center", color: t3, fontFamily: mono, fontSize: "11px", lineHeight: 1.7 }}>
+                              <div style={{ color: green, marginBottom: "4px" }}>All caught up</div>
+                              You&apos;ve rated every submission. {rated.length > 0 && <button onClick={() => setShowRatedSubs(true)} style={{ color: "#8aaeff", background: "none", border: "none", fontFamily: mono, fontSize: "11px", cursor: "pointer", textDecoration: "underline", padding: 0 }}>Show {rated.length} rated</button>}
+                            </div>
+                          ) : visibleSubs.map((comp: any, i: number) => {
                             const expanded    = expandedTesters.has(comp.tester_wallet)
                             const hasAnswers  = comp.review_answers && Object.keys(comp.review_answers).length > 0
                             const isRating    = dashRatingWallet === comp.tester_wallet
                             const scoreColor  = comp.auto_score > 70 ? "#00b87a" : comp.auto_score > 40 ? "#e08810" : "#e03348"
 
                             return (
-                              <div key={comp.tester_wallet} style={{ borderBottom: i < completions.length - 1 ? "1px solid " + bdr : "none" }}>
+                              <div key={comp.tester_wallet} style={{ borderBottom: i < visibleSubs.length - 1 ? "1px solid " + bdr : "none" }}>
                                 {/* Tester row */}
                                 <div style={{ padding: "14px 20px", display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
                                   {/* Avatar + score */}
