@@ -1,5 +1,5 @@
 ﻿"use client"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import ArcLayout from "@/components/ArcLayout"
 import { WalletAvatar } from "@/components/WalletAvatar"
@@ -145,6 +145,40 @@ export default function CampaignDetailPage() {
   const [alreadyDone, setAlreadyDone]   = useState(false)
   const [testerRank, setTesterRank]     = useState<number | null>(null)
   const [testerProgress, setTesterProgress] = useState<{ label: string; campaigns_needed: number; score_needed: number } | null>(null)
+
+  // Tester progress draft: keep typed answers + uploaded proof URLs + current
+  // step in localStorage so a submission failure (network, rate-limit, validation)
+  // doesn't wipe their work. Cleared only on successful submission. Keyed per
+  // (campaign, wallet) so each wallet has its own draft per campaign, and so
+  // switching wallets doesn't leak one tester's draft into another's view.
+  const testerDraftKey = (campaign && wallet) ? `arclens-trial-draft-${campaign.id}-${wallet.toLowerCase()}` : null
+  const testerDraftRestoredRef = useRef(false)
+
+  // Restore the draft once the campaign + wallet are known. Skipped entirely if
+  // the tester already submitted (no point — they can't resubmit anyway).
+  useEffect(() => {
+    if (!testerDraftKey || testerDraftRestoredRef.current || alreadyDone) return
+    testerDraftRestoredRef.current = true
+    try {
+      const raw = localStorage.getItem(testerDraftKey)
+      if (!raw) return
+      const draft = JSON.parse(raw)
+      if (draft.answers && typeof draft.answers === "object") setAnswers(draft.answers)
+      if (draft.proofs  && typeof draft.proofs  === "object") setProofs(draft.proofs)
+      if (typeof draft.flowStep === "number" && draft.flowStep >= 0 && campaign && draft.flowStep <= campaign.tasks.length) {
+        setFlowStep(draft.flowStep)
+      }
+    } catch { /* corrupted draft — ignore and start fresh */ }
+  }, [testerDraftKey, alreadyDone, campaign])
+
+  // Save the draft on every change AFTER restore has run, so we don't clobber a
+  // saved draft with the empty initial state before restoration completes.
+  useEffect(() => {
+    if (!testerDraftKey || !testerDraftRestoredRef.current || alreadyDone) return
+    try {
+      localStorage.setItem(testerDraftKey, JSON.stringify({ answers, proofs, flowStep, ts: Date.now() }))
+    } catch { /* localStorage full or private-mode — silently ignore */ }
+  }, [testerDraftKey, answers, proofs, flowStep, alreadyDone])
 
   // Builder rating state
   // Rating state lives entirely on the founder dashboard (/dashboard/[slug]).
@@ -325,6 +359,9 @@ export default function CampaignDetailPage() {
       setAutoScore(data.auto_score)
       setContractVerified(data.contract_verified ?? null)
       setFlowStep(campaign!.tasks.length + 1)
+      // Successful submit — drop the saved draft so a refresh doesn't restore
+      // stale state on a campaign they've already completed.
+      if (testerDraftKey) { try { localStorage.removeItem(testerDraftKey) } catch {} }
     } finally {
       setSubmitting(false)
     }
