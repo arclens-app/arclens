@@ -2,12 +2,32 @@ export const runtime = "nodejs"
 import { NextRequest, NextResponse } from "next/server"
 import { timingSafeEqual } from "crypto"
 import { Pool } from "pg"
+import { privateKeyToAccount } from "viem/accounts"
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
 
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || ""
-const PAYOUT_ADDR    = (process.env.PAYOUT_WALLET_ADDRESS || "").toLowerCase()
 const ARCSCAN        = "https://testnet.arcscan.app/api/v2"
+
+// Resolve the payout (DCW) address from any of these, in order of preference:
+//   1. PAYOUT_WALLET_ADDRESS               — explicit env (preferred)
+//   2. NEXT_PUBLIC_ARCLENS_PAYOUT_ADDRESS  — what some setups have under the
+//      NEXT_PUBLIC_ name so the client can also display the deposit address
+//   3. derived from PAYOUT_WALLET_PRIVATE_KEY — bulletproof fallback, the
+//      private key uniquely determines the public address
+// This way an env-name mismatch never breaks the DCW panel.
+function resolvePayoutAddr(): string {
+  const direct = process.env.PAYOUT_WALLET_ADDRESS || process.env.NEXT_PUBLIC_ARCLENS_PAYOUT_ADDRESS
+  if (direct) return direct.toLowerCase()
+  const pk = process.env.PAYOUT_WALLET_PRIVATE_KEY
+  if (pk) {
+    try {
+      const normalized = pk.startsWith("0x") ? pk : `0x${pk}`
+      return privateKeyToAccount(normalized as `0x${string}`).address.toLowerCase()
+    } catch { /* invalid key shape — fall through to empty */ }
+  }
+  return ""
+}
 
 // USDC is the native gas + payout token on Arc, so a single threshold covers both.
 // "Low" = comfortable buffer for a typical small campaign; "Critical" = topup-now.
@@ -30,8 +50,11 @@ export async function GET(req: NextRequest) {
   if (!checkAuth(readPassword(req))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
-  if (!PAYOUT_ADDR) {
-    return NextResponse.json({ error: "PAYOUT_WALLET_ADDRESS not configured" }, { status: 500 })
+  const payoutAddr = resolvePayoutAddr()
+  if (!payoutAddr) {
+    return NextResponse.json({
+      error: "Payout wallet not configured — set PAYOUT_WALLET_ADDRESS, or NEXT_PUBLIC_ARCLENS_PAYOUT_ADDRESS, or PAYOUT_WALLET_PRIVATE_KEY in Vercel env.",
+    }, { status: 500 })
   }
 
   try {
@@ -40,7 +63,7 @@ export async function GET(req: NextRequest) {
     // is the single number we care about. We do NOT also sum the ERC20 view —
     // it's the same balance under a different lens and double-counts.
     const [coinRes, commitRes] = await Promise.all([
-      fetch(`${ARCSCAN}/addresses/${PAYOUT_ADDR}`, { headers: { Accept: "application/json" } }),
+      fetch(`${ARCSCAN}/addresses/${payoutAddr}`, { headers: { Accept: "application/json" } }),
       pool.query(`
         SELECT COALESCE(SUM(
           (c.total_slots - (
@@ -83,7 +106,7 @@ export async function GET(req: NextRequest) {
     }
 
     return NextResponse.json({
-      address:     PAYOUT_ADDR,
+      address:     payoutAddr,
       usdc,
       committed,
       free,
