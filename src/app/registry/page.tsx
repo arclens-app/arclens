@@ -160,12 +160,14 @@ export default function RegistryPage() {
     if (!wallet) {
       setStatus("error"); setStatusMsg("Connect your wallet first"); return
     }
-    if (!deployerChecked || !deployer) {
-      setStatus("error"); setStatusMsg("Verify the contract on-chain first"); return
+    if (!deployerChecked) {
+      setStatus("error"); setStatusMsg("Click \"Verify Contract\" first so we can confirm it exists on Arc."); return
     }
-    if (deployer.toLowerCase() !== wallet.toLowerCase()) {
-      setStatus("error"); setStatusMsg("Connected wallet is not the contract deployer. Connect the deployer wallet to claim."); return
-    }
+    // Intentionally NOT blocking on `!deployer` or a client-side deployer/wallet
+    // comparison. The server re-fetches the deployer from Arc and reads the
+    // signed session cookie; it's the authority. Blocking client-side here was
+    // hiding real errors when blockscout's response didn't include a deployer
+    // field on the first try.
     setSubmitting(true)
     try {
       // Make the session cookie match the connected (deployer) wallet before
@@ -335,18 +337,33 @@ export default function RegistryPage() {
                 />
               </div>
 
-              {/* SUBMIT — backend re-fetches deployer and rejects if signed-in wallet doesn't match */}
+              {/* SUBMIT — server is the authority on deployer matching. Don't
+                  block client-side on a deployer/wallet comparison; just show
+                  the actual addresses for transparency and let the server give
+                  the real verdict on submit (it re-fetches deployer + reads the
+                  session cookie, neither of which the client can spoof). */}
               {(() => {
-                const deployerMatches = !!wallet && !!deployer && deployer.toLowerCase() === wallet.toLowerCase()
-                const ready = deployerChecked && deployerMatches
+                const ready          = deployerChecked && !!wallet
+                const showDiagnostic = deployerChecked && !!wallet && !!deployer &&
+                                       deployer.toLowerCase() !== wallet.toLowerCase()
                 return (
-                  <div style={{ padding: "14px 20px", display: "flex", alignItems: "center", gap: "12px" }}>
-                    <button onClick={submit} disabled={submitting || !ready}
-                      title={!wallet ? "Connect wallet" : !deployerChecked ? "Verify the contract first" : !deployerMatches ? "Connected wallet is not the deployer" : ""}
-                      style={{ flex: 1, height: "40px", background: status === "done" ? "#00b87a" : ready ? "#1a56ff" : "rgba(26,86,255,0.25)", color: "#fff", fontSize: "13px", fontWeight: 600, border: "none", borderRadius: "8px", cursor: (submitting||!ready) ? "not-allowed" : "pointer", fontFamily: "'Geist',sans-serif", opacity: submitting ? .7 : 1 }}>
-                      {submitting ? "Submitting..." : status === "done" ? "✓ Submitted" : !wallet ? "Connect wallet to submit" : !deployerChecked ? "Verify contract first" : !deployerMatches ? "Wrong wallet — connect deployer" : "Submit for Review"}
-                    </button>
-                    <div style={{ fontSize: "10px", fontFamily: mono, color: "#3a4870", lineHeight: 1.6 }}>Free · Reviewed by<br />ArcLens team</div>
+                  <div style={{ padding: "14px 20px" }}>
+                    {showDiagnostic && (
+                      <div style={{ marginBottom: 10, padding: "10px 12px", background: "rgba(224,136,16,0.06)", border: "1px solid rgba(224,136,16,0.25)", borderRadius: 7, fontSize: 11, fontFamily: mono, color: "#e08810", lineHeight: 1.7 }}>
+                        <div style={{ fontWeight: 600, marginBottom: 4 }}>Heads up — addresses don&apos;t match locally:</div>
+                        <div>Connected: <span style={{ color: "#eef2ff" }}>{wallet}</span></div>
+                        <div>Deployer:  <span style={{ color: "#eef2ff" }}>{deployer}</span></div>
+                        <div style={{ marginTop: 4, color: "#3a4870" }}>You can still submit — the server will verify and either accept or give a precise error.</div>
+                      </div>
+                    )}
+                    <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                      <button onClick={submit} disabled={submitting || !ready}
+                        title={!wallet ? "Connect wallet" : !deployerChecked ? "Verify the contract first" : ""}
+                        style={{ flex: 1, height: "40px", background: status === "done" ? "#00b87a" : ready ? "#1a56ff" : "rgba(26,86,255,0.25)", color: "#fff", fontSize: "13px", fontWeight: 600, border: "none", borderRadius: "8px", cursor: (submitting||!ready) ? "not-allowed" : "pointer", fontFamily: "'Geist',sans-serif", opacity: submitting ? .7 : 1 }}>
+                        {submitting ? "Submitting..." : status === "done" ? "✓ Submitted" : !wallet ? "Connect wallet to submit" : !deployerChecked ? "Verify contract first" : "Submit for Review"}
+                      </button>
+                      <div style={{ fontSize: "10px", fontFamily: mono, color: "#3a4870", lineHeight: 1.6 }}>Free · Reviewed by<br />ArcLens team</div>
+                    </div>
                   </div>
                 )
               })()}
