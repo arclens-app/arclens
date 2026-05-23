@@ -5,31 +5,7 @@ import { timingSafeEqual } from "crypto"
 import { enforce } from "@/lib/ratelimit"
 
 const pool   = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
-
-// Lazy Resend init. The SDK constructor throws "Missing API key" on empty
-// string in newer versions, which would crash the entire route at module load
-// (and break admin LOGIN, not just email-sending paths) in any environment
-// without RESEND_API_KEY (e.g. local dev). Instead, build the client per-call
-// and let calls no-op gracefully if the key isn't configured.
-let _resend: Resend | null = null
-function resendClient(): Resend | null {
-  if (_resend) return _resend
-  const key = process.env.RESEND_API_KEY
-  if (!key) return null
-  try { _resend = new Resend(key); return _resend } catch { return null }
-}
-// Drop-in replacement for `resend.emails.send(...)` that no-ops when Resend
-// isn't configured, so admin actions don't fail just because email sending
-// isn't available (e.g. local dev). Logs so the operator knows email was skipped.
-const resend = {
-  emails: {
-    async send(opts: Parameters<Resend["emails"]["send"]>[0]) {
-      const r = resendClient()
-      if (!r) { console.warn("[admin] RESEND_API_KEY not set — email skipped"); return { data: null, error: null } }
-      return r.emails.send(opts)
-    },
-  },
-}
+const resend = new Resend(process.env.RESEND_API_KEY || "")
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || ""
 
 function checkAuth(pw: string): boolean {
