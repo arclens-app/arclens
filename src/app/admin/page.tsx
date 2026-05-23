@@ -45,7 +45,7 @@ export default function AdminPage() {
   const [pw, setPw]                   = useState("")
   const [password, setPassword]       = useState("")
   const [loading, setLoading]         = useState(false)
-  const [tab, setTab]                 = useState<"pending"|"updates"|"campaign-updates"|"projects"|"contracts"|"events"|"locations"|"campaigns"|"stats">("pending")
+  const [tab, setTab]                 = useState<"pending"|"updates"|"campaign-updates"|"projects"|"contracts"|"events"|"locations"|"campaigns">("pending")
   const [submissions, setSubmissions] = useState<Project[]>([])
   const [projects, setProjects]       = useState<Project[]>([])
   const [payoutBal, setPayoutBal]     = useState<null | {
@@ -60,18 +60,6 @@ export default function AdminPage() {
     thresholds: { low: number; crit: number }
   }>(null)
   const [copiedAddr, setCopiedAddr] = useState(false)
-  // Why the DCW panel didn't render — surfaced inline instead of swallowed.
-  const [payoutErr, setPayoutErr]   = useState<string | null>(null)
-  // Site stats panel — milestone tracking + numbers handy for grant submissions.
-  const [siteStats, setSiteStats]   = useState<null | {
-    users:      { totalWallets: number; circleUsers: number; uniqueTesters: number; uniqueFounders: number; uniqueReviewers: number; uniqueClaimers: number; builderProfiles: number }
-    ecosystem:  { projectsLive: number; projectsTotal: number; projectsClaimed: number; contractsClaimed: number; contractsVerified: number }
-    activity:   { campaignsTotal: number; campaignsActive: number; completionsTotal: number; completionsReviewed: number; completionsClaimed: number; reviewsTotal: number; projectViews: number }
-    economy:    { xpAwarded: number; usdcPaid: number }
-    growth30d:  { projects: number; completions: number }
-    momentum7d: { completions: number; activeTesters: number }
-    generated_at: string
-  }>(null)
   const [contracts, setContracts]     = useState<Contract[]>([])
   const [pendingUpdates, setPendingUpdates] = useState<PendingUpdate[]>([])
   const [events, setEvents]           = useState<Event[]>([])
@@ -156,24 +144,11 @@ export default function AdminPage() {
       setPendingCampaignUpdates(data.pendingCampaignUpdates || [])
       setAllCampaigns(data.allCampaigns || [])
 
-      // Surface payout wallet balance so the operator knows before the gas
-      // tank runs dry. If the endpoint errors (missing env var, auth, Arcscan),
-      // we now record the error string so the panel can render an actionable
-      // diagnostic instead of silently hiding (which made "missing DCW panel"
-      // unidentifiable in prod).
+      // Fire-and-forget — surface payout wallet balance so the operator
+      // knows before the gas tank runs dry and breaks live payouts.
       fetch("/api/admin/payout-balance", { headers: { Authorization: `Bearer ${p}` }, cache: "no-store" })
-        .then(async r => {
-          const body = await r.json().catch(() => ({}))
-          if (r.ok && !body.error) { setPayoutBal(body); setPayoutErr(null); return }
-          setPayoutBal(null)
-          setPayoutErr(body.error || `HTTP ${r.status}`)
-        })
-        .catch(e => { setPayoutBal(null); setPayoutErr(e?.message || "network error") })
-
-      // Site stats for milestone tracking + grant submissions.
-      fetch("/api/admin/stats", { headers: { Authorization: `Bearer ${p}` }, cache: "no-store" })
         .then(r => r.ok ? r.json() : null)
-        .then(s => s && !s.error && setSiteStats(s))
+        .then(b => b && !b.error && setPayoutBal(b))
         .catch(() => {})
     } finally { setLoading(false) }
   }
@@ -337,10 +312,9 @@ export default function AdminPage() {
     { id: "events"    as const, label: "Events",        count: pendingEvents,            urgent: pendingEvents > 0 },
   ]
   const manageTabs = [
-    { id: "stats"     as const, label: "Stats Dashboard", count: 0,                urgent: false },
-    { id: "projects"  as const, label: "All Projects",    count: projects.length,  urgent: false },
-    { id: "contracts" as const, label: "Contracts",       count: contracts.length, urgent: false },
-    { id: "locations" as const, label: "Locations",       count: missingLoc,       urgent: missingLoc > 0 },
+    { id: "projects"  as const, label: "All Projects",  count: projects.length,  urgent: false },
+    { id: "contracts" as const, label: "Contracts",     count: contracts.length, urgent: false },
+    { id: "locations" as const, label: "Locations",     count: missingLoc,       urgent: missingLoc > 0 },
   ]
 
   const sidebarBtnStyle = (active: boolean): React.CSSProperties => ({
@@ -443,7 +417,6 @@ export default function AdminPage() {
                : tab === "events"           ? "Events"
                : tab === "projects"         ? "All Projects"
                : tab === "contracts"        ? "Contract Registry"
-               : tab === "stats"            ? "Stats Dashboard"
                : "Location Mapping"}
             </div>
             <div style={{ fontSize:"11px", fontFamily:mono, color:t3, marginTop:"4px" }}>
@@ -454,7 +427,6 @@ export default function AdminPage() {
                : tab === "events"    ? `${pendingEvents} pending · ${events.length} total`
                : tab === "projects"  ? `${projects.length} approved projects on Arc Ecosystem`
                : tab === "contracts" ? `${contracts.length} total · ${contracts.filter(c=>!c.verified).length} unverified`
-               : tab === "stats"     ? "Site-wide metrics · milestone tracker · payout wallet"
                : `${missingLoc} missing coordinates`}
             </div>
           </div>
@@ -471,86 +443,9 @@ export default function AdminPage() {
             </div>
           )}
 
-          {/* Stats Dashboard — only renders on the dedicated tab so the
-              landing experience (Submissions) isn't buried under a panel. */}
-          {tab === "stats" && siteStats && (() => {
-            const u = siteStats.users, e = siteStats.ecosystem, a = siteStats.activity, ec = siteStats.economy
-            const fmt = (n: number) => n.toLocaleString("en-US")
-            // Default to t1 (theme-aware) so values stay readable on BOTH light
-            // and dark admin themes — the previous hardcoded near-white made
-            // every tile without an explicit color invisible on light mode.
-            const Tile = ({ label, value, delta, color = t1 }: { label: string; value: string; delta?: string; color?: string }) => (
-              <div style={{ background: surf2, border: "1px solid " + bdr, borderRadius: 8, padding: "11px 13px", minWidth: 0 }}>
-                <div style={{ fontSize: 9, fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 }}>{label}</div>
-                <div style={{ fontSize: 18, fontWeight: 700, color, lineHeight: 1.1 }}>{value}</div>
-                {delta && <div style={{ fontSize: 10, fontFamily: mono, color: "#00b87a", marginTop: 3 }}>{delta}</div>}
-              </div>
-            )
-            return (
-              <div style={{ marginBottom: 18, padding: "16px 18px", background: surf, border: "1px solid " + bdr, borderRadius: 12 }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-                  <div style={{ fontSize: 11, fontFamily: mono, color: t2, textTransform: "uppercase", letterSpacing: "0.08em" }}>Site Stats · Milestone Tracker</div>
-                  <div style={{ fontSize: 9, fontFamily: mono, color: t3 }}>generated {new Date(siteStats.generated_at).toLocaleString()}</div>
-                </div>
-
-                <div style={{ fontSize: 9, fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 7 }}>Users · wallets engaged</div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 8, marginBottom: 14 }}>
-                  <Tile label="Total connected wallets" value={fmt(u.totalWallets)} color="#8aaeff" />
-                  <Tile label="Active (7d)"             value={fmt(siteStats.momentum7d.activeTesters)} color={siteStats.momentum7d.activeTesters > 0 ? "#00b87a" : "#eef2ff"} />
-                  <Tile label="Circle UCW users"        value={fmt(u.circleUsers)} color="#c08828" />
-                  <Tile label="Testers"                 value={fmt(u.uniqueTesters)} />
-                  <Tile label="Founders"                value={fmt(u.uniqueFounders)} />
-                  <Tile label="Reviewers"               value={fmt(u.uniqueReviewers)} />
-                  <Tile label="Contract claimers"       value={fmt(u.uniqueClaimers)} />
-                  <Tile label="Builder profiles"        value={fmt(u.builderProfiles)} />
-                </div>
-
-                <div style={{ fontSize: 9, fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 7 }}>Ecosystem</div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 8, marginBottom: 14 }}>
-                  <Tile label="Live projects"         value={fmt(e.projectsLive)} delta={siteStats.growth30d.projects > 0 ? `+${fmt(siteStats.growth30d.projects)} in 30d` : undefined} color="#8aaeff" />
-                  <Tile label="Total submitted"       value={fmt(e.projectsTotal)} />
-                  <Tile label="Claimed by founders"   value={fmt(e.projectsClaimed)} />
-                  <Tile label="Contracts in registry" value={fmt(e.contractsClaimed)} />
-                  {e.contractsVerified > 0 && <Tile label="Contracts verified" value={fmt(e.contractsVerified)} />}
-                </div>
-
-                <div style={{ fontSize: 9, fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 7 }}>Activity · Arc Trials</div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 8, marginBottom: 14 }}>
-                  <Tile label="Campaigns total"      value={fmt(a.campaignsTotal)} />
-                  <Tile label="Campaigns live"       value={fmt(a.campaignsActive)} color="#00b87a" />
-                  <Tile label="Completions"          value={fmt(a.completionsTotal)} delta={siteStats.growth30d.completions > 0 ? `+${fmt(siteStats.growth30d.completions)} in 30d` : undefined} color="#8aaeff" />
-                  <Tile label="Reviewed by founders" value={fmt(a.completionsReviewed)} />
-                  {a.completionsClaimed > 0 && <Tile label="USDC claimed" value={fmt(a.completionsClaimed)} />}
-                  <Tile label="Project reviews"      value={fmt(a.reviewsTotal)} />
-                  <Tile label="Project page views"   value={fmt(a.projectViews)} />
-                </div>
-
-                <div style={{ fontSize: 9, fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 7 }}>Economy</div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 8 }}>
-                  <Tile label="XP awarded"          value={fmt(ec.xpAwarded)} color="#c08828" />
-                  {ec.usdcPaid > 0 && <Tile label="USDC rewards paid" value={`$${fmt(Math.round(ec.usdcPaid))}`} color="#00b87a" />}
-                </div>
-              </div>
-            )
-          })()}
-
-          {/* DCW load failed — surface WHY instead of silently hiding the panel.
-              Common causes: PAYOUT_WALLET_ADDRESS unset on Vercel (needs a
-              redeploy after env change), admin password mismatch, or Arcscan
-              down. The actual error text is shown so it's actionable. */}
-          {tab === "stats" && !payoutBal && payoutErr && (
-            <div style={{ marginBottom: 16, padding: "12px 16px", background: "rgba(224,136,16,0.06)", border: "1px solid rgba(224,136,16,0.25)", borderRadius: 10, fontSize: 11, fontFamily: mono, color: "#e08810", lineHeight: 1.6 }}>
-              <div style={{ fontWeight: 600, marginBottom: 3 }}>Circle DCW Payout Wallet · panel didn&apos;t load</div>
-              <div style={{ color: t2 }}>{payoutErr}</div>
-              {/PAYOUT_WALLET_ADDRESS/i.test(payoutErr) && (
-                <div style={{ marginTop: 6, color: t3 }}>Fix: set <code style={{ color: t1 }}>PAYOUT_WALLET_ADDRESS</code> in Vercel → Settings → Environment Variables → redeploy.</div>
-              )}
-            </div>
-          )}
-
           {/* Circle DCW payout wallet — USDC is the native gas + payout token on Arc,
               so one balance covers both. Free = total - committed-but-unpaid liabilities. */}
-          {tab === "stats" && payoutBal && (() => {
+          {payoutBal && (() => {
             // When Arcscan responded with an error, usdc / free are null and
             // we render a clear "unavailable" state instead of misleading $0.
             const stale = payoutBal.fetchError != null || payoutBal.usdc == null
