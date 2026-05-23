@@ -1,6 +1,7 @@
 "use client"
 import { useEffect, useState } from "react"
 import ArcLayout from "@/components/ArcLayout"
+import { useArcStore } from "@/store/arc"
 
 const PROTECTED_NAMES = ["usdc","circle","arc bridge","arclens","uniswap","aave","compound","metamask","official","verified"]
 
@@ -30,8 +31,13 @@ export default function RegistryPage() {
   const [email, setEmail]       = useState("")
   const [source, setSource]     = useState("")
 
-  // Signing state
-  const [walletAddr, setWalletAddr]     = useState("")
+  // Read the connected wallet from the GLOBAL Zustand store (same source the
+  // header connect button + every other page uses). Previously this page kept
+  // its own local wallet state, so a user who connected via the header
+  // (visible top-right) still saw "Connect Wallet" here and a deployer-check
+  // mismatch — local state never knew about the global wallet.
+  const wallet    = useArcStore(s => s.walletAddr)
+  const setWallet = useArcStore(s => s.setWallet)
   const [deployer, setDeployer]         = useState("")
   const [deployerChecked, setDeployerChecked] = useState(false)
   const [checkingDeployer, setCheckingDeployer] = useState(false)
@@ -59,7 +65,13 @@ export default function RegistryPage() {
   async function connectWallet() {
     if (!(window as any).ethereum) { alert("MetaMask or Rabby wallet not detected."); return }
     const accounts = await (window as any).ethereum.request({ method: "eth_requestAccounts" })
-    if (accounts[0]) setWalletAddr(accounts[0])
+    if (accounts[0]) {
+      // Sync into the global wallet store so the header indicator + every
+      // other page see the same wallet immediately. Persisted to localStorage
+      // by ArcLayout so a refresh keeps it.
+      localStorage.setItem("arclens-wallet", accounts[0].toLowerCase())
+      setWallet(accounts[0])
+    }
   }
 
   // The verify API authorizes by the signed session cookie (one sign-in covers
@@ -145,20 +157,20 @@ export default function RegistryPage() {
     if (!addr.trim() || !name.trim() || !email.trim()) {
       setStatus("error"); setStatusMsg("Contract address, name and email are required"); return
     }
-    if (!walletAddr) {
+    if (!wallet) {
       setStatus("error"); setStatusMsg("Connect your wallet first"); return
     }
     if (!deployerChecked || !deployer) {
       setStatus("error"); setStatusMsg("Verify the contract on-chain first"); return
     }
-    if (deployer.toLowerCase() !== walletAddr.toLowerCase()) {
+    if (deployer.toLowerCase() !== wallet.toLowerCase()) {
       setStatus("error"); setStatusMsg("Connected wallet is not the contract deployer. Connect the deployer wallet to claim."); return
     }
     setSubmitting(true)
     try {
       // Make the session cookie match the connected (deployer) wallet before
       // the server checks it — otherwise a stale cookie causes "wrong deployer".
-      const sess = await ensureSession(walletAddr)
+      const sess = await ensureSession(wallet)
       if (!sess.ok) {
         setStatus("error"); setStatusMsg(sess.error || "Sign in with the deployer wallet to claim."); setSubmitting(false); return
       }
@@ -214,7 +226,7 @@ export default function RegistryPage() {
         {/* HOW IT WORKS */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: "1px", background: border, border: "1px solid " + border, borderRadius: "10px", overflow: "hidden", marginBottom: "24px" }}>
           {[
-            { n: "1", label: "Connect wallet",      sub: "Prove you own the deployer address", done: !!walletAddr },
+            { n: "1", label: "Connect wallet",      sub: "Prove you own the deployer address", done: !!wallet },
             { n: "2", label: "Verify contract",     sub: "We confirm it exists on Arc",         done: deployerChecked },
             { n: "3", label: "Add source (optional)", sub: "Upgrades badge to verified",          done: !!source.trim() },
             { n: "4", label: "Submit for review",   sub: "Goes live after ArcLens approves",    done: status === "done" },
@@ -249,10 +261,10 @@ export default function RegistryPage() {
               <div style={{ padding: "16px 20px", borderBottom: "1px solid " + border }}>
                 <div style={{ fontSize: "11px", fontFamily: mono, color: "#3a4870", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "10px" }}>Step 1 — Connect Wallet</div>
                 <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                  <button onClick={connectWallet} style={{ height: "36px", padding: "0 16px", background: walletAddr ? "rgba(0,184,122,0.08)" : "#1a56ff", color: walletAddr ? "#00d990" : "#fff", fontSize: "12px", fontWeight: 600, border: walletAddr ? "1px solid rgba(0,184,122,0.2)" : "none", borderRadius: "7px", cursor: "pointer", fontFamily: "'Geist',sans-serif" }}>
-                    {walletAddr ? "✓ " + walletAddr.slice(0,8) + "..." + walletAddr.slice(-6) : "Connect Wallet"}
+                  <button onClick={connectWallet} style={{ height: "36px", padding: "0 16px", background: wallet ? "rgba(0,184,122,0.08)" : "#1a56ff", color: wallet ? "#00d990" : "#fff", fontSize: "12px", fontWeight: 600, border: wallet ? "1px solid rgba(0,184,122,0.2)" : "none", borderRadius: "7px", cursor: "pointer", fontFamily: "'Geist',sans-serif" }}>
+                    {wallet ? "✓ " + wallet.slice(0,8) + "..." + wallet.slice(-6) : "Connect Wallet"}
                   </button>
-                  {walletAddr && <div style={{ fontSize: "11px", fontFamily: mono, color: "#3a4870" }}>Wallet connected — this must be the deployer address</div>}
+                  {wallet && <div style={{ fontSize: "11px", fontFamily: mono, color: "#3a4870" }}>Wallet connected — this must be the deployer address</div>}
                 </div>
               </div>
 
@@ -304,9 +316,9 @@ export default function RegistryPage() {
                 {deployerChecked && deployer && (
                   <div style={{ marginTop: "8px", fontSize: "10.5px", fontFamily: mono, color: "#3a4870", lineHeight: 1.6 }}>
                     Deployer on record: <span style={{ color: "#8aaeff" }}>{deployer.slice(0,10)}...{deployer.slice(-6)}</span>
-                    {walletAddr && deployer.toLowerCase() === walletAddr.toLowerCase()
+                    {wallet && deployer.toLowerCase() === wallet.toLowerCase()
                       ? <span style={{ color: "#00d990", marginLeft: "8px" }}>✓ Matches your wallet</span>
-                      : walletAddr ? <span style={{ color: "#e08810", marginLeft: "8px" }}>⚠ Connect the deployer wallet</span> : null
+                      : wallet ? <span style={{ color: "#e08810", marginLeft: "8px" }}>⚠ Connect the deployer wallet</span> : null
                     }
                   </div>
                 )}
@@ -325,14 +337,14 @@ export default function RegistryPage() {
 
               {/* SUBMIT — backend re-fetches deployer and rejects if signed-in wallet doesn't match */}
               {(() => {
-                const deployerMatches = !!walletAddr && !!deployer && deployer.toLowerCase() === walletAddr.toLowerCase()
+                const deployerMatches = !!wallet && !!deployer && deployer.toLowerCase() === wallet.toLowerCase()
                 const ready = deployerChecked && deployerMatches
                 return (
                   <div style={{ padding: "14px 20px", display: "flex", alignItems: "center", gap: "12px" }}>
                     <button onClick={submit} disabled={submitting || !ready}
-                      title={!walletAddr ? "Connect wallet" : !deployerChecked ? "Verify the contract first" : !deployerMatches ? "Connected wallet is not the deployer" : ""}
+                      title={!wallet ? "Connect wallet" : !deployerChecked ? "Verify the contract first" : !deployerMatches ? "Connected wallet is not the deployer" : ""}
                       style={{ flex: 1, height: "40px", background: status === "done" ? "#00b87a" : ready ? "#1a56ff" : "rgba(26,86,255,0.25)", color: "#fff", fontSize: "13px", fontWeight: 600, border: "none", borderRadius: "8px", cursor: (submitting||!ready) ? "not-allowed" : "pointer", fontFamily: "'Geist',sans-serif", opacity: submitting ? .7 : 1 }}>
-                      {submitting ? "Submitting..." : status === "done" ? "✓ Submitted" : !walletAddr ? "Connect wallet to submit" : !deployerChecked ? "Verify contract first" : !deployerMatches ? "Wrong wallet — connect deployer" : "Submit for Review"}
+                      {submitting ? "Submitting..." : status === "done" ? "✓ Submitted" : !wallet ? "Connect wallet to submit" : !deployerChecked ? "Verify contract first" : !deployerMatches ? "Wrong wallet — connect deployer" : "Submit for Review"}
                     </button>
                     <div style={{ fontSize: "10px", fontFamily: mono, color: "#3a4870", lineHeight: 1.6 }}>Free · Reviewed by<br />ArcLens team</div>
                   </div>

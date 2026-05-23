@@ -97,11 +97,17 @@ function computeAutoScore(
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
 
-  // Rate limit: 10 submissions per hour per IP
-  const rl = await rateLimit(`complete:${getIp(req)}`, 10, 3_600_000)
+  // Loose per-IP cap — anti-DDOS only, NOT a personal limit. The real
+  // participation cap is the unique (campaign_id, tester_wallet) constraint:
+  // one wallet can only successfully submit once per campaign, so we don't
+  // rate-limit individuals at all. The IP cap exists solely to stop mass-bot
+  // floods. Set high (300/hr ≈ 5/min) because many testers legitimately share
+  // an IP (mobile carriers, university WiFi, corporate NAT, VPNs) — the old
+  // 10/hr/IP crushed everyone behind shared NAT when one tester retried.
+  const rl = await rateLimit(`complete:${getIp(req)}`, 300, 3_600_000)
   if (!rl.allowed) {
     return NextResponse.json(
-      { error: "Too many submissions. Try again later." },
+      { error: "Too many submissions from your network right now. Try a different connection or wait a few minutes." },
       { status: 429, headers: { "Retry-After": String(Math.ceil(rl.resetIn / 1000)) } }
     )
   }
