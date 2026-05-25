@@ -1254,7 +1254,7 @@ export default function CampaignDetailPage() {
                   style={{ width: "100%", padding: "15px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", background: "none", border: "none", cursor: "pointer", textAlign: "left" }}>
                   <div>
                     <div style={{ fontSize: 13, fontWeight: 600, color: "var(--t1,#e8ecff)" }}>Edit Campaign</div>
-                    <div style={{ fontSize: 11, fontFamily: "var(--font-mono,monospace)", color: "var(--t3,#2e3a5c)", marginTop: 2 }}>Changes go to admin for review</div>
+                    <div style={{ fontSize: 11, fontFamily: "var(--font-mono,monospace)", color: "var(--t3,#2e3a5c)", marginTop: 2 }}>Cosmetic edits (invite codes, description, banner) apply instantly · material edits go to admin</div>
                   </div>
                   <span style={{ fontSize: 12, color: "var(--t3,#2e3a5c)", transform: editOpen ? "rotate(180deg)" : "none", transition: "transform 0.15s", display: "inline-block" }}>▾</span>
                 </button>
