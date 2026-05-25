@@ -331,7 +331,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
           ? `${appliedCount} change${appliedCount === 1 ? "" : "s"} live now, ${queuedCount} pending admin review.`
         : queuedCount > 0
           ? `${queuedCount} change${queuedCount === 1 ? "" : "s"} submitted for admin review.`
-          : `${appliedCount} change${appliedCount === 1 ? "" : "s"} are live now.`,
+        : appliedCount === 1
+          ? `1 change is live now.`
+          : `${appliedCount} changes are live now.`,
     })
   } catch (err) {
     console.error("[Forge PUT]", err)
