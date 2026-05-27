@@ -45,7 +45,11 @@ export default function AdminPage() {
   const [pw, setPw]                   = useState("")
   const [password, setPassword]       = useState("")
   const [loading, setLoading]         = useState(false)
-  const [tab, setTab]                 = useState<"pending"|"updates"|"campaign-updates"|"projects"|"contracts"|"events"|"locations"|"campaigns"|"stats">("pending")
+  const [tab, setTab]                 = useState<"pending"|"updates"|"campaign-updates"|"projects"|"contracts"|"events"|"locations"|"campaigns"|"stats"|"trust">("pending")
+  // Trust tab state: alerts + disputes, fetched on demand.
+  const [trust, setTrust]             = useState<{ alerts: any[]; disputes: any[]; counts: { open_alerts: number; open_disputes: number } } | null>(null)
+  const [trustLoading, setTrustLoading] = useState(false)
+  const [trustError, setTrustError]   = useState("")
   const [submissions, setSubmissions] = useState<Project[]>([])
   const [projects, setProjects]       = useState<Project[]>([])
   const [payoutBal, setPayoutBal]     = useState<null | {
@@ -175,7 +179,45 @@ export default function AdminPage() {
         .then(r => r.ok ? r.json() : null)
         .then(s => s && !s.error && setSiteStats(s))
         .catch(() => {})
+
+      // Trust: alerts + disputes — same load cycle so the sidebar badge
+      // shows the right count from page load.
+      loadTrust(p).catch(() => {})
     } finally { setLoading(false) }
+  }
+
+  async function loadTrust(p: string = pw) {
+    if (!p) return
+    setTrustLoading(true)
+    setTrustError("")
+    try {
+      const r = await fetch("/api/admin/trust", { headers: { Authorization: `Bearer ${p}` }, cache: "no-store" })
+      const d = await r.json()
+      if (!r.ok) throw new Error(d.error || "Failed")
+      setTrust(d)
+    } catch (e: any) {
+      setTrustError(e?.message || "Network error")
+    } finally { setTrustLoading(false) }
+  }
+
+  async function resolveAlert(id: number) {
+    if (!pw) return
+    await fetch("/api/admin/trust", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${pw}` },
+      body: JSON.stringify({ kind: "alert", id, action: "resolve" }),
+    }).catch(() => {})
+    await loadTrust()
+  }
+
+  async function actionDispute(id: number, action: "acknowledge" | "resolve" | "dismiss", notes?: string) {
+    if (!pw) return
+    await fetch("/api/admin/trust", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${pw}` },
+      body: JSON.stringify({ kind: "dispute", id, action, notes }),
+    }).catch(() => {})
+    await loadTrust()
   }
 
   async function act(id: number|string, action: string, table = "projects", extraData?: any) {
@@ -335,6 +377,7 @@ export default function AdminPage() {
     { id: "campaign-updates" as const, label: "Campaign Edits",   count: pendingCampaignUpdates.length, urgent: pendingCampaignUpdates.length > 0 },
     { id: "campaigns"        as const, label: "Campaigns",         count: pendingCampaigns.length,       urgent: pendingCampaigns.length > 0 },
     { id: "events"    as const, label: "Events",        count: pendingEvents,            urgent: pendingEvents > 0 },
+    { id: "trust"     as const, label: "Trust",         count: (trust?.counts.open_alerts ?? 0) + (trust?.counts.open_disputes ?? 0), urgent: !!trust && ((trust.counts.open_alerts > 0) || (trust.counts.open_disputes > 0)) },
   ]
   const manageTabs = [
     { id: "stats"     as const, label: "Stats Dashboard", count: 0,                urgent: false },
@@ -444,6 +487,7 @@ export default function AdminPage() {
                : tab === "projects"         ? "All Projects"
                : tab === "contracts"        ? "Contract Registry"
                : tab === "stats"            ? "Stats Dashboard"
+               : tab === "trust"            ? "Trust — Alerts & Disputes"
                : "Location Mapping"}
             </div>
             <div style={{ fontSize:"11px", fontFamily:mono, color:t3, marginTop:"4px" }}>
@@ -455,6 +499,7 @@ export default function AdminPage() {
                : tab === "projects"  ? `${projects.length} approved projects on Arc Ecosystem`
                : tab === "contracts" ? `${contracts.length} total · ${contracts.filter(c=>!c.verified).length} unverified`
                : tab === "stats"     ? "Site-wide metrics · milestone tracker · payout wallet"
+               : tab === "trust"     ? "Indexer self-audit + visitor-flagged disputes"
                : `${missingLoc} missing coordinates`}
             </div>
           </div>
@@ -1485,6 +1530,122 @@ export default function AdminPage() {
                       </div>
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* ── TRUST: alerts + disputes ── */}
+              {tab === "trust" && (
+                <div style={{ display:"flex", flexDirection:"column", gap:"18px" }}>
+                  <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:"10px", flexWrap:"wrap" }}>
+                    <div style={{ fontSize:"13px", color:t2 }}>
+                      {trustLoading ? "Loading…" : trust
+                        ? `${trust.counts.open_alerts} open indexer alert${trust.counts.open_alerts===1?"":"s"} · ${trust.counts.open_disputes} open public dispute${trust.counts.open_disputes===1?"":"s"}`
+                        : "—"}
+                    </div>
+                    <button onClick={() => loadTrust()} disabled={trustLoading}
+                      style={{ height:"30px", padding:"0 12px", background:"rgba(26,86,255,0.07)", color:"#8aaeff", fontSize:"11px", fontFamily:mono, border:"1px solid rgba(26,86,255,0.25)", borderRadius:"6px", cursor: trustLoading ? "not-allowed" : "pointer" }}>
+                      Refresh
+                    </button>
+                  </div>
+                  {trustError && (
+                    <div style={{ padding:"10px 14px", background:"rgba(224,51,72,0.05)", border:"1px solid rgba(224,51,72,0.25)", borderRadius:"8px", fontSize:"12px", color:"#e03348", fontFamily:mono }}>
+                      {trustError}
+                    </div>
+                  )}
+
+                  {/* Indexer alerts */}
+                  <div>
+                    <div style={{ fontSize:"10px", fontFamily:mono, color:t3, textTransform:"uppercase", letterSpacing:"0.1em", marginBottom:"10px" }}>
+                      Indexer alerts (self-audit from the cron)
+                    </div>
+                    {(!trust || trust.alerts.length === 0) ? (
+                      <EmptyState icon="✓" title="No open indexer alerts" sub="Drift cron has reconciled every project — numbers match the chain." />
+                    ) : (
+                      <div style={{ display:"flex", flexDirection:"column", gap:"8px" }}>
+                        {trust.alerts.map((a: any) => (
+                          <div key={a.id} style={{ background:surf, border:"1px solid "+(a.severity==="critical"?"rgba(224,51,72,0.3)":"rgba(192,136,40,0.25)"), borderRadius:"10px", padding:"14px 18px" }}>
+                            <div style={{ display:"flex", alignItems:"center", gap:"8px", marginBottom:"6px", flexWrap:"wrap" }}>
+                              <span style={{ fontSize:"9px", fontFamily:mono, padding:"2px 7px", borderRadius:"4px",
+                                background: a.severity==="critical" ? "rgba(224,51,72,0.1)" : "rgba(192,136,40,0.1)",
+                                color:      a.severity==="critical" ? "#e03348"             : "#c08828",
+                                border:"1px solid "+(a.severity==="critical"?"rgba(224,51,72,0.25)":"rgba(192,136,40,0.25)"),
+                                textTransform:"uppercase", letterSpacing:"0.08em" }}>
+                                {a.severity}
+                              </span>
+                              <span style={{ fontSize:"11px", fontFamily:mono, color:t2 }}>{a.kind}</span>
+                              {a.slug && <span style={{ fontSize:"11px", fontFamily:mono, color:"#8aaeff" }}>· {a.slug}</span>}
+                              <span style={{ fontSize:"10px", fontFamily:mono, color:t3, marginLeft:"auto" }}>
+                                {new Date(a.created_at).toLocaleString()}
+                              </span>
+                            </div>
+                            <div style={{ fontSize:"13px", color:t1, lineHeight:1.5, marginBottom:"10px", wordBreak:"break-word" }}>
+                              {a.message}
+                            </div>
+                            <button onClick={() => resolveAlert(Number(a.id))}
+                              style={{ height:"28px", padding:"0 12px", background:"rgba(0,184,122,0.08)", color:"#00b87a", fontSize:"11px", fontFamily:mono, border:"1px solid rgba(0,184,122,0.25)", borderRadius:"6px", cursor:"pointer" }}>
+                              Mark resolved
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Public disputes */}
+                  <div>
+                    <div style={{ fontSize:"10px", fontFamily:mono, color:t3, textTransform:"uppercase", letterSpacing:"0.1em", marginBottom:"10px" }}>
+                      Public disputes (visitor-flagged)
+                    </div>
+                    {(!trust || trust.disputes.length === 0) ? (
+                      <EmptyState icon="✓" title="No open public disputes" sub="No one has flagged a number for review." />
+                    ) : (
+                      <div style={{ display:"flex", flexDirection:"column", gap:"8px" }}>
+                        {trust.disputes.map((d: any) => (
+                          <div key={d.id} style={{ background:surf, border:"1px solid "+bdr, borderRadius:"10px", padding:"14px 18px" }}>
+                            <div style={{ display:"flex", alignItems:"center", gap:"8px", marginBottom:"6px", flexWrap:"wrap" }}>
+                              <span style={{ fontSize:"9px", fontFamily:mono, padding:"2px 7px", borderRadius:"4px", background:"rgba(224,136,16,0.1)", color:"#e08810", border:"1px solid rgba(224,136,16,0.25)", textTransform:"uppercase", letterSpacing:"0.08em" }}>
+                                {d.metric}
+                              </span>
+                              <span style={{ fontSize:"11px", fontFamily:mono, color:"#8aaeff" }}>{d.slug}</span>
+                              <span style={{ fontSize:"10px", fontFamily:mono, color:t3 }}>· {d.status}</span>
+                              <span style={{ fontSize:"10px", fontFamily:mono, color:t3, marginLeft:"auto" }}>
+                                {new Date(d.created_at).toLocaleString()}
+                              </span>
+                            </div>
+                            <div style={{ fontSize:"13px", color:t1, lineHeight:1.6, marginBottom:"8px", whiteSpace:"pre-wrap", wordBreak:"break-word" }}>
+                              {d.reason}
+                            </div>
+                            {d.evidence_url && (
+                              <div style={{ fontSize:"11px", fontFamily:mono, marginBottom:"8px" }}>
+                                <a href={d.evidence_url} target="_blank" rel="noopener noreferrer" style={{ color:"#8aaeff", textDecoration:"underline", wordBreak:"break-all" }}>{d.evidence_url}</a>
+                              </div>
+                            )}
+                            {d.reporter_email && (
+                              <div style={{ fontSize:"10px", fontFamily:mono, color:t3, marginBottom:"8px" }}>
+                                Reporter: {d.reporter_email}
+                              </div>
+                            )}
+                            <div style={{ display:"flex", gap:"8px", flexWrap:"wrap" }}>
+                              {d.status === "open" && (
+                                <button onClick={() => actionDispute(Number(d.id), "acknowledge")}
+                                  style={{ height:"28px", padding:"0 12px", background:"rgba(26,86,255,0.08)", color:"#8aaeff", fontSize:"11px", fontFamily:mono, border:"1px solid rgba(26,86,255,0.25)", borderRadius:"6px", cursor:"pointer" }}>
+                                  Acknowledge
+                                </button>
+                              )}
+                              <button onClick={() => actionDispute(Number(d.id), "resolve")}
+                                style={{ height:"28px", padding:"0 12px", background:"rgba(0,184,122,0.08)", color:"#00b87a", fontSize:"11px", fontFamily:mono, border:"1px solid rgba(0,184,122,0.25)", borderRadius:"6px", cursor:"pointer" }}>
+                                Mark resolved
+                              </button>
+                              <button onClick={() => actionDispute(Number(d.id), "dismiss")}
+                                style={{ height:"28px", padding:"0 12px", background:"rgba(224,51,72,0.06)", color:"#e03348", fontSize:"11px", fontFamily:mono, border:"1px solid rgba(224,51,72,0.2)", borderRadius:"6px", cursor:"pointer" }}>
+                                Dismiss
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </>
