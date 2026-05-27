@@ -1,0 +1,17 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "crons": [
+    {
+      "path": "/api/cron/tvl-revenue",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/tvl-drift",
+      "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/forex-refresh",
+      "schedule": "0 6 * * *"
+    }
+  ]
+}

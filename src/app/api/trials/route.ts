@@ -13,8 +13,37 @@ export async function GET(req: NextRequest) {
   const status  = searchParams.get("status")  || "active"
 
   try {
-    // Expire campaigns past their deadline — fire and forget, never blocks the response
-    pool.query("UPDATE campaigns SET status = 'ended' WHERE status = 'active' AND expires_at IS NOT NULL AND expires_at < NOW()").catch(() => {})
+    // Expire campaigns past their deadline OR at-capacity — fire and forget,
+    // never blocks the response. Also stamps ended_at/ended_reason so the UI
+    // can show "Ended on X (slots filled)" instead of just "active forever".
+    pool.query(`
+      UPDATE campaigns SET
+        status       = 'ended',
+        ended_at     = COALESCE(
+          ended_at,
+          CASE
+            WHEN total_slots IS NOT NULL AND filled_slots >= total_slots THEN
+              COALESCE(
+                (SELECT MAX(cc.created_at) FROM campaign_completions cc WHERE cc.campaign_id = campaigns.id),
+                NOW()
+              )
+            ELSE expires_at
+          END,
+          NOW()
+        ),
+        ended_reason = COALESCE(
+          ended_reason,
+          CASE
+            WHEN total_slots IS NOT NULL AND filled_slots >= total_slots THEN 'slots_filled'
+            ELSE 'expired'
+          END
+        )
+      WHERE status = 'active'
+        AND (
+          (expires_at IS NOT NULL AND expires_at < NOW())
+          OR (total_slots IS NOT NULL AND filled_slots >= total_slots)
+        )
+    `).catch(() => {})
 
     const conditions: string[] = []
     const params: unknown[]    = []
@@ -43,6 +72,7 @@ export async function GET(req: NextRequest) {
            c.total_slots, c.filled_slots, c.is_fcfs, c.min_rank,
            c.project_name, c.project_logo, c.campaign_logo, c.creator_wallet,
            c.tasks, c.created_at, c.expires_at, c.status, c.rejection_reason, c.app_url,
+           c.ended_at, c.ended_reason,
            (SELECT COUNT(*) FROM campaign_completions cc WHERE cc.campaign_id = c.id) AS completion_count
          FROM campaigns c
          WHERE ${where}

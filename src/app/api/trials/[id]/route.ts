@@ -29,7 +29,37 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const whereClause = isNumeric ? "c.id = $1" : "c.slug = $1"
 
   try {
-    pool.query("UPDATE campaigns SET status = 'ended' WHERE status = 'active' AND expires_at IS NOT NULL AND expires_at < NOW()").catch(() => {})
+    // Auto-end logic — matches /api/trials. Catches campaigns past their
+    // deadline OR at capacity, stamping ended_at + ended_reason so the
+    // UI can show why they ended.
+    pool.query(`
+      UPDATE campaigns SET
+        status       = 'ended',
+        ended_at     = COALESCE(
+          ended_at,
+          CASE
+            WHEN total_slots IS NOT NULL AND filled_slots >= total_slots THEN
+              COALESCE(
+                (SELECT MAX(cc.created_at) FROM campaign_completions cc WHERE cc.campaign_id = campaigns.id),
+                NOW()
+              )
+            ELSE expires_at
+          END,
+          NOW()
+        ),
+        ended_reason = COALESCE(
+          ended_reason,
+          CASE
+            WHEN total_slots IS NOT NULL AND filled_slots >= total_slots THEN 'slots_filled'
+            ELSE 'expired'
+          END
+        )
+      WHERE status = 'active'
+        AND (
+          (expires_at IS NOT NULL AND expires_at < NOW())
+          OR (total_slots IS NOT NULL AND filled_slots >= total_slots)
+        )
+    `).catch(() => {})
 
     const campaignRes = await pool.query(
       `SELECT

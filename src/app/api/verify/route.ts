@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
 import { Pool } from "pg"
+import crypto from "crypto"
+import { ethers } from "ethers"
 import { enforce } from "@/lib/ratelimit"
 import { getSession } from "@/lib/session"
+import { ARC_RPC_HTTP } from "@/lib/constants"
+import { verifyDeployerSignature } from "@/lib/deployerSig"
+import { buildVerifyMessage } from "./challenge/route"
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
 
@@ -48,39 +53,94 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ error: "Invalid request" }, { status: 400 })
 }
 
+// HMAC token verification — must match /api/verify/challenge.
+function challengeSecret(): Buffer {
+  const s = process.env.SESSION_SECRET || ""
+  if (!s || s.length < 32) {
+    return crypto.createHash("sha256")
+      .update("arclens-dev-challenge-fallback-do-not-use-in-prod").digest()
+  }
+  return crypto.createHash("sha256").update(s + "::challenge").digest()
+}
+function verifyChallengeToken(token: string): any | null {
+  if (!token || typeof token !== "string") return null
+  const [body, sig] = token.split(".")
+  if (!body || !sig) return null
+  const expected = Buffer.from(
+    crypto.createHmac("sha256", challengeSecret()).update(body).digest(),
+  ).toString("base64url")
+  const a = Buffer.from(sig); const b = Buffer.from(expected)
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null
+  try {
+    const payload = JSON.parse(Buffer.from(body, "base64url").toString("utf8"))
+    if (payload.kind !== "verify-claim") return null
+    const exp = Date.parse(payload.expires_at)
+    if (!Number.isFinite(exp) || exp < Date.now()) return null
+    return payload
+  } catch { return null }
+}
+
 export async function POST(req: NextRequest) {
   const blocked = await enforce(req, "contract-verify", { limit: 10, windowMs: 60_000 })
   if (blocked) return blocked
 
   const body = await req.json()
-  const { address, name, type, description, website, twitter, email, source_code, warnings } = body
+  const { challenge_token, signed_message, signature, source_code, warnings } = body
 
-  if (!address?.trim()) return NextResponse.json({ error: "Contract address required" }, { status: 400 })
-  if (!name?.trim())    return NextResponse.json({ error: "Contract name required" }, { status: 400 })
-  if (!email?.trim())   return NextResponse.json({ error: "Email required" }, { status: 400 })
-
-  const addr = address.trim().toLowerCase()
-  if (!/^0x[a-f0-9]{40}$/.test(addr)) {
-    return NextResponse.json({ error: "Invalid contract address" }, { status: 400 })
-  }
-
-  // Must be signed in — same session cookie that protects builder profile,
-  // founder claim, trials, and update-project. One sign-in covers everything.
   const sess = getSession(req)
   if (!sess) {
-    return NextResponse.json({ error: "Sign in with the deployer wallet to claim a contract" }, { status: 401 })
+    return NextResponse.json({ error: "Sign in first (any wallet that owns the project)." }, { status: 401 })
   }
 
-  // Deployer is fetched SERVER-SIDE so the client can't lie about it.
-  // The signed-in wallet must match the on-chain deployer of this contract.
+  // 1. HMAC-verify the challenge token and TTL-check.
+  const payload = verifyChallengeToken(challenge_token)
+  if (!payload) {
+    return NextResponse.json(
+      { error: "Challenge token missing, expired, or tampered. Click 'Get signing message' again." },
+      { status: 400 },
+    )
+  }
+  if (payload.issued_to_wallet?.toLowerCase() !== sess.addr) {
+    return NextResponse.json(
+      { error: "Challenge was issued to a different wallet — re-request." },
+      { status: 403 },
+    )
+  }
+
+  // 2. Reconstruct canonical message; ensure it's exactly what was signed.
+  const expectedMessage = buildVerifyMessage(payload)
+  if (signed_message !== expectedMessage) {
+    return NextResponse.json(
+      { error: "Signed message doesn't match the canonical text — sign exactly as shown." },
+      { status: 400 },
+    )
+  }
+  if (!signature) return NextResponse.json({ error: "signature required" }, { status: 400 })
+
+  const addr = payload.contract_address
+  const name = payload.name
+  const type = payload.type
+  const description = payload.description
+  const website = payload.website
+  const twitter = payload.twitter
+  const email = payload.email
+
+  // 3. Server-side fetch of the on-chain deployer (never accept client-supplied).
   const onChainDeployer = await fetchDeployer(addr)
   if (!onChainDeployer) {
-    return NextResponse.json({ error: "Couldn't verify deployer on Arc. The contract may not exist yet, or Arcscan is unreachable." }, { status: 502 })
+    return NextResponse.json({ error: "Couldn't verify deployer on Arc. Try again in a few minutes." }, { status: 502 })
   }
-  if (sess.addr !== onChainDeployer) {
+
+  // 4. Verify the off-chain signature: EOA personal_sign OR EIP-1271 contract wallet.
+  const provider = new ethers.JsonRpcProvider(ARC_RPC_HTTP)
+  const sigCheck = await verifyDeployerSignature(signed_message, signature, onChainDeployer, provider)
+  if (!sigCheck.ok) {
     return NextResponse.json(
-      { error: `Only the contract deployer can claim this entry. Deployer on chain is ${onChainDeployer.slice(0,10)}…${onChainDeployer.slice(-6)} — sign in with that wallet.` },
-      { status: 403 }
+      {
+        error: `Signature did not match the on-chain deployer ${onChainDeployer.slice(0,10)}…${onChainDeployer.slice(-6)}. ${sigCheck.reason ?? ""}`,
+        deployer: onChainDeployer,
+      },
+      { status: 403 },
     )
   }
   const deployer = onChainDeployer

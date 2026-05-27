@@ -15,7 +15,19 @@ export async function GET(
               website, twitter, github, discord, contract,
               featured, badge, color, created_at,
               COALESCE(view_count, 0) as view_count,
-              city, country, lat, lng
+              city, country, lat, lng,
+              tvl_tracking_enabled,
+              tvl_usd_e6::text          AS tvl_usd_e6,
+              tvl_ath_usd_e6::text      AS tvl_ath_usd_e6,
+              tvl_ath_block,
+              tvl_ath_at,
+              revenue_cum_usd_e6::text  AS revenue_cum_usd_e6,
+              revenue_ath_day_usd_e6::text AS revenue_ath_day_usd_e6,
+              revenue_ath_day,
+              volume_cum_usd_e6::text   AS volume_cum_usd_e6,
+              volume_ath_day_usd_e6::text AS volume_ath_day_usd_e6,
+              volume_ath_day,
+              tvl_last_indexed_at
        FROM projects
        WHERE approved = true AND live = true
          AND (slug = $1 OR id::text = $1)
@@ -107,8 +119,78 @@ export async function GET(
       console.error("[Ecosystem GET id] leaderboard query failed", e)
     }
 
+    // ─── TVL detail (only when the founder has opted in) ─────────────────────
+    // Three pieces:
+    //   (a) per-contract breakdown at the latest snapshot → audit table
+    //   (b) a downsampled time series for the sparkline / chart
+    //   (c) the live list of registered tracked contracts (with verification)
+    let tvl: any = null
+    if (project.tvl_tracking_enabled) {
+      try {
+        const latest = await pool.query(
+          `SELECT id, block_number, block_time,
+                  total_usd_e6::text AS total_usd_e6,
+                  breakdown
+           FROM tvl_snapshots
+           WHERE project_id = $1
+           ORDER BY block_number DESC LIMIT 1`,
+          [project.id]
+        )
+
+        // Sparkline series: ≤90 evenly distributed snapshots since first
+        // recorded TVL. Using a window function keeps Postgres doing the work
+        // and bounds the JSON payload no matter how many snapshots exist.
+        const series = await pool.query(
+          `WITH s AS (
+             SELECT block_number, block_time, total_usd_e6,
+                    ROW_NUMBER() OVER (ORDER BY block_number ASC) AS rn,
+                    COUNT(*)     OVER ()                          AS n
+             FROM tvl_snapshots WHERE project_id = $1
+           )
+           SELECT block_number, block_time, total_usd_e6::text AS total_usd_e6
+           FROM s
+           WHERE rn % GREATEST(1, n / 90) = 0 OR rn = 1 OR rn = n
+           ORDER BY block_number ASC`,
+          [project.id]
+        )
+
+        const contracts = await pool.query(
+          `SELECT id, address, role, label, start_block,
+                  deployer_address, verified_at, revoked_at
+           FROM project_contracts
+           WHERE project_id = $1 AND verified_at IS NOT NULL AND revoked_at IS NULL
+           ORDER BY role, id`,
+          [project.id]
+        )
+
+        // Revenue daily series (last ~90 days) for the revenue sparkline.
+        const revSeries = await pool.query(
+          `SELECT day, total_usd_e6::text AS total_usd_e6, event_count
+           FROM revenue_daily WHERE project_id = $1
+           ORDER BY day DESC LIMIT 90`,
+          [project.id]
+        )
+        const volSeries = await pool.query(
+          `SELECT day, total_usd_e6::text AS total_usd_e6, event_count
+           FROM volume_daily WHERE project_id = $1
+           ORDER BY day DESC LIMIT 90`,
+          [project.id]
+        )
+
+        tvl = {
+          latest: latest.rows[0] ?? null,
+          series: series.rows,
+          revenue_series: revSeries.rows.reverse(),
+          volume_series: volSeries.rows.reverse(),
+          contracts: contracts.rows,
+        }
+      } catch (e) {
+        console.error("[Ecosystem GET id] tvl detail failed", e)
+      }
+    }
+
     return NextResponse.json(
-      { project: { ...project, txCount }, related: related.rows, leaderboard, campaignsRun, usingXp },
+      { project: { ...project, txCount }, related: related.rows, leaderboard, campaignsRun, usingXp, tvl },
       { headers: { "Cache-Control": "public, s-maxage=30, stale-while-revalidate=60" } }
     )
   } catch (err) {

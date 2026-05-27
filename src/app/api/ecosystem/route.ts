@@ -11,7 +11,21 @@ export async function GET() {
               featured, color, launched_at, slug, badge,
               city, country, lat, lng,
               COALESCE(view_count, 0) as view_count,
-              created_at
+              created_at,
+              -- TVL / Revenue tracking (NULL when project hasn't opted in;
+              -- the UI uses NULL vs 0 to decide whether to show a number).
+              tvl_tracking_enabled,
+              tvl_usd_e6::text          AS tvl_usd_e6,
+              tvl_ath_usd_e6::text      AS tvl_ath_usd_e6,
+              tvl_ath_block,
+              tvl_ath_at,
+              revenue_cum_usd_e6::text  AS revenue_cum_usd_e6,
+              revenue_ath_day_usd_e6::text AS revenue_ath_day_usd_e6,
+              revenue_ath_day,
+              volume_cum_usd_e6::text   AS volume_cum_usd_e6,
+              volume_ath_day_usd_e6::text AS volume_ath_day_usd_e6,
+              volume_ath_day,
+              tvl_last_indexed_at
        FROM projects
        WHERE approved = true AND live = true
        ORDER BY featured DESC, COALESCE(view_count, 0) DESC, created_at DESC`

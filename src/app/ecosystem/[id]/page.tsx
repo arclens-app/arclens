@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react"
 import { useParams } from "next/navigation"
 import ArcLayout from "@/components/ArcLayout"
+import TvlCards from "./TvlCards"
 
 function imgSrc(url: string | null): string | null {
   if (!url) return null
@@ -27,6 +28,15 @@ interface Project {
   created_at: string
   txCount: string | null
   view_count?: number
+  tvl_tracking_enabled?: boolean
+  tvl_usd_e6?: string | null
+  tvl_ath_usd_e6?: string | null
+  tvl_ath_block?: number | null
+  tvl_ath_at?: string | null
+  revenue_cum_usd_e6?: string | null
+  revenue_ath_day_usd_e6?: string | null
+  revenue_ath_day?: string | null
+  tvl_last_indexed_at?: string | null
 }
 
 interface RelatedProject {
@@ -128,6 +138,7 @@ export default function ProjectPage() {
   const [reviewError, setReviewError] = useState("")
   const [reviewSuccess, setReviewSuccess] = useState(false)
   const [connectedWallet, setConnectedWallet] = useState<string | null>(null)
+  const [tvl, setTvl] = useState<any>(null)
 
   useEffect(() => {
     setMounted(true)
@@ -148,6 +159,7 @@ export default function ProjectPage() {
         setLeaderboard(data.leaderboard || [])
         setCampaignsRun(data.campaignsRun || 0)
         setUsingXp(!!data.usingXp)
+        setTvl(data.tvl || null)
 
         // Record view
         const deviceId = getDeviceId()
@@ -352,6 +364,14 @@ export default function ProjectPage() {
             <p style={{ fontSize: "14px", color: t2, lineHeight: 1.85, margin: 0, whiteSpace: "pre-wrap" }}>{project.description}</p>
           </div>
         )}
+
+        {/* TVL & REVENUE CARDS */}
+        <TvlCards
+          project={project as any}
+          tvl={tvl}
+          theme={{ mono, surf, surf2, bdr, t1, t2, t3 }}
+          slug={String(id ?? (project as any).slug ?? "")}
+        />
 
         {/* CONTRACT INFO */}
         {project.contract && (

@@ -20,6 +20,35 @@ interface Project {
   slug: string | null
   created_at?: string
   view_count?: number
+  // TVL & revenue (NULL when the founder hasn't opted in)
+  tvl_tracking_enabled?: boolean
+  tvl_usd_e6?: string | null
+  tvl_ath_usd_e6?: string | null
+  tvl_ath_block?: number | null
+  tvl_ath_at?: string | null
+  revenue_cum_usd_e6?: string | null
+  revenue_ath_day_usd_e6?: string | null
+  revenue_ath_day?: string | null
+  volume_cum_usd_e6?: string | null
+  volume_ath_day_usd_e6?: string | null
+  volume_ath_day?: string | null
+  tvl_last_indexed_at?: string | null
+}
+
+// Format an integer-string in 1e6 fixed-point USD as $1.23K / $4.56M / $7.89B.
+// Returns null when the input is null/undefined/0 so callers can decide whether
+// to show the number or hide the row entirely (we hide rather than print $0).
+function fmtUsdE6(raw: string | null | undefined): string | null {
+  if (raw == null) return null
+  let n: bigint
+  try { n = BigInt(raw) } catch { return null }
+  if (n === BigInt(0)) return null
+  const usd = Number(n) / 1e6
+  if (!Number.isFinite(usd)) return null
+  if (usd >= 1e9) return "$" + (usd / 1e9).toFixed(2) + "B"
+  if (usd >= 1e6) return "$" + (usd / 1e6).toFixed(2) + "M"
+  if (usd >= 1e3) return "$" + (usd / 1e3).toFixed(1) + "K"
+  return "$" + usd.toFixed(2)
 }
 
 interface TrendingProject {
@@ -68,7 +97,7 @@ export default function EcosystemPage() {
   const existingNames       = useRef<Set<string>>(new Set())
   const existingContracts   = useRef<Set<string>>(new Set())
   const [trending, setTrending] = useState<TrendingProject[]>([])
-  const [sortBy, setSortBy] = useState<"all"|"trending"|"new"|"official"|"verified"|"featured">("all")
+  const [sortBy, setSortBy] = useState<"all"|"trending"|"new"|"official"|"verified"|"featured"|"tvl"|"revenue"|"volume">("all")
   const [page, setPage] = useState(1)
   const [cols, setCols] = useState(4)
   const gridWrapRef = useRef<HTMLDivElement>(null)
@@ -196,11 +225,31 @@ export default function EcosystemPage() {
       : sortBy === "official"  ? p.badge === "official"
       : sortBy === "verified"  ? p.badge === "verified"
       : sortBy === "featured"  ? p.featured
+      // For TVL/Revenue/Volume sort tabs, hide projects with no measured number —
+      // a leaderboard that pads with $0 projects is misleading.
+      : sortBy === "tvl"       ? !!(p.tvl_tracking_enabled && p.tvl_usd_e6 && p.tvl_usd_e6 !== "0")
+      : sortBy === "revenue"   ? !!(p.tvl_tracking_enabled && p.revenue_cum_usd_e6 && p.revenue_cum_usd_e6 !== "0")
+      : sortBy === "volume"    ? !!(p.tvl_tracking_enabled && p.volume_cum_usd_e6 && p.volume_cum_usd_e6 !== "0")
       : true
     return matchCat && matchSearch && matchSort
   }).sort((a, b) => {
     if (sortBy === "new") return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
     if (sortBy === "trending") return (b.view_count || 0) - (a.view_count || 0)
+    if (sortBy === "tvl") {
+      const av = a.tvl_usd_e6 ? BigInt(a.tvl_usd_e6) : BigInt(0)
+      const bv = b.tvl_usd_e6 ? BigInt(b.tvl_usd_e6) : BigInt(0)
+      return bv > av ? 1 : bv < av ? -1 : 0
+    }
+    if (sortBy === "revenue") {
+      const av = a.revenue_cum_usd_e6 ? BigInt(a.revenue_cum_usd_e6) : BigInt(0)
+      const bv = b.revenue_cum_usd_e6 ? BigInt(b.revenue_cum_usd_e6) : BigInt(0)
+      return bv > av ? 1 : bv < av ? -1 : 0
+    }
+    if (sortBy === "volume") {
+      const av = a.volume_cum_usd_e6 ? BigInt(a.volume_cum_usd_e6) : BigInt(0)
+      const bv = b.volume_cum_usd_e6 ? BigInt(b.volume_cum_usd_e6) : BigInt(0)
+      return bv > av ? 1 : bv < av ? -1 : 0
+    }
     return 0
   })
 
@@ -260,7 +309,33 @@ export default function EcosystemPage() {
           </div>
         )}
 
-
+        {p.tvl_tracking_enabled && (fmtUsdE6(p.tvl_usd_e6) || fmtUsdE6(p.volume_cum_usd_e6) || fmtUsdE6(p.revenue_cum_usd_e6)) && (
+          <div style={{ padding: "8px 16px", borderTop: "1px solid " + border, display: "flex", alignItems: "baseline", gap: "16px", flexWrap: "wrap", background: "rgba(26,86,255,0.03)" }}>
+            {fmtUsdE6(p.tvl_usd_e6) && (
+              <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.2 }}>
+                <span style={{ fontSize: "8.5px", fontFamily: mono, color: t3, letterSpacing: "0.08em", textTransform: "uppercase" }}>TVL</span>
+                <span style={{ fontSize: "13.5px", fontWeight: 700, color: t1, fontFamily: mono, letterSpacing: "-0.02em" }}>{fmtUsdE6(p.tvl_usd_e6)}</span>
+                {fmtUsdE6(p.tvl_ath_usd_e6) && p.tvl_ath_usd_e6 !== p.tvl_usd_e6 && (
+                  <span style={{ fontSize: "9px", fontFamily: mono, color: t3 }}>
+                    ATH {fmtUsdE6(p.tvl_ath_usd_e6)}
+                  </span>
+                )}
+              </div>
+            )}
+            {fmtUsdE6(p.volume_cum_usd_e6) && (
+              <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.2 }}>
+                <span style={{ fontSize: "8.5px", fontFamily: mono, color: t3, letterSpacing: "0.08em", textTransform: "uppercase" }}>Volume</span>
+                <span style={{ fontSize: "13.5px", fontWeight: 700, color: "#8aaeff", fontFamily: mono, letterSpacing: "-0.02em" }}>{fmtUsdE6(p.volume_cum_usd_e6)}</span>
+              </div>
+            )}
+            {fmtUsdE6(p.revenue_cum_usd_e6) && (
+              <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.2 }}>
+                <span style={{ fontSize: "8.5px", fontFamily: mono, color: t3, letterSpacing: "0.08em", textTransform: "uppercase" }}>Revenue</span>
+                <span style={{ fontSize: "13.5px", fontWeight: 700, color: "#00b87a", fontFamily: mono, letterSpacing: "-0.02em" }}>{fmtUsdE6(p.revenue_cum_usd_e6)}</span>
+              </div>
+            )}
+          </div>
+        )}
 
         <div style={{ padding: "10px 12px", borderTop: "1px solid " + border, display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
           {p.website  && <a href={p.website}  target="_blank" rel="noopener noreferrer" style={{ fontSize: "10px", fontFamily: mono, padding: "3px 9px", borderRadius: "5px", border: "1px solid " + border, color: t2, textDecoration: "none" }}>Website</a>}
@@ -444,6 +519,9 @@ export default function EcosystemPage() {
         <div style={{ display: "flex", gap: "6px", marginBottom: "14px", flexWrap: "wrap" }}>
           {([
             { key: "all",      label: "All" },
+            { key: "tvl",      label: "TVL" },
+            { key: "volume",   label: "Volume" },
+            { key: "revenue",  label: "Revenue" },
             { key: "trending", label: "Trending" },
             { key: "new",      label: "New" },
             { key: "featured", label: "Featured" },

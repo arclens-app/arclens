@@ -28,6 +28,8 @@ interface Campaign {
   tasks: { id: string; title: string; requires_tx: boolean }[]
   created_at: string
   expires_at: string | null
+  ended_at: string | null
+  ended_reason: "slots_filled" | "expired" | "admin_closed" | null
   completion_count: number
 }
 
@@ -322,7 +324,7 @@ export default function ForgePage() {
                   : "No ended campaigns yet."
                 : filter !== "all"
                   ? `No active ${TYPE_META[filter]?.label ?? filter} campaigns right now.`
-                  : "Be the first builder to create one."
+                  : "No active campaigns right now."
               }
             </div>
             {wallet && statusFilter === "active" && (
@@ -426,9 +428,33 @@ export default function ForgePage() {
                     )}
 
                     {/* Footer */}
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingTop: 8, borderTop: "1px solid rgba(255,255,255,0.05)", marginTop: "auto" }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingTop: 8, borderTop: "1px solid rgba(255,255,255,0.05)", marginTop: "auto", gap: 8, flexWrap: "wrap" }}>
                       <span style={{ fontSize: 10, color: "#2e3a5c", fontFamily: "monospace" }}>{c.tasks?.length || 0} task{c.tasks?.length !== 1 ? "s" : ""} · {Number(c.completion_count)} done</span>
-                      <span style={{ fontSize: 10, color: "#2e3a5c" }}>{timeAgo(c.created_at)}</span>
+                      {/* For ended campaigns, surface the ACTUAL end date + why.
+                          For active campaigns, keep the "created Xd ago" hint. */}
+                      {c.status === "ended" && c.ended_at ? (() => {
+                        const endedDate = new Date(c.ended_at)
+                        const expiresDate = c.expires_at ? new Date(c.expires_at) : null
+                        // Compare CALENDAR DAYS, not 24-hour periods — "May 26 → May 28"
+                        // is humanly 2 days early even when the timestamps are
+                        // 1.6 days apart. UTC stripping avoids timezone surprises.
+                        const utcDay = (d: Date) => Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())
+                        const daysEarly = (c.ended_reason === "slots_filled" && expiresDate)
+                          ? Math.round((utcDay(expiresDate) - utcDay(endedDate)) / 86_400_000)
+                          : 0
+                        const label = c.ended_reason === "slots_filled"
+                          ? (daysEarly > 0
+                              ? `Ended ${endedDate.toLocaleDateString(undefined,{month:"short",day:"numeric"})} · ${daysEarly}d early`
+                              : `Ended ${endedDate.toLocaleDateString(undefined,{month:"short",day:"numeric"})} · full`)
+                          : `Ended ${endedDate.toLocaleDateString(undefined,{month:"short",day:"numeric"})}`
+                        return (
+                          <span style={{ fontSize: 10, color: c.ended_reason === "slots_filled" ? "#00b87a" : "#6b7da8", fontFamily: "monospace" }}>
+                            {label}
+                          </span>
+                        )
+                      })() : (
+                        <span style={{ fontSize: 10, color: "#2e3a5c" }}>{timeAgo(c.created_at)}</span>
+                      )}
                     </div>
                   </div>
                 </div>

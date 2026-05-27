@@ -4,6 +4,7 @@ import { useParams, useSearchParams } from "next/navigation"
 import ArcLayout from "@/components/ArcLayout"
 import { WalletAvatar } from "@/components/WalletAvatar"
 import { useArcStore } from "@/store/arc"
+import TvlTrackingPanel from "./TvlTrackingPanel"
 
 interface Project {
   id: number; name: string; slug: string; tagline: string; description: string
@@ -32,7 +33,7 @@ export default function DashboardPage() {
   const [loading, setLoading]       = useState(true)
   const [error, setError]           = useState("")
   const [mounted, setMounted]       = useState(false)
-  const [activeTab, setActiveTab]   = useState<"overview"|"reviews"|"private"|"forge"|"edit">("overview")
+  const [activeTab, setActiveTab]   = useState<"overview"|"reviews"|"private"|"forge"|"edit"|"tvl">("overview")
   const [forgeCampaigns, setForgeCampaigns]   = useState<any[]>([])
   const [connectedWallet, setConnectedWallet] = useState<string | null>(null)
 
@@ -503,6 +504,7 @@ export default function DashboardPage() {
               ] : []),
               ...((connectedWallet || token) ? [
                 { key: "edit",    label: "Edit Listing" },
+                { key: "tvl",     label: "TVL Tracking" },
               ] : []),
             ] as const).map(tab => (
               <button key={tab.key} onClick={() => setActiveTab(tab.key as typeof activeTab)}
@@ -1076,6 +1078,15 @@ export default function DashboardPage() {
                 </button>
               </div>
             </div>
+          )}
+
+          {activeTab === "tvl" && (
+            <TvlTrackingPanel
+              slug={slug}
+              token={token}
+              connectedWallet={connectedWallet}
+              theme={{ mono, bdr, surf, surf2, t1, t2, t3, green }}
+            />
           )}
 
         </div>

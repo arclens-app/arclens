@@ -163,22 +163,23 @@ export default function RegistryPage() {
     if (!deployerChecked) {
       setStatus("error"); setStatusMsg("Click \"Verify Contract\" first so we can confirm it exists on Arc."); return
     }
-    // Intentionally NOT blocking on `!deployer` or a client-side deployer/wallet
-    // comparison. The server re-fetches the deployer from Arc and reads the
-    // signed session cookie; it's the authority. Blocking client-side here was
-    // hiding real errors when blockscout's response didn't include a deployer
-    // field on the first try.
+
     setSubmitting(true)
     try {
-      // Make the session cookie match the connected (deployer) wallet before
-      // the server checks it — otherwise a stale cookie causes "wrong deployer".
+      // Make sure the session cookie matches the connected wallet so the
+      // server's session-binding check on /challenge passes.
       const sess = await ensureSession(wallet)
       if (!sess.ok) {
-        setStatus("error"); setStatusMsg(sess.error || "Sign in with the deployer wallet to claim."); setSubmitting(false); return
+        setStatus("error"); setStatusMsg(sess.error || "Sign in to claim."); setSubmitting(false); return
       }
 
-      const res  = await fetch("/api/verify", {
-        method:  "POST",
+      // Step 1: request a canonical signing message + opaque HMAC token.
+      // The deployer wallet does NOT need to be the one connected — we only
+      // need someone to sign the canonical message with the deployer key
+      // (which can live anywhere). For the registry's inline UX we use the
+      // connected wallet when it matches the deployer; otherwise we explain.
+      const chRes = await fetch("/api/verify/challenge", {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({
@@ -189,7 +190,49 @@ export default function RegistryPage() {
           website:     website.trim() || undefined,
           twitter:     twitter.trim() || undefined,
           email:       email.trim(),
-          source_code: source.trim() || undefined,
+        }),
+      })
+      const ch = await chRes.json()
+      if (!chRes.ok) {
+        setStatus("error"); setStatusMsg(ch.error || "Couldn't issue signing message")
+        setSubmitting(false); return
+      }
+
+      // Step 2: produce a signature. If the connected wallet IS the deployer,
+      // sign inline via personal_sign — one click. Otherwise, point the
+      // founder at the dashboard's full offline-signing flow (paste path).
+      const connLower = (wallet || "").toLowerCase()
+      const depLower = (ch.deployer || "").toLowerCase()
+      if (!ch.deployer || depLower !== connLower) {
+        setStatus("error")
+        setStatusMsg(
+          ch.deployer
+            ? `Your connected wallet doesn't match the on-chain deployer (${ch.deployer.slice(0,10)}…${ch.deployer.slice(-6)}). Either switch to that wallet and try again, or use the offline-signing flow from your project's dashboard if the deployer key lives in cold storage / a Safe multisig.`
+            : "Couldn't read the on-chain deployer (arcscan may be slow). Try again in a minute."
+        )
+        setSubmitting(false); return
+      }
+
+      const eth = (window as any).ethereum
+      if (!eth) {
+        setStatus("error"); setStatusMsg("No injected wallet found.")
+        setSubmitting(false); return
+      }
+      const signature: string = await eth.request({
+        method: "personal_sign",
+        params: [ch.message, wallet],
+      })
+
+      // Step 3: send message + signature to /api/verify.
+      const res = await fetch("/api/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          challenge_token: ch.token,
+          signed_message:  ch.message,
+          signature,
+          source_code:     source.trim() || undefined,
           warnings,
         }),
       })
@@ -202,7 +245,13 @@ export default function RegistryPage() {
       } else {
         setStatus("error"); setStatusMsg(data.error || "Submission failed")
       }
-    } catch { setStatus("error"); setStatusMsg("Network error — try again") }
+    } catch (e: any) {
+      if (e?.code === 4001) {
+        setStatus("error"); setStatusMsg("Sign request cancelled in wallet.")
+      } else {
+        setStatus("error"); setStatusMsg(e?.message || "Network error — try again")
+      }
+    }
     finally { setSubmitting(false) }
   }
 

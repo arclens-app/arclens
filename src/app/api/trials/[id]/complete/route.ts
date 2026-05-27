@@ -356,11 +356,29 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       [campaignNumericId, wallet, tx_hashes, JSON.stringify(review_answers), JSON.stringify(cleanedProofs), auto_score, contract_verified, provisionalScore]
     )
 
-    // Atomic slot increment — prevents race condition when two testers submit simultaneously
+    // Atomic slot increment — prevents race condition when two testers submit simultaneously.
+    // Also flips status to 'ended' the moment the LAST slot is filled (rather than
+    // waiting for expires_at to elapse). The "filled_slots + 1 >= total_slots" check
+    // captures the increment we're about to apply, so the transition is atomic with the
+    // increment and there's no window where filled = total but status = 'active'.
     if (campaign.total_slots) {
       const slotRes = await pool.query(
-        `UPDATE campaigns SET filled_slots = filled_slots + 1
-         WHERE id = $1 AND filled_slots < total_slots RETURNING id`,
+        `UPDATE campaigns SET
+           filled_slots = filled_slots + 1,
+           status = CASE
+             WHEN filled_slots + 1 >= total_slots THEN 'ended'
+             ELSE status
+           END,
+           ended_at = CASE
+             WHEN filled_slots + 1 >= total_slots AND ended_at IS NULL THEN NOW()
+             ELSE ended_at
+           END,
+           ended_reason = CASE
+             WHEN filled_slots + 1 >= total_slots AND ended_reason IS NULL THEN 'slots_filled'
+             ELSE ended_reason
+           END
+         WHERE id = $1 AND filled_slots < total_slots
+         RETURNING id, status, filled_slots, total_slots`,
         [campaignNumericId]
       )
       if (!slotRes.rows.length) {
