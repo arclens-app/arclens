@@ -70,8 +70,11 @@ export interface ProjectContractRow {
   label: string | null
   start_block: number
   // Volume-only metadata; null for other roles. Indexer ignores volume rows
-  // missing any of these fields and records an indexer_alerts row so the
-  // founder knows their volume config is incomplete.
+  // missing any required field for their method and records an alert.
+  //
+  //   volume_method = 'swap_event'        → requires signature+topic+amount_arg+stablecoin
+  //   volume_method = 'outflow_transfer'  → requires only stablecoin (sums Transfer-OUT)
+  volume_method?: "swap_event" | "outflow_transfer" | null
   volume_event_signature?: string | null
   volume_event_topic?: string | null
   volume_amount_arg?: number | null

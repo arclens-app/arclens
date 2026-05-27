@@ -193,16 +193,33 @@ export async function GET(req: NextRequest) {
           stats.alerts++
           continue
         }
-        if (!vc.volume_event_topic || vc.volume_amount_arg == null || !vc.volume_event_signature) {
+        // Two volume methods supported:
+        //   • 'swap_event'       → decode the founder's declared Swap event (precise)
+        //   • 'outflow_transfer' → sum USDC Transfer events FROM the contract (approximate)
+        // For backwards compatibility, NULL method is treated as 'swap_event'.
+        const method = vc.volume_method ?? "swap_event"
+        if (method === "swap_event") {
+          if (!vc.volume_event_topic || vc.volume_amount_arg == null || !vc.volume_event_signature) {
+            await recordAlert(client, vc.project_id, "volume_config", "warning",
+              `Volume contract ${vc.address}: event_signature / amount_arg / topic missing for swap_event mode — skipping.`)
+            stats.alerts++
+            continue
+          }
+          const count = await scanVolumeEvents(
+            client, provider, vc, stable, forex, targetBlock,
+          )
+          stats.newVolumeEvents += count
+        } else if (method === "outflow_transfer") {
+          const count = await scanVolumeOutflow(
+            client, provider, vc, stable, forex, targetBlock,
+          )
+          stats.newVolumeEvents += count
+        } else {
           await recordAlert(client, vc.project_id, "volume_config", "warning",
-            `Volume contract ${vc.address}: event_signature / amount_arg / topic missing — skipping.`)
+            `Volume contract ${vc.address}: unknown volume_method ${method} — skipping.`)
           stats.alerts++
           continue
         }
-        const count = await scanVolumeEvents(
-          client, provider, vc, stable, forex, targetBlock,
-        )
-        stats.newVolumeEvents += count
         stats.volumeContractsScanned++
       } catch (e: any) {
         await recordAlert(client, vc.project_id, "rpc_error", "warning",
@@ -245,7 +262,8 @@ async function loadLiveProjectContracts(client: PoolClient): Promise<ProjectCont
     `SELECT pc.id, pc.project_id, LOWER(pc.address) AS address, pc.role,
             pc.label, pc.start_block,
             pc.volume_event_signature, pc.volume_event_topic,
-            pc.volume_amount_arg, pc.volume_stablecoin_id
+            pc.volume_amount_arg, pc.volume_stablecoin_id,
+            pc.volume_method
      FROM project_contracts pc
      JOIN projects p ON p.id = pc.project_id
      WHERE pc.verified_at IS NOT NULL
@@ -701,6 +719,143 @@ async function scanVolumeEvents(
   }
 
   // One upsert per (project, day) — at most ~7 rows even on busy days.
+  for (const [k, { usdE6, count }] of insertedDeltas) {
+    const [projStr, day] = k.split("|")
+    await client.query(
+      `INSERT INTO volume_daily (project_id, day, total_usd_e6, event_count)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (project_id, day) DO UPDATE SET
+         total_usd_e6 = volume_daily.total_usd_e6 + EXCLUDED.total_usd_e6,
+         event_count  = volume_daily.event_count + EXCLUDED.event_count,
+         updated_at   = NOW()`,
+      [Number(projStr), day, usdE6.toString(), count],
+    )
+  }
+
+  await client.query(
+    `INSERT INTO indexer_cursors (kind, stablecoin_id, last_block, updated_at)
+     VALUES ($1, $2, $3, NOW())
+     ON CONFLICT (kind, stablecoin_id) DO UPDATE SET
+       last_block = GREATEST(indexer_cursors.last_block, EXCLUDED.last_block),
+       updated_at = NOW()`,
+    [cursorKind, stable.id, toBlock],
+  )
+
+  return inserted
+}
+
+// ─── VOLUME SCAN (outflow-transfer method) ───────────────────────────────────
+// Approximate but no protocol-specific event decoding. For aggregator-shape
+// contracts (Tower, 1inch, Paraswap) whose routers don't emit Swap events.
+//
+// Heuristic: every successful swap routed through the contract eventually
+// transfers stables OUT of the router back to the user. We sum those
+// Transfer-OUT events on the configured stablecoin. Over-counts internal
+// hops; UI labels the resulting number as "approximate".
+async function scanVolumeOutflow(
+  client: PoolClient,
+  provider: ethers.JsonRpcProvider,
+  vc: ProjectContractRow,
+  stable: StablecoinRow,
+  forex: ForexMap,
+  targetBlock: number,
+): Promise<number> {
+  const cursorKind = `volume_${vc.id}`
+  const curRes = await client.query<{ last_block: string }>(
+    `SELECT last_block::text FROM indexer_cursors
+     WHERE kind = $1 AND stablecoin_id = $2`,
+    [cursorKind, stable.id],
+  )
+  const cursor = curRes.rows[0] ? Number(curRes.rows[0].last_block) : 0
+  if (cursor >= targetBlock) return 0
+
+  const fromBlock = Math.max(cursor + 1, vc.start_block)
+  if (fromBlock > targetBlock) return 0
+  const toBlock = Math.min(targetBlock, fromBlock + MAX_LOG_RANGE - 1)
+
+  // Filter: Transfer events on the stablecoin where `from` = our contract.
+  // topic[1] = from-address (indexed), padded to 32 bytes.
+  const fromTopic = addressToTopic(vc.address)
+  const logs = await getLogsBisecting(
+    provider,
+    { address: stable.address, topics: [TRANSFER_TOPIC, fromTopic] },
+    fromBlock, toBlock,
+  )
+
+  if (logs.length === 0) {
+    await client.query(
+      `INSERT INTO indexer_cursors (kind, stablecoin_id, last_block, updated_at)
+       VALUES ($1, $2, $3, NOW())
+       ON CONFLICT (kind, stablecoin_id) DO UPDATE SET
+         last_block = GREATEST(indexer_cursors.last_block, EXCLUDED.last_block),
+         updated_at = NOW()`,
+      [cursorKind, stable.id, toBlock],
+    )
+    return 0
+  }
+
+  // Pre-fetch block timestamps, concurrency-gated.
+  const blockNums = Array.from(new Set(logs.map(l => l.blockNumber)))
+  const blockTimes = new Map<number, Date>()
+  await gatedAll(blockNums, 20, async n => {
+    const b = await provider.getBlock(n)
+    if (b) blockTimes.set(n, new Date(b.timestamp * 1000))
+  })
+
+  const fx = forex[stable.peg_currency] ?? forex.USD
+
+  type EventRow = [
+    proj: number, contract: number, sc: number,
+    tx: string, idx: number, blk: number, ts: Date,
+    rawStr: string, usdStr: string,
+  ]
+  const eventRows: EventRow[] = []
+  const dailyKey = (proj: number, day: string) => `${proj}|${day}`
+
+  for (const log of logs) {
+    const amount = BigInt(log.data) // unindexed value in Transfer payload
+    if (amount === BigInt(0)) continue
+    const usdE6 = toUsdE6(amount, stable.decimals, fx.rate)
+    const blockTime = blockTimes.get(log.blockNumber) ?? new Date()
+    eventRows.push([
+      vc.project_id, vc.id, stable.id,
+      log.transactionHash, log.index, log.blockNumber, blockTime,
+      amount.toString(), usdE6.toString(),
+    ])
+  }
+
+  let inserted = 0
+  const insertedDeltas = new Map<string, { usdE6: bigint; count: number }>()
+  if (eventRows.length > 0) {
+    const placeholders: string[] = []
+    const flat: any[] = []
+    eventRows.forEach((row, i) => {
+      const off = i * 9
+      placeholders.push(
+        `($${off + 1},$${off + 2},$${off + 3},$${off + 4},$${off + 5},$${off + 6},$${off + 7},$${off + 8},$${off + 9})`,
+      )
+      flat.push(...row)
+    })
+    const r = await client.query<{ project_id: number; block_time: string; amount_usd_e6: string }>(
+      `INSERT INTO volume_events
+         (project_id, contract_id, stablecoin_id, tx_hash, log_index,
+          block_number, block_time, amount_raw, amount_usd_e6)
+       VALUES ${placeholders.join(",")}
+       ON CONFLICT (tx_hash, log_index) DO NOTHING
+       RETURNING project_id, block_time::text, amount_usd_e6::text`,
+      flat,
+    )
+    inserted = r.rowCount ?? 0
+    for (const row of r.rows) {
+      const day = String(row.block_time).slice(0, 10)
+      const k = dailyKey(row.project_id, day)
+      const cur = insertedDeltas.get(k) ?? { usdE6: BigInt(0), count: 0 }
+      cur.usdE6 += BigInt(row.amount_usd_e6)
+      cur.count += 1
+      insertedDeltas.set(k, cur)
+    }
+  }
+
   for (const [k, { usdE6, count }] of insertedDeltas) {
     const [projStr, day] = k.split("|")
     await client.query(

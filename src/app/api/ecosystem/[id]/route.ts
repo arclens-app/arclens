@@ -156,7 +156,8 @@ export async function GET(
 
         const contracts = await pool.query(
           `SELECT id, address, role, label, start_block,
-                  deployer_address, verified_at, revoked_at
+                  deployer_address, verified_at, revoked_at,
+                  volume_method
            FROM project_contracts
            WHERE project_id = $1 AND verified_at IS NOT NULL AND revoked_at IS NULL
            ORDER BY role, id`,
