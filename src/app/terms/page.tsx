@@ -14,13 +14,13 @@ const sections = [
     title: "About ArcLens",
     body: `ArcLens is an independent blockchain intelligence platform providing the following services:
 
-• Block Explorer — real-time access to blocks, transactions, addresses, and gas analytics on the Arc network
 • Arc Ecosystem Directory — a curated public directory of projects building on Arc
+• Protocol Metrics — deployer-verified TVL, volume, and revenue tracking for stablecoin protocols on Arc, with hourly reconciliation against on-chain state and an auditable trail down to the transaction hash
 • Arc Trials — a testing campaign platform where builders post tasks and reward community testers in USDC
 • Events Hub — community events, hackathons, workshops, and announcements across the Arc ecosystem
-• Bridge Monitor — tracking of USDC cross-chain transfers via Circle's Cross-Chain Transfer Protocol (CCTP)
-• Contract Registry — verification and discovery of smart contracts deployed on Arc
+• Contract Registry — verification and discovery of smart contracts deployed on Arc, with deployer-signed identity claims
 • Wallet Analytics — on-chain wallet intelligence including holdings and transaction activity
+• Network Explorer — real-time access to blocks, transactions, addresses, and gas analytics on the Arc network
 • Developer Tools — RPC console and developer resources for building on Arc
 
 ArcLens is independently operated and is not affiliated with, endorsed by, or operated by Arc Network or Circle Internet Financial, Inc.`,
