@@ -28,7 +28,7 @@ ArcLens is independently operated and is not affiliated with, endorsed by, or op
   {
     id: "3",
     title: "Testnet Disclaimer",
-    body: `ArcLens currently operates primarily on Arc Testnet (Chain ID 2588). Testnet assets, transactions, and balances have no real monetary value unless explicitly stated otherwise. Blockchain data displayed on the platform is sourced from third-party nodes and may be subject to delays, inaccuracies, or gaps. ArcLens makes no warranty as to the accuracy, completeness, or timeliness of any data presented. You should independently verify all on-chain data before relying on it for any purpose.`,
+    body: `ArcLens currently operates primarily on Arc Testnet (Chain ID 5042002). Testnet assets, transactions, and balances have no real monetary value unless explicitly stated otherwise. Blockchain data displayed on the platform is sourced from third-party nodes and may be subject to delays, inaccuracies, or gaps. ArcLens makes no warranty as to the accuracy, completeness, or timeliness of any data presented. You should independently verify all on-chain data before relying on it for any purpose.`,
   },
   {
     id: "4",

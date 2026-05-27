@@ -284,17 +284,11 @@ export async function POST(req: NextRequest) {
 
     // 9. Volume-only sanity (defense in depth — same checks the /challenge
     //    endpoint already did, but values could differ if someone hand-built
-    //    a token).
+    //    a token). Two methods supported with different required fields.
     let volumeTopic: string | null = null
+    let volumeMethodFinal: "swap_event" | "outflow_transfer" = "swap_event"
     if (payload.role === "volume") {
-      const sig = payload.volume_event_signature
-      if (!sig) {
-        return NextResponse.json({ error: "Challenge payload missing volume_event_signature" }, { status: 400 })
-      }
-      const dataTypes = dataArgTypes(sig)
-      if (dataTypes.length === 0 || (payload.volume_amount_arg ?? -1) >= dataTypes.length) {
-        return NextResponse.json({ error: "Volume event arg out of range" }, { status: 400 })
-      }
+      volumeMethodFinal = payload.volume_method === "outflow_transfer" ? "outflow_transfer" : "swap_event"
       const scRes = await pool.query(
         `SELECT id FROM stablecoins WHERE id = $1 AND active = true`,
         [payload.volume_stablecoin_id],
@@ -302,7 +296,19 @@ export async function POST(req: NextRequest) {
       if (scRes.rows.length === 0) {
         return NextResponse.json({ error: "volume_stablecoin_id not in active registry" }, { status: 400 })
       }
-      volumeTopic = ethers.id(canonicalEventSignature(sig))
+      if (volumeMethodFinal === "swap_event") {
+        const sig = payload.volume_event_signature
+        if (!sig) {
+          return NextResponse.json({ error: "Challenge payload missing volume_event_signature" }, { status: 400 })
+        }
+        const dataTypes = dataArgTypes(sig)
+        if (dataTypes.length === 0 || (payload.volume_amount_arg ?? -1) >= dataTypes.length) {
+          return NextResponse.json({ error: "Volume event arg out of range" }, { status: 400 })
+        }
+        volumeTopic = ethers.id(canonicalEventSignature(sig))
+      }
+      // outflow_transfer: no event topic needed — indexer uses the standard
+      // Transfer topic and filters on `from = contract address`.
     }
 
     // 10. Resolve start_block.
@@ -322,8 +328,8 @@ export async function POST(req: NextRequest) {
       `INSERT INTO project_contracts
          (project_id, address, role, label, start_block,
           deployer_address, signed_message, deployer_sig, verified_at,
-          volume_event_signature, volume_event_topic, volume_amount_arg, volume_stablecoin_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), $9, $10, $11, $12)
+          volume_method, volume_event_signature, volume_event_topic, volume_amount_arg, volume_stablecoin_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), $9, $10, $11, $12, $13)
        ON CONFLICT (project_id, address, role) DO UPDATE SET
          label                  = COALESCE(EXCLUDED.label, project_contracts.label),
          start_block            = EXCLUDED.start_block,
@@ -332,6 +338,7 @@ export async function POST(req: NextRequest) {
          verified_at            = NOW(),
          signed_message         = EXCLUDED.signed_message,
          deployer_sig           = EXCLUDED.deployer_sig,
+         volume_method          = EXCLUDED.volume_method,
          volume_event_signature = EXCLUDED.volume_event_signature,
          volume_event_topic     = EXCLUDED.volume_event_topic,
          volume_amount_arg      = EXCLUDED.volume_amount_arg,
@@ -344,9 +351,10 @@ export async function POST(req: NextRequest) {
         onChainDeployer,
         signed_message,    // full canonical text — auditable later
         signature,         // raw signature bytes — auditable later
-        payload.role === "volume" ? payload.volume_event_signature ?? null : null,
-        payload.role === "volume" ? volumeTopic : null,
-        payload.role === "volume" ? payload.volume_amount_arg ?? null : null,
+        payload.role === "volume" ? volumeMethodFinal : null,
+        payload.role === "volume" && volumeMethodFinal === "swap_event" ? payload.volume_event_signature ?? null : null,
+        payload.role === "volume" && volumeMethodFinal === "swap_event" ? volumeTopic : null,
+        payload.role === "volume" && volumeMethodFinal === "swap_event" ? payload.volume_amount_arg ?? null : null,
         payload.role === "volume" ? payload.volume_stablecoin_id ?? null : null,
       ],
     )

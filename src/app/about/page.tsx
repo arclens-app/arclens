@@ -53,7 +53,7 @@ const FEATURES = [
 ]
 
 const STATS = [
-  { value: "Chain 2588", label: "Arc Testnet" },
+  { value: "Chain 5042002", label: "Arc Testnet" },
   { value: "USDC", label: "Native gas token" },
   { value: "< 1s", label: "Finality" },
   { value: "$0.01", label: "Avg transfer cost" },

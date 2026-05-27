@@ -153,7 +153,7 @@ export default function Home() {
           <div style={{ marginBottom: "32px" }}>
             <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "4px 10px", background: "rgba(26,86,255,0.08)", border: "1px solid rgba(26,86,255,0.15)", borderRadius: "99px", marginBottom: "14px" }}>
               <div style={{ width: "5px", height: "5px", borderRadius: "50%", background: usdc, animation: "pulse 2s infinite" }} />
-              <span style={{ fontSize: "10px", fontFamily: mono, color: "#8aaeff", letterSpacing: "0.06em" }}>Arc Testnet · Economic OS · Chain 2588</span>
+              <span style={{ fontSize: "10px", fontFamily: mono, color: "#8aaeff", letterSpacing: "0.06em" }}>Arc Testnet · Economic OS · Chain 5042002</span>
             </div>
             <div style={{ fontSize: "32px", fontWeight: 700, letterSpacing: "-0.045em", lineHeight: 1.1, marginBottom: "8px", color: t1 }}>
               Network Overview

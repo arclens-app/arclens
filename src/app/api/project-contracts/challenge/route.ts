@@ -93,7 +93,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const {
       slug, address, role, label, start_block,
-      volume_event_signature, volume_amount_arg, volume_stablecoin_id,
+      volume_method, volume_event_signature, volume_amount_arg, volume_stablecoin_id,
     } = body
 
     // Resolve & authorize the project.
@@ -119,29 +119,34 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "You don't own this project" }, { status: 403 })
     }
 
-    // Volume-only validation (same shape as the POST endpoint).
+    // Volume-only validation. Two methods supported.
+    let resolvedMethod: "swap_event" | "outflow_transfer" = "swap_event"
     if (role === "volume") {
-      if (!volume_event_signature || typeof volume_event_signature !== "string") {
-        return NextResponse.json({ error: "volume_event_signature required for role=volume" }, { status: 400 })
-      }
-      const sig = volume_event_signature.trim()
-      if (!/^[A-Za-z_][A-Za-z0-9_]*\(.*\)$/.test(sig)) {
-        return NextResponse.json({ error: "volume_event_signature malformed" }, { status: 400 })
-      }
-      const argIdx = Number(volume_amount_arg)
-      if (!Number.isFinite(argIdx) || argIdx < 0 || argIdx > 32) {
-        return NextResponse.json({ error: "volume_amount_arg must be 0-based index" }, { status: 400 })
-      }
-      const dataTypes = dataArgTypes(sig)
-      if (dataTypes.length === 0 || argIdx >= dataTypes.length) {
-        return NextResponse.json({
-          error: `volume_amount_arg=${argIdx} out of range against the non-indexed args in ${sig}`,
-        }, { status: 400 })
-      }
+      resolvedMethod = volume_method === "outflow_transfer" ? "outflow_transfer" : "swap_event"
       const scId = Number(volume_stablecoin_id)
       if (!Number.isFinite(scId)) {
         return NextResponse.json({ error: "volume_stablecoin_id required" }, { status: 400 })
       }
+      if (resolvedMethod === "swap_event") {
+        if (!volume_event_signature || typeof volume_event_signature !== "string") {
+          return NextResponse.json({ error: "volume_event_signature required for swap_event method" }, { status: 400 })
+        }
+        const sig = volume_event_signature.trim()
+        if (!/^[A-Za-z_][A-Za-z0-9_]*\(.*\)$/.test(sig)) {
+          return NextResponse.json({ error: "volume_event_signature malformed" }, { status: 400 })
+        }
+        const argIdx = Number(volume_amount_arg)
+        if (!Number.isFinite(argIdx) || argIdx < 0 || argIdx > 32) {
+          return NextResponse.json({ error: "volume_amount_arg must be 0-based index" }, { status: 400 })
+        }
+        const dataTypes = dataArgTypes(sig)
+        if (dataTypes.length === 0 || argIdx >= dataTypes.length) {
+          return NextResponse.json({
+            error: `volume_amount_arg=${argIdx} out of range against the non-indexed args in ${sig}`,
+          }, { status: 400 })
+        }
+      }
+      // outflow_transfer needs nothing else — Transfer event is universal across stablecoins.
     }
 
     const now = new Date()
@@ -153,8 +158,11 @@ export async function POST(req: NextRequest) {
       start_block: start_block != null ? Number(start_block) : null,
       label: label ? String(label).slice(0, 80) : null,
       ...(role === "volume" ? {
-        volume_event_signature: String(volume_event_signature).trim(),
-        volume_amount_arg: Number(volume_amount_arg),
+        volume_method: resolvedMethod,
+        ...(resolvedMethod === "swap_event" ? {
+          volume_event_signature: String(volume_event_signature).trim(),
+          volume_amount_arg: Number(volume_amount_arg),
+        } : {}),
         volume_stablecoin_id: Number(volume_stablecoin_id),
       } : {}),
       nonce: crypto.randomBytes(16).toString("hex"),

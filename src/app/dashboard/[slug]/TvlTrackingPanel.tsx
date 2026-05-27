@@ -101,6 +101,7 @@ export default function TvlTrackingPanel({ slug, token, connectedWallet, theme }
 
   // Volume-only subform
   const [stables, setStables] = useState<Stablecoin[]>([])
+  const [volMethod, setVolMethod] = useState<"swap_event" | "outflow_transfer">("swap_event")
   const [volPreset, setVolPreset] = useState<keyof typeof VOLUME_PRESETS>("custom")
   const [volSignature, setVolSignature] = useState("")
   const [volAmountArg, setVolAmountArg] = useState("")
@@ -181,18 +182,22 @@ export default function TvlTrackingPanel({ slug, token, connectedWallet, theme }
       return
     }
     if (role === "volume") {
-      if (!volSignature.trim() || !/^[A-Za-z_][A-Za-z0-9_]*\(.*\)$/.test(volSignature.trim())) {
-        setSubmitError('Volume needs an event signature like "Swap(address indexed sender, uint256 amount0, ...)".')
-        return
-      }
-      const argIdx = Number(volAmountArg)
-      if (!Number.isFinite(argIdx) || argIdx < 0) {
-        setSubmitError("Volume needs the index (0-based) of the amount arg in log.data.")
-        return
-      }
       if (!volStablecoinId) {
         setSubmitError("Pick the stablecoin the amount is denominated in.")
         return
+      }
+      // Swap-event method needs the canonical signature + amount arg index.
+      // Outflow-transfer method only needs the stablecoin (universal Transfer event).
+      if (volMethod === "swap_event") {
+        if (!volSignature.trim() || !/^[A-Za-z_][A-Za-z0-9_]*\(.*\)$/.test(volSignature.trim())) {
+          setSubmitError('Volume needs an event signature like "Swap(address indexed sender, uint256 amount0, ...)".')
+          return
+        }
+        const argIdx = Number(volAmountArg)
+        if (!Number.isFinite(argIdx) || argIdx < 0) {
+          setSubmitError("Volume needs the index (0-based) of the amount arg in log.data.")
+          return
+        }
       }
     }
 
@@ -206,9 +211,12 @@ export default function TvlTrackingPanel({ slug, token, connectedWallet, theme }
       }
       if (startBlock.trim()) body.start_block = Number(startBlock)
       if (role === "volume") {
-        body.volume_event_signature = volSignature.trim()
-        body.volume_amount_arg      = Number(volAmountArg)
-        body.volume_stablecoin_id   = Number(volStablecoinId)
+        body.volume_method        = volMethod
+        body.volume_stablecoin_id = Number(volStablecoinId)
+        if (volMethod === "swap_event") {
+          body.volume_event_signature = volSignature.trim()
+          body.volume_amount_arg      = Number(volAmountArg)
+        }
       }
       const res = await fetch("/api/project-contracts/challenge", {
         method: "POST",
@@ -296,6 +304,8 @@ export default function TvlTrackingPanel({ slug, token, connectedWallet, theme }
       setAddr("")
       setLabel("")
       setStartBlock("")
+      setVolMethod("swap_event")
+      setVolPreset("custom")
       setVolSignature("")
       setVolAmountArg("")
       setVolStablecoinId("")
@@ -539,9 +549,26 @@ export default function TvlTrackingPanel({ slug, token, connectedWallet, theme }
               gap: "12px",
             }}>
               <div style={{ fontSize: "11px", fontFamily: mono, color: "#8aaeff", letterSpacing: "0.05em", lineHeight: 1.6 }}>
-                Volume tracking is precise: we decode your protocol&apos;s own Swap event from chain logs.
-                Pick a common pattern below — or choose Custom and paste your signature directly.
+                Two ways to track volume on Arc. Pick the one that fits your contract.
               </div>
+              <div>
+                <label style={labelStyle}>Tracking method</label>
+                <select
+                  value={volMethod}
+                  onChange={e => setVolMethod(e.target.value as "swap_event" | "outflow_transfer")}
+                  style={{ ...inputStyle, cursor: "pointer" }}
+                  disabled={submitting}
+                >
+                  <option value="swap_event">Swap event — precise. Your contract emits a Swap log per trade.</option>
+                  <option value="outflow_transfer">Outflow Transfer — approximate. For aggregators / routers without Swap events.</option>
+                </select>
+                <div style={{ fontSize: "10px", fontFamily: mono, color: t3, marginTop: "6px", lineHeight: 1.6 }}>
+                  {volMethod === "swap_event"
+                    ? "Decodes your declared Swap event. Cards show ✓ swap-event precise."
+                    : "Sums stablecoin Transfer events leaving your router. Approximate — cards show “Outflow method” badge. Best for aggregators (Tower, 1inch, Paraswap) whose router contracts don’t emit Swap events."}
+                </div>
+              </div>
+              {volMethod === "swap_event" && (
               <div>
                 <label style={labelStyle}>What does your protocol look like?</label>
                 <select
@@ -560,34 +587,39 @@ export default function TvlTrackingPanel({ slug, token, connectedWallet, theme }
                   </div>
                 )}
               </div>
-              <div>
-                <label style={labelStyle}>Event signature</label>
-                <input
-                  value={volSignature}
-                  onChange={e => { setVolSignature(e.target.value); setVolPreset("custom") }}
-                  placeholder='Swap(address indexed sender, uint256 amount0, ...)'
-                  style={{ ...inputStyle, fontSize: "12px" }}
-                  disabled={submitting}
-                />
-                {volSignature && topicForSignature(volSignature) && (
-                  <div style={{ fontSize: "10px", fontFamily: mono, color: t3, marginTop: "6px", wordBreak: "break-all", lineHeight: 1.5 }}>
-                    Topic[0]: <span style={{ color: t2 }}>{topicForSignature(volSignature)}</span>
-                    <br />
-                    <span style={{ color: t3 }}>↑ This is the hash we filter chain logs for. It should match what your contract actually emits.</span>
-                  </div>
-                )}
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "120px 1fr", gap: "10px" }}>
+              )}
+              {volMethod === "swap_event" && (
                 <div>
-                  <label style={labelStyle}>Amount arg #</label>
+                  <label style={labelStyle}>Event signature</label>
                   <input
-                    value={volAmountArg}
-                    onChange={e => setVolAmountArg(e.target.value.replace(/[^0-9]/g, ""))}
-                    placeholder="1"
-                    style={inputStyle}
+                    value={volSignature}
+                    onChange={e => { setVolSignature(e.target.value); setVolPreset("custom") }}
+                    placeholder='Swap(address indexed sender, uint256 amount0, ...)'
+                    style={{ ...inputStyle, fontSize: "12px" }}
                     disabled={submitting}
                   />
+                  {volSignature && topicForSignature(volSignature) && (
+                    <div style={{ fontSize: "10px", fontFamily: mono, color: t3, marginTop: "6px", wordBreak: "break-all", lineHeight: 1.5 }}>
+                      Topic[0]: <span style={{ color: t2 }}>{topicForSignature(volSignature)}</span>
+                      <br />
+                      <span style={{ color: t3 }}>↑ This is the hash we filter chain logs for. It should match what your contract actually emits.</span>
+                    </div>
+                  )}
                 </div>
+              )}
+              <div style={{ display: "grid", gridTemplateColumns: volMethod === "swap_event" ? "120px 1fr" : "1fr", gap: "10px" }}>
+                {volMethod === "swap_event" && (
+                  <div>
+                    <label style={labelStyle}>Amount arg #</label>
+                    <input
+                      value={volAmountArg}
+                      onChange={e => setVolAmountArg(e.target.value.replace(/[^0-9]/g, ""))}
+                      placeholder="1"
+                      style={inputStyle}
+                      disabled={submitting}
+                    />
+                  </div>
+                )}
                 <div>
                   <label style={labelStyle}>Denominated in</label>
                   <select
@@ -605,10 +637,19 @@ export default function TvlTrackingPanel({ slug, token, connectedWallet, theme }
                   </select>
                 </div>
               </div>
-              <div style={{ fontSize: "10px", fontFamily: mono, color: t3, lineHeight: 1.6 }}>
-                If your event has indexed args, supply the <em>non-indexed subset</em> as the signature.
-                The amount index counts from 0 across the args that appear in <code>log.data</code>.
-              </div>
+              {volMethod === "swap_event" && (
+                <div style={{ fontSize: "10px", fontFamily: mono, color: t3, lineHeight: 1.6 }}>
+                  If your event has indexed args, supply the <em>non-indexed subset</em> as the signature.
+                  The amount index counts from 0 across the args that appear in <code>log.data</code>.
+                </div>
+              )}
+              {volMethod === "outflow_transfer" && (
+                <div style={{ fontSize: "10px", fontFamily: mono, color: t3, lineHeight: 1.6 }}>
+                  We&apos;ll count every stablecoin Transfer event with <code>from = {addr ? addr.slice(0,10)+"…" : "your contract"}</code>.
+                  No on-chain event from your contract is required. The resulting volume is an approximation
+                  (over-counts internal hops) and the project page will show an <em>Outflow method · approximate</em> badge.
+                </div>
+              )}
             </div>
           )}
 

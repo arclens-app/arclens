@@ -396,7 +396,7 @@ export default function AddressPage() {
               {[
                 { label:"Full Address",   value:addr },
                 { label:"Account Type",   value:isContract?"Smart Contract":"Wallet (user account)" },
-                { label:"Network",        value:"Arc Testnet (Chain ID 2588)" },
+                { label:"Network",        value:"Arc Testnet (Chain ID 5042002)" },
                 { label:"USDC Balance",   value:usdcBal },
                 { label:"Transactions",   value:txCount||"—" },
                 ...(contractName?[{ label:"Contract Name", value:contractName }]:[]),

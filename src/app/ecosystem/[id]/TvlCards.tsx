@@ -19,6 +19,7 @@ interface Contract {
   deployer_address: string | null
   verified_at: string
   revoked_at: string | null
+  volume_method?: "swap_event" | "outflow_transfer" | null
 }
 
 interface SnapshotPoint {
@@ -393,7 +394,22 @@ export default function TvlCards({ project, tvl, theme, slug }: Props) {
       )}
 
       {/* ── VOLUME CARD ── */}
-      {volCumFmt && (
+      {volCumFmt && (() => {
+        // The honesty badge depends on HOW we computed this number. If any
+        // of the volume contracts use outflow_transfer, we mark the whole
+        // number as approximate so analysts can adjust confidence.
+        const hasOutflow = volContracts.some(c => c.volume_method === "outflow_transfer")
+        const hasSwapEvent = volContracts.some(c => c.volume_method !== "outflow_transfer")
+        const mixed = hasOutflow && hasSwapEvent
+        const badge = hasOutflow && !hasSwapEvent
+          ? { label: "Outflow method · approximate", bg: "rgba(224,136,16,0.08)", color: "#e08810", border: "rgba(224,136,16,0.3)",
+              title: "Computed by summing stablecoin Transfer events FROM the contract. Over-counts internal hops; designed for aggregators / routers without on-chain Swap events." }
+          : mixed
+          ? { label: "Mixed methods · partly approximate", bg: "rgba(224,136,16,0.08)", color: "#e08810", border: "rgba(224,136,16,0.3)",
+              title: "Some contracts use Swap events (precise), others use the outflow-transfer method (approximate). Click breakdown for per-contract method." }
+          : { label: "✓ swap-event precise", bg: "rgba(0,184,122,0.08)", color: USDC_GREEN, border: "rgba(0,184,122,0.25)",
+              title: "Counted from the protocol's own Swap event — exact ABI-decoded amounts." }
+        return (
         <div style={{ background: surf, border: "1px solid " + bdr, borderRadius: "14px", padding: "22px 26px", display: "flex", flexDirection: "column", gap: "14px" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px" }}>
             <div style={{ fontSize: "10px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.1em" }}>
@@ -401,10 +417,10 @@ export default function TvlCards({ project, tvl, theme, slug }: Props) {
             </div>
             <span style={{
               fontSize: "8.5px", fontFamily: mono, padding: "2px 7px", borderRadius: "4px",
-              background: "rgba(0,184,122,0.08)", color: USDC_GREEN,
-              border: "1px solid rgba(0,184,122,0.25)",
-            }} title="Counted from the protocol's own Swap event — not from Transfer outflows">
-              ✓ swap-event precise
+              background: badge.bg, color: badge.color,
+              border: "1px solid " + badge.border,
+            }} title={badge.title}>
+              {badge.label}
             </span>
           </div>
 
@@ -438,7 +454,8 @@ export default function TvlCards({ project, tvl, theme, slug }: Props) {
             )}
           </div>
         </div>
-      )}
+        )
+      })()}
 
       {/* ── REVENUE CARD ── */}
       {revCumFmt && (

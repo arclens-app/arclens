@@ -67,7 +67,7 @@ export default function NotFound() {
           {/* Chain info */}
           <div style={{ marginTop: "40px", padding: "12px 20px", background: "var(--surf, #0a0e1a)", border: "1px solid var(--bdr, rgba(255,255,255,0.06))", borderRadius: "10px", display: "inline-flex", alignItems: "center", gap: "16px" }}>
             <div style={{ fontSize: "9.5px", fontFamily: "'DM Mono', monospace", color: "var(--t3, #2e3a5c)", textAlign: "left" }}>
-              <div style={{ marginBottom: "2px" }}>Chain ID <span style={{ color: "var(--t2, #6b7da8)" }}>2588</span></div>
+              <div style={{ marginBottom: "2px" }}>Chain ID <span style={{ color: "var(--t2, #6b7da8)" }}>5042002</span></div>
               <div>Gas token <span style={{ color: "#00b87a" }}>USDC</span></div>
             </div>
             <div style={{ width: "1px", height: "28px", background: "var(--bdr, rgba(255,255,255,0.06))" }} />

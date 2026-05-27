@@ -109,7 +109,10 @@ export interface ChallengePayload {
   role: "tvl" | "revenue" | "treasury" | "volume"
   start_block?: number | null
   label?: string | null
-  // Volume-only — keep undefined when role !== 'volume'
+  // Volume-only — keep undefined when role !== 'volume'.
+  // volume_method = 'swap_event' (default) requires signature+arg+stablecoin.
+  // volume_method = 'outflow_transfer' requires only stablecoin.
+  volume_method?: "swap_event" | "outflow_transfer"
   volume_event_signature?: string
   volume_amount_arg?: number
   volume_stablecoin_id?: number
@@ -132,6 +135,7 @@ export function buildChallengeMessage(p: ChallengePayload): string {
   if (p.label) lines.push(`label: ${p.label}`)
   if (p.start_block != null) lines.push(`start_block: ${p.start_block}`)
   if (p.role === "volume") {
+    if (p.volume_method) lines.push(`volume_method: ${p.volume_method}`)
     if (p.volume_event_signature) lines.push(`volume_event_signature: ${p.volume_event_signature}`)
     if (p.volume_amount_arg != null) lines.push(`volume_amount_arg: ${p.volume_amount_arg}`)
     if (p.volume_stablecoin_id != null) lines.push(`volume_stablecoin_id: ${p.volume_stablecoin_id}`)

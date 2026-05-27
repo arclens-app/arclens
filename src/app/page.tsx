@@ -379,6 +379,9 @@ export default function HomePage() {
   const [tps, setTps]                   = useState("...")
   const [gasCost, setGasCost]           = useState("$0.011")
   const [recentBlocks, setRecentBlocks] = useState<any[]>([])
+  // Live finality — average inter-block time over the most recent 5 blocks.
+  // Defaults to "—" until the first RPC pass; then becomes a real "Xs" value.
+  const [finalityLive, setFinalityLive] = useState("—")
 
   useEffect(() => {
     setMounted(true)
@@ -415,6 +418,12 @@ export default function HomePage() {
         if (blocks.length >= 2) {
           const span = blocks[0].timestamp - blocks[blocks.length - 1].timestamp
           if (span > 0) setTps((blocks.reduce((s: number, b: any) => s + b.txCount, 0) / span).toFixed(1))
+          // Average block time across the sampled blocks. Sub-second on Arc,
+          // so we always show one decimal place even when the integer would round to 0.
+          const avgBlockTime = span / (blocks.length - 1)
+          if (avgBlockTime > 0 && Number.isFinite(avgBlockTime)) {
+            setFinalityLive(avgBlockTime < 10 ? avgBlockTime.toFixed(2) + "s" : Math.round(avgBlockTime) + "s")
+          }
         }
         setRecentBlocks(blocks.slice(0, 4))
       } catch { /* ignore */ }
@@ -434,12 +443,11 @@ export default function HomePage() {
   const featured    = projects.filter(p => p.featured).slice(0, 3)
   const builderCnt  = projects.length
   const cityCnt     = [...new Set(projects.filter((p: any) => p.city).map((p: any) => p.city))].length
-  const finality    = "0.82s"
 
   const tickers = [
     `${gasCost} to transfer any USDC amount`,
     `${tps} transactions per second`,
-    `${finality} average finality`,
+    `${finalityLive} average block time`,
     `${builderCnt} builders live on testnet`,
     "Gas paid in USDC — not ETH",
     "Sub-second confirmations, every time",
@@ -479,7 +487,7 @@ export default function HomePage() {
           }}>
             <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "5px 12px", background: "rgba(26,86,255,0.1)", border: "1px solid rgba(26,86,255,0.2)", borderRadius: "99px", marginBottom: "28px" }}>
               <div style={{ width: "5px", height: "5px", borderRadius: "50%", background: usdc, animation: "hpulse 2s infinite" }} />
-              <span style={{ fontSize: "10px", fontFamily: mono, color: link, letterSpacing: "0.08em" }}>Arc Testnet · Chain 2588 · Live</span>
+              <span style={{ fontSize: "10px", fontFamily: mono, color: link, letterSpacing: "0.08em" }}>Arc Testnet · Chain 5042002 · Live</span>
             </div>
 
             <h1 style={{ fontSize: "clamp(30px,3.8vw,58px)", fontWeight: 800, letterSpacing: "-0.05em", lineHeight: 1.04, color: "#e8ecff", margin: "0 0 22px" }}>
@@ -522,17 +530,17 @@ export default function HomePage() {
           <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: "100px", background: "linear-gradient(to top, #060812, transparent)", pointerEvents: "none", zIndex: 2 }} />
         </div>
 
-        {/* ── STATS — big numbers, no boxes ────────────── */}
+        {/* ── STATS — big numbers, no boxes. Every value here is computed
+              from the live chain or the live DB — no hardcoded fakes. */}
         <div style={{ borderTop: `1px solid ${bdr}`, borderBottom: `1px solid ${bdr}` }}>
-          <div style={{ maxWidth: "1200px", margin: "0 auto", display: "grid", gridTemplateColumns: isMobile ? "repeat(2,1fr)" : "repeat(4,1fr)" }}>
+          <div style={{ maxWidth: "1200px", margin: "0 auto", display: "grid", gridTemplateColumns: isMobile ? "repeat(3,1fr)" : "repeat(3,1fr)" }}>
             {[
               { label: "Cost to send any USDC",  value: gasCost,         color: usdc,  sub: "Flat. In dollars. Always."  },
-              { label: "Average finality",        value: finality,        color: link,  sub: "Faster than a card swipe."  },
+              { label: "Average block time",      value: finalityLive,    color: link,  sub: "Faster than a card swipe."  },
               { label: "Active builders",         value: `${builderCnt}`, color: usdc,  sub: `across ${cityCnt} cities`   },
-              { label: "USDC settled today",      value: "$2.14M",        color: link,  sub: "Real economic activity."    },
-            ].map((s, i) => (
-              <div key={i} style={{ padding: "44px 32px", textAlign: "center", borderRight: i < 3 ? `1px solid ${bdr}` : "none" }} className="hp-stat-cell">
-                <div style={{ fontSize: "42px", fontWeight: 800, letterSpacing: "-0.05em", color: s.color, lineHeight: 1, marginBottom: "12px" }}>{s.value}</div>
+            ].map((s, i, arr) => (
+              <div key={i} style={{ padding: isMobile ? "28px 12px" : "44px 32px", textAlign: "center", borderRight: i < arr.length - 1 ? `1px solid ${bdr}` : "none" }} className="hp-stat-cell">
+                <div style={{ fontSize: isMobile ? "28px" : "42px", fontWeight: 800, letterSpacing: "-0.05em", color: s.color, lineHeight: 1, marginBottom: "12px" }}>{s.value}</div>
                 <div style={{ fontSize: "9px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "4px" }}>{s.label}</div>
                 <div style={{ fontSize: "11px", color: t2 }}>{s.sub}</div>
               </div>
@@ -619,7 +627,7 @@ export default function HomePage() {
               Every other chain forces you to hold a volatile asset just to pay fees. Arc uses USDC as its native gas token. Costs are predictable, always in dollars, zero ETH exposure required.
             </p>
             <div style={{ display: "flex", gap: "36px" }}>
-              {[{ v: gasCost, l: "per transfer" }, { v: finality, l: "finality" }, { v: tps, l: "TPS live" }].map((s, i) => (
+              {[{ v: gasCost, l: "per transfer" }, { v: finalityLive, l: "block time" }, { v: tps, l: "TPS live" }].map((s, i) => (
                 <div key={i}>
                   <div style={{ fontSize: "24px", fontWeight: 800, color: i % 2 === 0 ? usdc : link, letterSpacing: "-0.04em" }}>{s.v}</div>
                   <div style={{ fontSize: "10px", fontFamily: mono, color: t3, marginTop: "4px" }}>{s.l}</div>
