@@ -12,9 +12,9 @@ const geist = Geist({ subsets: ["latin"], variable: "--font-geist" })
 const geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-geist-mono" })
 
 export const metadata: Metadata = {
-  title: "ArcLens — Arc Testnet Explorer",
-  description: "The block explorer + ecosystem hub built for Arc builders. Live blocks, transactions, USDC gas tracker and ecosystem directory.",
-  keywords: ["Arc", "Arc Testnet", "USDC", "blockchain explorer", "Circle", "ArcLens", "arclenz"],
+  title: "ArcLens — The Arc Ecosystem Hub",
+  description: "Deployer-verified TVL, volume, and revenue tracking for stablecoin protocols on Arc — plus the ecosystem directory, trial campaigns, and network explorer.",
+  keywords: ["Arc", "ArcLens", "TVL", "stablecoin", "stablecoin DEX", "DeFi", "Circle", "USDC", "ecosystem", "arclenz"],
   icons: {
     icon: [
       { url: "/favicon-32x32.png", sizes: "32x32", type: "image/png" },
@@ -26,8 +26,8 @@ export const metadata: Metadata = {
     ],
   },
   openGraph: {
-    title: "ArcLens — Arc Testnet Explorer",
-    description: "The block explorer + ecosystem hub built for Arc builders.",
+    title: "ArcLens — The Arc Ecosystem Hub",
+    description: "Deployer-verified TVL, volume, and revenue tracking for stablecoin protocols on Arc — plus ecosystem directory, trial campaigns, and network explorer.",
     url: "https://arclenz.xyz",
     siteName: "ArcLens",
     images: [
@@ -42,8 +42,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "ArcLens — Arc Testnet Explorer",
-    description: "The block explorer + ecosystem hub built for Arc builders.",
+    title: "ArcLens — The Arc Ecosystem Hub",
+    description: "Deployer-verified TVL, volume, and revenue tracking for stablecoin protocols on Arc — plus ecosystem directory, trial campaigns, and network explorer.",
     images: ["https://arclenz.xyz/og-image.png"],
     creator: "@arclens_app",
     site: "@arclens_app",

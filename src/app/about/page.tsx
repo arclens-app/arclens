@@ -3,16 +3,16 @@ import ArcLayout from "@/components/ArcLayout"
 
 const FEATURES = [
   {
-    icon: "◈",
-    title: "Block Explorer",
-    desc: "Real-time blocks, transactions, addresses, and gas analytics. Search any wallet, transaction hash, or contract on the Arc network.",
-    color: "#1a56ff",
-  },
-  {
     icon: "◎",
     title: "Arc Ecosystem Directory",
     desc: "The definitive public directory of every project building on Arc. Filter by category, discover teams, and track project activity on a live 3D globe.",
     color: "#00b87a",
+  },
+  {
+    icon: "▲",
+    title: "Protocol Metrics",
+    desc: "Deployer-verified TVL, volume, and cumulative revenue for stablecoin protocols on Arc. Every number is exact (no oracle estimation), auditable down to the tx hash, and the indexer reconciles to chain hourly.",
+    color: "#d4a447",
   },
   {
     icon: "✦",
@@ -27,15 +27,9 @@ const FEATURES = [
     color: "#a855f7",
   },
   {
-    icon: "⇄",
-    title: "Bridge Monitor",
-    desc: "Track USDC flowing in and out of Arc via Circle's Cross-Chain Transfer Protocol (CCTP) across all supported networks.",
-    color: "#00d990",
-  },
-  {
     icon: "✦",
     title: "Contract Registry",
-    desc: "Verify, submit, and discover smart contracts deployed on Arc. Source code verification and ABI lookup for builders.",
+    desc: "Verify, submit, and discover smart contracts deployed on Arc. Deployer-signed claims so identity is never spoofable.",
     color: "#e08810",
   },
   {
@@ -43,6 +37,12 @@ const FEATURES = [
     title: "Wallet Analytics",
     desc: "Top USDC holders, whale transaction monitoring, and active wallet intelligence across the Arc network.",
     color: "#ec4899",
+  },
+  {
+    icon: "◈",
+    title: "Network Explorer",
+    desc: "Real-time blocks, transactions, addresses, and gas analytics. One of many surfaces — useful, not the headline.",
+    color: "#1a56ff",
   },
   {
     icon: "⌘",
@@ -123,7 +123,7 @@ export default function AboutPage() {
                 Make Arc legible<br />to the world.
               </h2>
               <p style={{ fontSize: "14px", color: t2, lineHeight: 1.8, margin: "0 0 16px", fontWeight: 300 }}>
-                Block explorers are usually afterthoughts — bare tables of raw data. ArcLens is built differently. Every number is translated into dollars. Every project is discoverable. Every builder has a profile the community can engage with.
+                ArcLens isn&apos;t a block explorer with an ecosystem bolted on. It&apos;s the ecosystem and intelligence layer for Arc — protocol metrics, project directory, trial campaigns, and reputation all in one place. The explorer is one of many surfaces, useful but not the headline.
               </p>
               <p style={{ fontSize: "14px", color: t2, lineHeight: 1.8, margin: 0, fontWeight: 300 }}>
                 Arc's vision is a financial system built on USDC. ArcLens is the intelligence layer that makes that vision visible.

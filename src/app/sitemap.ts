@@ -20,7 +20,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${BASE}/search`,      priority: 0.5,  changeFrequency: "weekly"  },
     { url: `${BASE}/start`,       priority: 0.6,  changeFrequency: "monthly" },
     { url: `${BASE}/node-guide`,  priority: 0.5,  changeFrequency: "monthly" },
-    { url: `${BASE}/bridge`,      priority: 0.5,  changeFrequency: "monthly" },
   ]
 
   let projectRoutes: MetadataRoute.Sitemap = []

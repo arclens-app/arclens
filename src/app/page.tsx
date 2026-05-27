@@ -488,7 +488,7 @@ export default function HomePage() {
             </h1>
 
             <p style={{ fontSize: "14px", color: t2, marginBottom: "12px", lineHeight: 1.75, fontWeight: 300, maxWidth: "400px" }}>
-              ArcLens is the financial intelligence layer for Arc — block explorer, ecosystem directory, events hub, bridge monitor, contract registry, and wallet analytics.
+              ArcLens is the financial intelligence layer for Arc — ecosystem directory, protocol metrics, trial campaigns, events hub, contract registry, wallet analytics, and network explorer.
             </p>
 
             <div style={{ fontSize: "13px", color: t2, marginBottom: "36px", fontWeight: 300 }}>
