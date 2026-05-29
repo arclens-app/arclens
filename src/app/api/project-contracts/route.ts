@@ -23,7 +23,8 @@ import { ARC_RPC_HTTP } from "@/lib/constants"
 import { canonicalEventSignature, dataArgTypes } from "@/lib/tvl"
 import {
   buildChallengeMessage,
-  verifyDeployerSignature,
+  verifyAuthorizedSigner,
+  type AuthorizedCandidate,
   type ChallengePayload,
 } from "@/lib/deployerSig"
 
@@ -58,6 +59,76 @@ async function fetchDeployer(addr: string): Promise<string | null> {
     }
   } catch {}
   return null
+}
+
+// The EOA that SENT the contract-creation transaction. For factory deploys the
+// arcscan `creator_address_hash` is the factory CONTRACT, but the tx sender is
+// the founder's wallet that triggered it — still strong proof of authority.
+async function fetchCreationTxSender(addr: string): Promise<string | null> {
+  try {
+    const res = await fetch(`${ARCSCAN}/addresses/${addr}`, {
+      headers: { Accept: "application/json" },
+      next: { revalidate: 300 },
+    })
+    if (!res.ok) return null
+    const d = await res.json()
+    const txHash = d?.creation_tx_hash || d?.creation_transaction_hash
+    if (!txHash) return null
+    const txRes = await fetch(`${ARCSCAN}/transactions/${txHash}`, {
+      headers: { Accept: "application/json" },
+      next: { revalidate: 300 },
+    })
+    if (!txRes.ok) return null
+    const tx = await txRes.json()
+    const from = tx?.from?.hash || tx?.from
+    return from ? String(from).toLowerCase() : null
+  } catch {}
+  return null
+}
+
+// EIP-1967 admin storage slot: keccak256("eip1967.proxy.admin") - 1.
+const EIP1967_ADMIN_SLOT = "0xb53127684a568b3173ae13b9f8a6016e243e63b6e8ee1178d6a717850b5d6103"
+const AUTHORITY_ABI = [
+  "function owner() view returns (address)",
+  "function getOwner() view returns (address)",
+  "function admin() view returns (address)",
+]
+
+// Resolve the SET of addresses authorized to claim this contract — the
+// plug-and-play proof ladder. Every entry is read authoritatively from chain
+// or explorer (never from the request). Order is informational; the verifier
+// accepts a signature from ANY of them.
+async function resolveAuthorizedSigners(
+  addr: string,
+  provider: ethers.JsonRpcProvider,
+): Promise<AuthorizedCandidate[]> {
+  const out: AuthorizedCandidate[] = []
+  const seen = new Set<string>()
+  const add = (a: string | null | undefined, method: string) => {
+    if (!a) return
+    const low = a.toLowerCase()
+    if (!/^0x[0-9a-f]{40}$/.test(low) || low === ethers.ZeroAddress.toLowerCase()) return
+    if (seen.has(low)) return
+    seen.add(low)
+    out.push({ address: low, method })
+  }
+
+  // A — direct CREATE creator (EOA for normal deploys; factory for the rest).
+  add(await fetchDeployer(addr), "deployer")
+  // B — creation-tx sender EOA (the founder's wallet behind a factory deploy).
+  add(await fetchCreationTxSender(addr), "deployer_tx_sender")
+  // C — current on-chain authority: owner()/getOwner()/admin().
+  const c = new ethers.Contract(addr, AUTHORITY_ABI, provider)
+  for (const [fn, method] of [["owner", "owner"], ["getOwner", "owner"], ["admin", "admin"]] as const) {
+    try { add(await (c as any)[fn](), method) } catch { /* not exposed */ }
+  }
+  // D — EIP-1967 proxy admin slot.
+  try {
+    const raw = await provider.getStorage(addr, EIP1967_ADMIN_SLOT)
+    if (raw && raw !== "0x" && BigInt(raw) !== BigInt(0)) add("0x" + raw.slice(-40), "proxy_admin")
+  } catch { /* not a proxy */ }
+
+  return out
 }
 
 async function fetchCreationBlock(addr: string): Promise<number | null> {
@@ -254,33 +325,35 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // 7. Fetch the on-chain deployer authoritatively from arcscan — never
-    //    accept a client-supplied deployer.
-    const onChainDeployer = await fetchDeployer(payload.contract_address)
-    if (!onChainDeployer) {
+    // 7. Resolve the SET of addresses authorized to claim this contract — read
+    //    authoritatively from chain/explorer, never from the request. This is
+    //    the plug-and-play proof ladder: direct creator, creation-tx sender
+    //    (factory deploys), owner()/admin(), and proxy admin slot.
+    const authorizedSigners = await resolveAuthorizedSigners(payload.contract_address, provider)
+    if (authorizedSigners.length === 0) {
       return NextResponse.json(
-        { error: "Couldn't verify the deployer on Arc. The contract may not be indexed yet, or arcscan is unreachable." },
+        { error: "Couldn't resolve any on-chain authority for this contract on Arc. It may not be indexed yet, or arcscan is unreachable." },
         { status: 502 },
       )
     }
 
-    // 8. Verify the off-chain signature against the on-chain deployer.
-    //    Tries EOA personal_sign first; falls back to EIP-1271 if the deployer
-    //    is itself a contract (Safe multisig and friends).
-    const sigCheck = await verifyDeployerSignature(
-      signed_message, signature, onChainDeployer, provider,
+    // 8. Verify the off-chain signature against ANY authorized signer.
+    //    EOA personal_sign first; EIP-1271 fallback for contract-wallet signers.
+    const sigCheck = await verifyAuthorizedSigner(
+      signed_message, signature, authorizedSigners, provider,
     )
     if (!sigCheck.ok) {
       return NextResponse.json(
         {
-          error: `Signature did not match the on-chain deployer ${onChainDeployer.slice(0, 10)}…${onChainDeployer.slice(-6)}. ${sigCheck.reason ?? ""}`,
-          method: sigCheck.method,
+          error: `Signature didn't match any authorized signer for this contract. ${sigCheck.reason ?? ""}`,
           recovered: sigCheck.recovered,
-          deployer: onChainDeployer,
+          accepted_signers: authorizedSigners,
         },
         { status: 403 },
       )
     }
+    // The specific address + rung that authorized the claim (for audit + badge).
+    const authorizedBy = sigCheck.matched ?? authorizedSigners[0].address
 
     // 9. Volume-only sanity (defense in depth — same checks the /challenge
     //    endpoint already did, but values could differ if someone hand-built
@@ -348,7 +421,7 @@ export async function POST(req: NextRequest) {
         project.id, addr, role,
         label ?? null,
         sb,
-        onChainDeployer,
+        authorizedBy,      // the on-chain authority that proved the claim
         signed_message,    // full canonical text — auditable later
         signature,         // raw signature bytes — auditable later
         payload.role === "volume" ? volumeMethodFinal : null,
@@ -370,8 +443,9 @@ export async function POST(req: NextRequest) {
       address: addr,
       role,
       start_block: sb,
-      deployer: onChainDeployer,
-      verification_method: sigCheck.method,  // 'eoa' or 'eip1271' for audit
+      deployer: authorizedBy,
+      verification_method: sigCheck.method,  // which rung matched: deployer / deployer_tx_sender / owner / admin / proxy_admin
+      verification_proof: sigCheck.proof,    // 'eoa' or 'eip1271'
       message: "Tracked. The indexer picks it up on the next cron tick (≤5 min).",
     })
   } catch (e: any) {
