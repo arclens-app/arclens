@@ -2,6 +2,8 @@
 import { useEffect, useState, useRef } from "react"
 import { useArcStore } from "@/store/arc"
 import { detectWallets, EIP6963Provider } from "@/context/web3modal"
+import ArcLensAI from "@/components/ArcLensAI"
+import WalletPanel from "@/components/WalletPanel"
 
 const NAV = [
   { section: "EXPLORER", items: [
@@ -44,6 +46,8 @@ export default function ArcLayout({ children, active }: { children: React.ReactN
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [copied, setCopied]           = useState(false)
 
+  // Wallet funds panel (expands from the connected chip)
+  const [walletPanelOpen, setWalletPanelOpen] = useState(false)
   // Connect modal state
   const [showConnectModal, setShowConnectModal] = useState(false)
   const [connectView, setConnectView]           = useState<"choose" | "wallets" | "email" | "otp" | "pin">("choose")
@@ -750,7 +754,7 @@ export default function ArcLayout({ children, active }: { children: React.ReactN
               </div>
               {walletBal && <div style={{ fontSize: "13px", fontWeight: 700, color: usdc, letterSpacing: "-0.02em", marginBottom: "6px" }}>{walletBal} USDC</div>}
               <div style={{ display: "flex", gap: "6px", marginBottom: "8px" }}>
-                <button onClick={() => { window.location.href = "/address/" + walletAddr; setSidebarOpen(false) }}
+                <button onClick={() => { setWalletPanelOpen(true); setSidebarOpen(false) }}
                   style={{ flex: 1, height: "26px", background: "rgba(0,184,122,0.08)", color: usdc, fontSize: "10px", fontFamily: mono, border: "1px solid rgba(0,184,122,0.2)", borderRadius: "5px", cursor: "pointer" }}>
                   My Wallet
                 </button>
@@ -875,7 +879,7 @@ export default function ArcLayout({ children, active }: { children: React.ReactN
           {/* WALLET — compact topbar button */}
           {connected && walletAddr ? (
             <div style={{ display: "flex", alignItems: "center", gap: "2px", flexShrink: 0 }}>
-              <button onClick={() => { window.location.href = "/address/" + walletAddr }}
+              <button onClick={() => setWalletPanelOpen(true)} title="Wallet · balances & send"
                 style={{ height: "30px", padding: "0 10px", background: "rgba(0,184,122,0.08)", color: usdc, fontSize: "11px", fontFamily: mono, border: "1px solid rgba(0,184,122,0.2)", borderRadius: "6px 0 0 6px", cursor: "pointer", display: "flex", alignItems: "center", gap: "5px" }}>
                 <div style={{ width: "5px", height: "5px", borderRadius: "50%", background: usdc, flexShrink: 0 }} />
                 {walletAddr.slice(0,6)}...{walletAddr.slice(-4)}
@@ -1235,6 +1239,20 @@ export default function ArcLayout({ children, active }: { children: React.ReactN
           .hide-sm { display: none !important; }
         }
       `}</style>
+
+      {/* Pervasive AI overlay — floating button + ⌘K + chat panel, on every page. */}
+      <ArcLensAI />
+
+      {/* Wallet funds panel — balances + send/receive, opened from the connected chip. */}
+      {walletAddr && (
+        <WalletPanel
+          open={walletPanelOpen}
+          onClose={() => setWalletPanelOpen(false)}
+          walletAddr={walletAddr}
+          walletType={walletType}
+          email={typeof window !== "undefined" ? localStorage.getItem("arclens-circle-email") : null}
+        />
+      )}
     </div>
   )
 }

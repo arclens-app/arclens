@@ -45,11 +45,16 @@ export default function AdminPage() {
   const [pw, setPw]                   = useState("")
   const [password, setPassword]       = useState("")
   const [loading, setLoading]         = useState(false)
-  const [tab, setTab]                 = useState<"pending"|"updates"|"campaign-updates"|"projects"|"contracts"|"events"|"locations"|"campaigns"|"stats"|"trust">("pending")
+  const [tab, setTab]                 = useState<"pending"|"updates"|"campaign-updates"|"projects"|"contracts"|"events"|"locations"|"campaigns"|"stats"|"trust"|"tracked">("pending")
   // Trust tab state: alerts + disputes, fetched on demand.
   const [trust, setTrust]             = useState<{ alerts: any[]; disputes: any[]; counts: { open_alerts: number; open_disputes: number } } | null>(null)
   const [trustLoading, setTrustLoading] = useState(false)
   const [trustError, setTrustError]   = useState("")
+  // Tracked Contracts tab state.
+  const [tracked, setTracked]         = useState<{ contracts: any[]; counts: { total: number; working: number; errored: number; quiet: number; awaiting: number; revoked: number } } | null>(null)
+  const [trackedLoading, setTrackedLoading] = useState(false)
+  const [trackedError, setTrackedError] = useState("")
+  const [trackedEdit, setTrackedEdit] = useState<{ id: number; field: string; value: string } | null>(null)
   const [submissions, setSubmissions] = useState<Project[]>([])
   const [projects, setProjects]       = useState<Project[]>([])
   const [payoutBal, setPayoutBal]     = useState<null | {
@@ -183,6 +188,8 @@ export default function AdminPage() {
       // Trust: alerts + disputes — same load cycle so the sidebar badge
       // shows the right count from page load.
       loadTrust(p).catch(() => {})
+      // Tracked Contracts — fetched alongside for sidebar count accuracy.
+      loadTracked(p).catch(() => {})
     } finally { setLoading(false) }
   }
 
@@ -218,6 +225,58 @@ export default function AdminPage() {
       body: JSON.stringify({ kind: "dispute", id, action, notes }),
     }).catch(() => {})
     await loadTrust()
+  }
+
+  async function loadTracked(p: string = pw) {
+    if (!p) return
+    setTrackedLoading(true)
+    setTrackedError("")
+    try {
+      const r = await fetch("/api/admin/tracked-contracts", { headers: { Authorization: `Bearer ${p}` }, cache: "no-store" })
+      const d = await r.json()
+      if (!r.ok) throw new Error(d.error || "Failed")
+      setTracked(d)
+    } catch (e: any) {
+      setTrackedError(e?.message || "Network error")
+    } finally { setTrackedLoading(false) }
+  }
+
+  async function saveTrackedEdit(id: number, patch: Record<string, any>) {
+    if (!pw) return
+    try {
+      const r = await fetch(`/api/admin/tracked-contracts/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${pw}` },
+        body: JSON.stringify(patch),
+      })
+      const d = await r.json()
+      if (!r.ok) {
+        setToast({ ok: false, text: d.error || "Edit failed" })
+      } else {
+        setToast({ ok: true, text: d.re_indexed ? "Saved · re-indexing started" : "Saved" })
+      }
+    } catch (e: any) {
+      setToast({ ok: false, text: e?.message || "Network error" })
+    }
+    setTrackedEdit(null)
+    await loadTracked()
+  }
+
+  async function revokeTracked(id: number) {
+    if (!pw) return
+    if (!confirm("Revoke this tracked contract? Soft-deletes — history preserved, indexer stops counting.")) return
+    try {
+      const r = await fetch(`/api/admin/tracked-contracts/${id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${pw}` },
+      })
+      const d = await r.json()
+      if (!r.ok) setToast({ ok: false, text: d.error || "Revoke failed" })
+      else setToast({ ok: true, text: "Revoked" })
+    } catch (e: any) {
+      setToast({ ok: false, text: e?.message || "Network error" })
+    }
+    await loadTracked()
   }
 
   async function act(id: number|string, action: string, table = "projects", extraData?: any) {
@@ -378,6 +437,7 @@ export default function AdminPage() {
     { id: "campaigns"        as const, label: "Campaigns",         count: pendingCampaigns.length,       urgent: pendingCampaigns.length > 0 },
     { id: "events"    as const, label: "Events",        count: pendingEvents,            urgent: pendingEvents > 0 },
     { id: "trust"     as const, label: "Trust",         count: (trust?.counts.open_alerts ?? 0) + (trust?.counts.open_disputes ?? 0), urgent: !!trust && ((trust.counts.open_alerts > 0) || (trust.counts.open_disputes > 0)) },
+    { id: "tracked"   as const, label: "Tracked Contracts", count: tracked?.counts.total ?? 0, urgent: !!tracked && tracked.counts.errored > 0 },
   ]
   const manageTabs = [
     { id: "stats"     as const, label: "Stats Dashboard", count: 0,                urgent: false },
@@ -488,6 +548,7 @@ export default function AdminPage() {
                : tab === "contracts"        ? "Contract Registry"
                : tab === "stats"            ? "Stats Dashboard"
                : tab === "trust"            ? "Trust — Alerts & Disputes"
+               : tab === "tracked"          ? "Tracked Contracts"
                : "Location Mapping"}
             </div>
             <div style={{ fontSize:"11px", fontFamily:mono, color:t3, marginTop:"4px" }}>
@@ -500,6 +561,7 @@ export default function AdminPage() {
                : tab === "contracts" ? `${contracts.length} total · ${contracts.filter(c=>!c.verified).length} unverified`
                : tab === "stats"     ? "Site-wide metrics · milestone tracker · payout wallet"
                : tab === "trust"     ? "Indexer self-audit + visitor-flagged disputes"
+               : tab === "tracked"   ? `${tracked?.counts.working ?? 0} working · ${tracked?.counts.errored ?? 0} errored · ${tracked?.counts.quiet ?? 0} quiet · ${tracked?.counts.revoked ?? 0} revoked`
                : `${missingLoc} missing coordinates`}
             </div>
           </div>
@@ -1646,6 +1708,144 @@ export default function AdminPage() {
                       </div>
                     )}
                   </div>
+                </div>
+              )}
+
+              {/* ── TRACKED CONTRACTS: founder-registered TVL/Volume/Revenue rows ── */}
+              {tab === "tracked" && (
+                <div style={{ display:"flex", flexDirection:"column", gap:"14px" }}>
+                  <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:"10px", flexWrap:"wrap" }}>
+                    <div style={{ fontSize:"13px", color:t2 }}>
+                      {trackedLoading ? "Loading…" : tracked
+                        ? <>
+                            {tracked.counts.total} live ·{" "}
+                            <span style={{ color: "#00b87a" }}>{tracked.counts.working} working</span> ·{" "}
+                            <span style={{ color: "#e03348" }}>{tracked.counts.errored} errored</span> ·{" "}
+                            <span style={{ color: t3 }}>{tracked.counts.quiet} quiet</span>
+                          </>
+                        : "—"}
+                    </div>
+                    <button onClick={() => loadTracked()} disabled={trackedLoading}
+                      style={{ height:"30px", padding:"0 12px", background:"rgba(26,86,255,0.07)", color:"#8aaeff", fontSize:"11px", fontFamily:mono, border:"1px solid rgba(26,86,255,0.25)", borderRadius:"6px", cursor: trackedLoading ? "not-allowed" : "pointer" }}>
+                      Refresh
+                    </button>
+                  </div>
+                  {trackedError && (
+                    <div style={{ padding:"10px 14px", background:"rgba(224,51,72,0.05)", border:"1px solid rgba(224,51,72,0.25)", borderRadius:"8px", fontSize:"12px", color:"#e03348", fontFamily:mono }}>
+                      {trackedError}
+                    </div>
+                  )}
+
+                  {(!tracked || tracked.contracts.length === 0) ? (
+                    <EmptyState icon="◉" title="No tracked contracts yet" sub="When a founder registers a TVL/Volume/Revenue contract via deployer signature, it appears here automatically. Self-service — no approval needed." />
+                  ) : (
+                    <div style={{ display:"flex", flexDirection:"column", gap:"8px" }}>
+                      {tracked.contracts.map((c: any) => {
+                        const statusMeta: Record<string, { color: string; bg: string; border: string; label: string }> = {
+                          working:  { color:"#00b87a", bg:"rgba(0,184,122,0.1)",  border:"rgba(0,184,122,0.3)",  label:"✓ working" },
+                          awaiting: { color:"#8aaeff", bg:"rgba(26,86,255,0.1)",  border:"rgba(26,86,255,0.3)",  label:"⏳ awaiting" },
+                          errored:  { color:"#e03348", bg:"rgba(224,51,72,0.1)",  border:"rgba(224,51,72,0.3)",  label:"⚠ errored" },
+                          quiet:    { color:t3,        bg:"rgba(107,125,168,0.1)", border:"rgba(107,125,168,0.25)", label:"🔇 quiet" },
+                          revoked:  { color:t3,        bg:"rgba(255,255,255,0.04)", border:bdr, label:"⏸ revoked" },
+                        }
+                        const sm = statusMeta[c.status] || statusMeta.quiet
+                        const roleColor = c.role === "tvl" ? "#8aaeff" : c.role === "volume" ? "#c08828" : c.role === "revenue" ? "#00b87a" : "#a855f7"
+                        return (
+                          <div key={c.id} style={{ background:surf, border:"1px solid "+bdr, borderRadius:"10px", padding:"14px 18px", opacity: c.status === "revoked" ? 0.55 : 1 }}>
+                            <div style={{ display:"flex", alignItems:"center", gap:"10px", marginBottom:"8px", flexWrap:"wrap" }}>
+                              <span style={{ fontSize:"9px", fontFamily:mono, padding:"2px 7px", borderRadius:"4px", background:sm.bg, color:sm.color, border:"1px solid "+sm.border, textTransform:"uppercase", letterSpacing:"0.06em" }}>
+                                {sm.label}
+                              </span>
+                              <span style={{ fontSize:"9px", fontFamily:mono, padding:"2px 7px", borderRadius:"4px", background: roleColor+"1a", color: roleColor, border:"1px solid "+roleColor+"33", textTransform:"uppercase", letterSpacing:"0.06em" }}>
+                                {c.role}{c.role === "volume" && c.volume?.method ? ` · ${c.volume.method === "outflow_transfer" ? "outflow" : "swap"}` : ""}
+                              </span>
+                              <a href={`/ecosystem/${c.project_slug || c.project_id}`} target="_blank" rel="noopener noreferrer"
+                                style={{ fontSize:"13px", fontWeight:600, color:"#8aaeff", textDecoration:"none" }}>
+                                {c.project_name}
+                              </a>
+                              <span style={{ fontSize:"10px", fontFamily:mono, color:t3, marginLeft:"auto" }}>
+                                {new Date(c.created_at).toLocaleString()}
+                              </span>
+                            </div>
+                            <div style={{ display:"grid", gridTemplateColumns:"180px 1fr", gap:"6px 14px", fontSize:"11.5px", fontFamily:mono, marginBottom:"10px" }}>
+                              <div style={{ color:t3 }}>Address</div>
+                              <div style={{ color:t1, wordBreak:"break-all" }}>
+                                <a href={`https://testnet.arcscan.app/address/${c.address}`} target="_blank" rel="noopener noreferrer" style={{ color:"#8aaeff", textDecoration:"none" }}>
+                                  {c.address}
+                                </a>
+                              </div>
+                              <div style={{ color:t3 }}>Deployer</div>
+                              <div style={{ color:t2, wordBreak:"break-all" }}>{c.deployer_address || "—"}</div>
+                              <div style={{ color:t3 }}>Label</div>
+                              <div style={{ color:t1, display:"flex", alignItems:"center", gap:"8px" }}>
+                                {trackedEdit?.id === c.id && trackedEdit.field === "label" ? (
+                                  <>
+                                    <input value={trackedEdit.value} onChange={e => setTrackedEdit({ ...trackedEdit, value: e.target.value })}
+                                      style={{ background:surf2, border:"1px solid "+bdr, color:t1, padding:"4px 8px", borderRadius:"5px", fontFamily:mono, fontSize:"11.5px", width:"260px" }} />
+                                    <button onClick={() => saveTrackedEdit(c.id, { label: trackedEdit.value })}
+                                      style={{ fontSize:"10px", padding:"3px 9px", background:"rgba(0,184,122,0.1)", color:"#00b87a", border:"1px solid rgba(0,184,122,0.3)", borderRadius:"5px", cursor:"pointer", fontFamily:mono }}>Save</button>
+                                    <button onClick={() => setTrackedEdit(null)}
+                                      style={{ fontSize:"10px", padding:"3px 9px", background:"transparent", color:t3, border:"1px solid "+bdr, borderRadius:"5px", cursor:"pointer", fontFamily:mono }}>Cancel</button>
+                                  </>
+                                ) : (
+                                  <>
+                                    <span>{c.label || <span style={{ color:t3, fontStyle:"italic" }}>(none)</span>}</span>
+                                    {!c.revoked_at && (
+                                      <button onClick={() => setTrackedEdit({ id: c.id, field: "label", value: c.label || "" })}
+                                        style={{ fontSize:"10px", padding:"2px 8px", background:"transparent", color:"#8aaeff", border:"1px solid rgba(26,86,255,0.25)", borderRadius:"5px", cursor:"pointer", fontFamily:mono }}>edit</button>
+                                    )}
+                                  </>
+                                )}
+                              </div>
+                              <div style={{ color:t3 }}>Start block</div>
+                              <div style={{ color:t2 }}>{Number(c.start_block).toLocaleString()}</div>
+                              {c.role === "volume" && c.volume && (
+                                <>
+                                  <div style={{ color:t3 }}>Event signature</div>
+                                  <div style={{ color:t2, wordBreak:"break-all" }}>{c.volume.event_signature || <span style={{ color:t3, fontStyle:"italic" }}>(outflow method — none required)</span>}</div>
+                                  <div style={{ color:t3 }}>Amount arg / stable</div>
+                                  <div style={{ color:t2 }}>{c.volume.amount_arg ?? "—"} · {c.volume.stablecoin_symbol || "—"}</div>
+                                  <div style={{ color:t3 }}>Events captured</div>
+                                  <div style={{ color: c.volume.event_count > 0 ? "#00b87a" : t3 }}>{c.volume.event_count.toLocaleString()}</div>
+                                </>
+                              )}
+                              {c.role === "revenue" && c.revenue && (
+                                <>
+                                  <div style={{ color:t3 }}>Fee events captured</div>
+                                  <div style={{ color: c.revenue.event_count > 0 ? "#00b87a" : t3 }}>{c.revenue.event_count.toLocaleString()}</div>
+                                </>
+                              )}
+                              {c.role === "tvl" && c.tvl && (
+                                <>
+                                  <div style={{ color:t3 }}>Last indexed</div>
+                                  <div style={{ color:t2 }}>{c.tvl.last_indexed_at ? new Date(c.tvl.last_indexed_at).toLocaleString() : "—"}</div>
+                                </>
+                              )}
+                            </div>
+                            {c.last_alert && (
+                              <div style={{ padding:"8px 12px", background:"rgba(224,51,72,0.05)", border:"1px solid rgba(224,51,72,0.2)", borderRadius:"7px", marginBottom:"10px" }}>
+                                <div style={{ fontSize:"10px", fontFamily:mono, color:"#e03348", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:"4px" }}>
+                                  Last alert · {c.last_alert.kind} · {new Date(c.last_alert.created_at).toLocaleString()}
+                                </div>
+                                <div style={{ fontSize:"11.5px", color:t1, lineHeight:1.5, wordBreak:"break-word" }}>{c.last_alert.message}</div>
+                              </div>
+                            )}
+                            {c.revoked_at && (
+                              <div style={{ fontSize:"10px", fontFamily:mono, color:t3, marginBottom:"6px" }}>
+                                Revoked {new Date(c.revoked_at).toLocaleString()} {c.revoke_reason ? `· ${c.revoke_reason}` : ""}
+                              </div>
+                            )}
+                            {!c.revoked_at && (
+                              <button onClick={() => revokeTracked(c.id)}
+                                style={{ height:"28px", padding:"0 12px", background:"rgba(224,51,72,0.06)", color:"#e03348", fontSize:"11px", fontFamily:mono, border:"1px solid rgba(224,51,72,0.2)", borderRadius:"6px", cursor:"pointer" }}>
+                                Revoke
+                              </button>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
             </>
