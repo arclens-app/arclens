@@ -125,6 +125,7 @@ export default function WalletPanel({ open, onClose, walletAddr, walletType, ema
       <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 59, background: SCRIM, backdropFilter: "blur(8px)", animation: "wpFade .2s ease" }} />
       <div style={{
         position: "fixed", zIndex: 60, left: "50%", top: "50%",
+        transform: "translate(-50%, -50%)",
         width: "min(420px,94vw)", maxHeight: "88vh",
         background: `radial-gradient(130% 55% at 100% 0%, rgba(59,107,255,0.14), transparent 60%), ${PANEL}`,
         border: `1px solid ${BORDER2}`, borderRadius: "26px",
