@@ -102,10 +102,22 @@ function renderAnswer(text: string): React.ReactNode {
 }
 
 function renderInline(s: string): React.ReactNode {
-  const parts = s.split(/(\*\*[^*]+\*\*)/g)
+  // Tokenize **bold** and [text](url) markdown links.
+  const parts = s.split(/(\*\*[^*]+\*\*|\[[^\]]+\]\([^)]+\))/g)
   return parts.map((p, i) => {
     if (p.startsWith("**") && p.endsWith("**")) {
       return <strong key={i} style={{ color: T1, fontWeight: 600 }}>{p.slice(2, -2)}</strong>
+    }
+    const link = p.match(/^\[([^\]]+)\]\(([^)]+)\)$/)
+    if (link) {
+      const href = link[2]
+      const external = /^https?:\/\//.test(href)
+      return (
+        <a key={i} href={href} target={external ? "_blank" : undefined} rel={external ? "noopener noreferrer" : undefined}
+          style={{ color: ARC, textDecoration: "none", borderBottom: `1px solid ${ARC}66`, fontWeight: 500 }}>
+          {link[1]}
+        </a>
+      )
     }
     return <span key={i}>{p}</span>
   })
@@ -450,14 +462,12 @@ export default function ArcLensAI() {
                         ) : t.answer ? (
                           <>
                             {renderAnswer(t.answer)}
-                            <div style={{ marginTop: "10px", fontFamily: MONO, fontSize: "9.5px", color: T3, letterSpacing: "0.04em", display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                              {t.ctx?.has_page_data && <span>· page-data</span>}
-                              {t.ctx?.kb_hits !== undefined && t.ctx.kb_hits > 0 && (
-                                <span>· {t.ctx.kb_hits} kb hit{t.ctx.kb_hits === 1 ? "" : "s"}</span>
-                              )}
-                              {t.ctx?.llm && <span>· {t.ctx.llm}</span>}
-                              {typeof t.ms === "number" && <span>· {t.ms}ms</span>}
-                            </div>
+                            {t.ctx?.llm && t.ctx.llm !== "stub" && (
+                              <div style={{ marginTop: "10px", fontFamily: MONO, fontSize: "9.5px", color: T3, letterSpacing: "0.04em", display: "flex", alignItems: "center", gap: "6px" }}>
+                                <span style={{ width: 5, height: 5, borderRadius: "50%", background: USDC, boxShadow: `0 0 5px ${USDC}` }} />
+                                grounded in live Arc data
+                              </div>
+                            )}
                           </>
                         ) : null}
                       </div>

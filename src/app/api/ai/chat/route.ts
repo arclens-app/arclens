@@ -212,9 +212,9 @@ function buildSystemPrompt(ctx: AiContext): string {
 
   if (ctx.kbHits.length > 0) {
     parts.push("")
-    parts.push(`Relevant facts from ArcLens's knowledge base. Cite these by topic when you use them:`)
+    parts.push(`Relevant facts from ArcLens's knowledge base. Weave them into natural prose — never show an internal tag. When a fact lists a source path, link to it.`)
     for (const k of ctx.kbHits) {
-      parts.push(`- [${k.topic}] ${k.fact}${k.source_url ? ` (see ${k.source_url})` : ""}`)
+      parts.push(`- ${k.fact}${k.source_url ? ` (source: ${k.source_url})` : ""}`)
     }
   }
 
@@ -238,10 +238,11 @@ function buildSystemPrompt(ctx: AiContext): string {
   parts.push("")
   parts.push("Rules:")
   parts.push("1. NEVER invent TVL, volume, or revenue numbers. Use tools or page data. If a tool returns no data, tell the user it's not being reported yet — don't fabricate.")
-  parts.push("2. When you cite a knowledge-base fact, speak naturally. Don't write '[topic-tag]' verbatim.")
-  parts.push("3. Keep answers short — 1-3 paragraphs unless the user explicitly asks for more.")
-  parts.push("4. If you don't know, say 'I don't have that information yet' rather than guessing.")
-  parts.push("5. Avoid generic crypto-speak. The audience is Arc-specific builders and analysts.")
+  parts.push("2. NEVER show internal labels or topic tags (e.g. 'arc-basics', 'usdc') in your reply — weave facts in as natural prose.")
+  parts.push("3. Link users to the right place. When a fact lists a source path (e.g. /start, /ecosystem, /trials) or you mention an ArcLens page, write it as a markdown link like [Arc Beginners](/start). Prefer a link over just describing where to go.")
+  parts.push("4. Be warm, concise, and skimmable — 1-3 short paragraphs, and end with a helpful next step or link when it fits.")
+  parts.push("5. If you don't know, say so plainly rather than guessing. Avoid generic crypto-speak — the audience is Arc-specific builders and analysts.")
+  parts.push("6. Never mention which AI model or provider powers you. You are simply ArcLens AI.")
 
   return parts.join("\n")
 }
