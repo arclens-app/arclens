@@ -82,6 +82,19 @@ const FACTS = [
   // ─── How to ask ArcLens AI things ────────────────────────────────────────
   { topic: "ai-self", fact: "ArcLens AI can answer questions about Arc, USDC, Circle products, and any project listed on ArcLens. It cites the source of every fact and tells you when it doesn't know.", source_url: "/" },
   { topic: "ai-self", fact: "ArcLens AI never speaks numbers from memory — every TVL, volume, or revenue figure is fetched live from the database or chain at the moment of the question.", source_url: "/" },
+
+  // ─── Stablecoins tracked ─────────────────────────────────────────────────
+  { topic: "stablecoins", fact: "ArcLens tracks both USDC and EURC on Arc. EURC is Circle's euro-pegged stablecoin (6 decimals, contract 0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a), valued in USD at the live EUR→USD rate so TVL and volume read in dollars.", source_url: "/about" },
+
+  // ─── TVL vs Volume (the most common confusion) ───────────────────────────
+  { topic: "metrics-explained", fact: "TVL and Volume are different metrics. TVL (Total Value Locked) is the value of stablecoins currently held in a project's contracts — a balance, a snapshot. Volume is the throughput of swaps over time, decoded from the protocol's Swap events — a flow. A project can have high TVL and low volume, or the reverse.", source_url: "/about" },
+  { topic: "metrics-explained", fact: "Cumulative volume is the running total of swap notional since a contract was registered. It is NOT the same as TVL, and the two should never be added together to form a single 'total'.", source_url: "/about" },
+
+  // ─── In-app wallet (send / receive) ──────────────────────────────────────
+  { topic: "wallet", fact: "ArcLens has a built-in wallet panel — click your connected wallet to see your USDC and EURC balances. Circle email-wallet users can Send tokens to any Arc address and Receive to their own; ArcLens never custodies the funds, the user authorizes every send with their Circle PIN.", source_url: "/" },
+
+  // ─── Plug-and-play contract registration ─────────────────────────────────
+  { topic: "founder-onboarding", fact: "Registering a contract for tracking works no matter how it was deployed. ArcLens proves the founder's authority via any of: the deployer signature, the wallet that sent the deploy transaction (covers factory deploys), the contract's owner()/admin(), or its EIP-1967 proxy-admin. The founder signs once with a wallet that deployed or controls the contract.", source_url: "/dashboard/[slug]" },
 ]
 
 async function main() {

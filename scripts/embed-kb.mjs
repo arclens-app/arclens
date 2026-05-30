@@ -22,7 +22,7 @@ const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, ssl: { re
 const { embed } = await import("ai")
 const { createGoogleGenerativeAI } = await import("@ai-sdk/google")
 const google = createGoogleGenerativeAI({ apiKey })
-const model = google.textEmbeddingModel("text-embedding-004")
+const model = google.textEmbeddingModel("gemini-embedding-001")
 
 const rows = await pool.query(
   `SELECT id, topic, fact FROM ai_knowledge_base ${reembedAll ? "" : "WHERE embedding IS NULL"} ORDER BY id`,
