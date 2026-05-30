@@ -15,6 +15,9 @@ import { buildContext, logKnowledgeGap, getGeminiKey, type AiContext } from "@/l
 import { buildTools } from "@/lib/aiTools"
 import { enforce } from "@/lib/ratelimit"
 
+export const runtime = "nodejs"
+export const maxDuration = 60
+
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false },
@@ -49,47 +52,69 @@ export async function POST(req: NextRequest) {
   const route   = String(body.route || "/").slice(0, 200)
   const ctx     = await buildContext({ route, session, userQuery: lastUser })
 
-  // Build the answer — real LLM or stub
-  const apiKey   = getGeminiKey()
-  let answerText: string
-  let live       = false
-  if (apiKey) {
-    try {
-      answerText = await callGemini(body.messages, ctx, apiKey)
-      live = true
-    } catch (e: any) {
-      console.error("[ai/chat] Gemini error:", e?.message || e)
-      answerText = stubAnswer(lastUser, ctx)
-    }
-  } else {
-    answerText = stubAnswer(lastUser, ctx)
-  }
-  const usedKb = ctx.kbHits.length > 0
+  // Stream the answer token-by-token. Protocol: raw UTF-8 answer text, then a
+  // RECORD-SEPARATOR (\x1e) followed by a JSON trailer with conversationId +
+  // context. The stub path streams too, so the client has one contract.
+  const apiKey = getGeminiKey()
+  const encoder = new TextEncoder()
 
-  // If we couldn't really answer (stub mode AND no KB hits), log the question as
-  // a knowledge gap so an admin can fill it.
-  if (!live && !usedKb) {
-    await logKnowledgeGap({ question: lastUser, userAddr: session?.addr ?? null, route })
-  }
+  const stream = new ReadableStream({
+    async start(controller) {
+      let answerText = ""
+      let live = false
+      try {
+        if (apiKey) {
+          try {
+            const result = await streamGemini(body.messages, ctx, apiKey)
+            for await (const delta of result.textStream) {
+              answerText += delta
+              controller.enqueue(encoder.encode(delta))
+            }
+            live = answerText.length > 0
+          } catch (e: any) {
+            console.error("[ai/chat] Gemini error:", e?.message || e)
+            answerText = stubAnswer(lastUser, ctx)
+            controller.enqueue(encoder.encode(answerText))
+          }
+        } else {
+          answerText = stubAnswer(lastUser, ctx)
+          controller.enqueue(encoder.encode(answerText))
+        }
 
-  // Persist the conversation
-  const convId = await persistConversation({
-    conversationId: body.conversationId ?? null,
-    userAddr: session?.addr ?? null,
-    route,
-    role:    ctx.role,
-    messages: [...body.messages, { role: "assistant", content: answerText }],
+        // Knowledge-gap log when we couldn't really answer.
+        if (!live && ctx.kbHits.length === 0) {
+          await logKnowledgeGap({ question: lastUser, userAddr: session?.addr ?? null, route })
+        }
+
+        const convId = await persistConversation({
+          conversationId: body.conversationId ?? null,
+          userAddr: session?.addr ?? null,
+          route,
+          role:    ctx.role,
+          messages: [...body.messages, { role: "assistant", content: answerText }],
+        })
+
+        const trailer = {
+          conversationId: convId,
+          context: {
+            role:          ctx.role,
+            kb_hits:       ctx.kbHits.length,
+            has_page_data: !!ctx.pageData,
+            llm:           live ? "gemini-2.5-flash" : "stub",
+          },
+        }
+        controller.enqueue(encoder.encode("\x1e" + JSON.stringify(trailer)))
+      } catch (e: any) {
+        console.error("[ai/chat] stream error:", e?.message || e)
+        if (answerText.length === 0) controller.enqueue(encoder.encode("Something went wrong — try again."))
+      } finally {
+        controller.close()
+      }
+    },
   })
 
-  return NextResponse.json({
-    message: { role: "assistant", content: answerText },
-    conversationId: convId,
-    context: {
-      role:        ctx.role,
-      kb_hits:     ctx.kbHits.length,
-      has_page_data: !!ctx.pageData,
-      llm:         live ? "gemini-2.5-flash" : "stub",
-    },
+  return new Response(stream, {
+    headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" },
   })
 }
 
@@ -139,12 +164,12 @@ function stubAnswer(userMsg: string, ctx: AiContext): string {
 // ────────────────────────────────────────────────────────────────────────────
 // Real LLM path — Gemini 2.5 Flash via Vercel AI SDK
 // ────────────────────────────────────────────────────────────────────────────
-async function callGemini(
+async function streamGemini(
   messages: Array<{ role: "user" | "assistant"; content: string }>,
   ctx: AiContext,
   apiKey: string,
-): Promise<string> {
-  const [{ generateText, stepCountIs }, { createGoogleGenerativeAI }] = await Promise.all([
+) {
+  const [{ streamText, stepCountIs }, { createGoogleGenerativeAI }] = await Promise.all([
     import("ai"),
     import("@ai-sdk/google"),
   ])
@@ -153,20 +178,18 @@ async function callGemini(
   // GOOGLE_GENERATIVE_AI_API_KEY — no silent fallback to stub.
   const google = createGoogleGenerativeAI({ apiKey })
 
-  const system = buildSystemPrompt(ctx)
-  const llmMessages = messages.map(m => ({ role: m.role, content: m.content }))
-
-  const result = await generateText({
+  // streamText returns synchronously with a `.textStream` async iterable that
+  // yields the final user-facing text deltas (after any tool steps resolve).
+  return streamText({
     model: google("gemini-2.5-flash"),
-    system,
-    messages: llmMessages as any,
+    system: buildSystemPrompt(ctx),
+    messages: messages.map(m => ({ role: m.role, content: m.content })) as any,
     tools: buildTools(),
     // Let the model call a tool, read the data, then answer (a few hops max).
     stopWhen: stepCountIs(5),
     temperature: 0.4,
     maxOutputTokens: 1024,
   })
-  return (result as any).text ?? ""
 }
 
 function buildSystemPrompt(ctx: AiContext): string {
