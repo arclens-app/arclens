@@ -74,8 +74,16 @@ export async function POST(req: NextRequest) {
             live = answerText.length > 0
             // Capture structured tool results so the client can render data cards.
             try {
-              const trs: any[] = await (result as any).toolResults
-              const KNOWN = new Set(["list_top_projects", "compare_projects", "search_ecosystem", "get_project_metrics"])
+              let trs: any[] = []
+              try { trs = await (result as any).toolResults } catch {}
+              if (!trs || trs.length === 0) {
+                // Multi-step runs surface results per-step; flatten as a fallback.
+                try {
+                  const steps: any[] = await (result as any).steps
+                  trs = (steps || []).flatMap(s => s.toolResults || [])
+                } catch {}
+              }
+              const KNOWN = new Set(["list_top_projects", "compare_projects", "search_ecosystem", "get_project_metrics", "get_top_movers"])
               cards = (trs || [])
                 .map(tr => ({ tool: tr.toolName, data: tr.output ?? tr.result }))
                 .filter(c => KNOWN.has(c.tool) && c.data)
@@ -243,7 +251,8 @@ function buildSystemPrompt(ctx: AiContext): string {
   parts.push("- compare_projects: side-by-side metrics for named projects.")
   parts.push("- search_ecosystem: find projects by keyword/category.")
   parts.push("- get_project_metrics: one project's live numbers by name/slug.")
-  parts.push("Call a tool whenever the user asks about rankings, comparisons, or a project's numbers. Only state numbers a tool or the page data returned. If a tool returns an empty list or a 'none yet' note, say so plainly.")
+  parts.push("- get_top_movers: rank by GROWTH over a period — use for 'who gained the most TVL this week', 'fastest growing', 'who's up this week'. (tvl = change vs window start; volume/revenue = total over the window.)")
+  parts.push("Call a tool whenever the user asks about rankings, comparisons, growth/this-week, or a project's numbers. Only state numbers a tool or the page data returned. If a tool returns an empty list or a 'none yet' note, say so plainly.")
 
   parts.push("")
   parts.push("Rules:")

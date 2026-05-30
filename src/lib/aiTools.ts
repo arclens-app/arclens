@@ -200,5 +200,72 @@ export function buildTools() {
         }
       },
     }),
+
+    get_top_movers: tool({
+      description:
+        "Rank Arc projects by GROWTH over a recent period — use for 'who gained the most TVL this week', " +
+        "'fastest-growing by volume', 'who's up this week'. For tvl it's the CHANGE in value locked vs the " +
+        "start of the window; for volume/revenue it's the TOTAL over the window (those are flows).",
+      inputSchema: jsonSchema<{ metric?: "tvl" | "volume" | "revenue"; period_days?: number; limit?: number }>({
+        type: "object",
+        properties: {
+          metric:      { type: "string", enum: ["tvl", "volume", "revenue"], description: "Default tvl." },
+          period_days: { type: "number", description: "Lookback window in days (1-90). Default 7 (this week)." },
+          limit:       { type: "number", description: "How many to return (1-10). Default 5." },
+        },
+      }),
+      execute: async ({ metric = "tvl", period_days = 7, limit = 5 }) => {
+        const days = Math.min(Math.max(Number(period_days) || 7, 1), 90)
+        const lim  = Math.min(Math.max(Number(limit) || 5, 1), 10)
+
+        if (metric === "tvl") {
+          // current TVL vs the latest snapshot at/before (now - window)
+          const r = await pool.query(
+            `WITH past AS (
+               SELECT DISTINCT ON (project_id) project_id, total_usd_e6
+               FROM tvl_snapshots
+               WHERE block_time <= NOW() - make_interval(days => $1::int)
+               ORDER BY project_id, block_time DESC
+             )
+             SELECT p.name, p.slug, p.tvl_usd_e6::text AS cur, COALESCE(past.total_usd_e6, 0)::text AS past
+             FROM projects p LEFT JOIN past ON past.project_id = p.id
+             WHERE p.approved AND p.live AND p.tvl_usd_e6 > 0`,
+            [days],
+          )
+          const movers = r.rows
+            .map(row => {
+              const cur = BigInt(row.cur || "0"), pst = BigInt(row.past || "0")
+              const change = cur - pst
+              const pct = pst > BigInt(0) ? (Number(change) / Number(pst)) * 100 : null
+              return {
+                name: row.name, slug: row.slug, changeE6: change,
+                current: fmtUsd(row.cur),
+                change: (change >= BigInt(0) ? "+" : "−") + fmtUsd((change < BigInt(0) ? -change : change).toString()),
+                change_pct: pct == null ? null : (pct >= 0 ? "+" : "") + pct.toFixed(1) + "%",
+              }
+            })
+            .filter(m => m.changeE6 !== BigInt(0))
+            .sort((a, b) => (a.changeE6 < b.changeE6 ? 1 : a.changeE6 > b.changeE6 ? -1 : 0))
+            .slice(0, lim)
+          if (!movers.length) return { metric, period_days: days, projects: [], note: `No measurable TVL change in the last ${days} days yet.` }
+          return { metric, period_days: days, projects: movers.map((m, i) => ({ rank: i + 1, name: m.name, slug: m.slug, current: m.current, change: m.change, change_pct: m.change_pct })) }
+        }
+
+        // volume / revenue — sum the daily series over the window (it's a flow)
+        const tbl = metric === "revenue" ? "revenue_daily" : "volume_daily"
+        const r = await pool.query(
+          `SELECT p.name, p.slug, COALESCE(SUM(d.total_usd_e6), 0)::text AS period_total
+           FROM projects p JOIN ${tbl} d ON d.project_id = p.id
+           WHERE p.approved AND p.live AND d.day >= (CURRENT_DATE - ($1::int - 1))
+           GROUP BY p.id, p.name, p.slug
+           HAVING SUM(d.total_usd_e6) > 0
+           ORDER BY SUM(d.total_usd_e6) DESC
+           LIMIT $2`,
+          [days, lim],
+        )
+        if (!r.rows.length) return { metric, period_days: days, projects: [], note: `No ${metric} reported in the last ${days} days yet.` }
+        return { metric, period_days: days, projects: r.rows.map((row, i) => ({ rank: i + 1, name: row.name, slug: row.slug, value: fmtUsd(row.period_total) })) }
+      },
+    }),
   }
 }
