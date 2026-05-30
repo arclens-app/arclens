@@ -199,11 +199,26 @@ export default function ArcLensAI() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages: thread, route: pathname, conversationId: convId }),
       })
-      const data: ChatResponse = await res.json()
+      if (!res.body) throw new Error("no stream")
+      // Stream protocol: answer text, then \x1e + JSON trailer (id + context).
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buf = ""
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buf += decoder.decode(value, { stream: true })
+        const sep = buf.indexOf("\x1e")
+        const soFar = sep >= 0 ? buf.slice(0, sep) : buf
+        setTurns(prev => prev.map((t, i) => i === prev.length - 1 ? { ...t, answer: soFar, loading: soFar.length === 0 } : t))
+      }
       const ms = Date.now() - t0
-      const answer = data?.message?.content ?? "Something went wrong — try again."
-      setTurns(prev => prev.map((t, i) => i === prev.length - 1 ? { ...t, answer, loading: false, ctx: data?.context, ms } : t))
-      if (data?.conversationId != null) setConvId(data.conversationId)
+      const sep = buf.indexOf("\x1e")
+      const answer = (sep >= 0 ? buf.slice(0, sep) : buf) || "Something went wrong — try again."
+      let meta: ChatResponse | null = null
+      if (sep >= 0) { try { meta = JSON.parse(buf.slice(sep + 1)) } catch {} }
+      setTurns(prev => prev.map((t, i) => i === prev.length - 1 ? { ...t, answer, loading: false, ctx: meta?.context, ms } : t))
+      if (meta?.conversationId != null) setConvId(meta.conversationId)
     } catch {
       setTurns(prev => prev.map((t, i) => i === prev.length - 1 ? { ...t, answer: "Network error — try again.", loading: false, ms: Date.now() - t0 } : t))
     }
