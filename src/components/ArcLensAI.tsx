@@ -35,15 +35,17 @@ interface Turn {
 // ── theme tokens ───────────────────────────────────────────────────────────
 // All sourced from the CSS vars ArcLayout sets on <html>, so the AI tracks the
 // active light/dark theme. Fallbacks are the dark values.
-const BG    = "var(--bg, #060812)"
-const SURF  = "var(--surf, #0a0e1a)"
-const SURF2 = "var(--surf2, #0e1224)"
-const T1    = "var(--t1, #e8ecff)"
-const T2    = "var(--t2, #6b7da8)"
-const T3    = "var(--t3, #2e3a5c)"
-const BDR   = "var(--bdr, rgba(255,255,255,0.06))"
-const ARC   = "#1a56ff"
-const USDC  = "#00b87a"
+// Fixed premium-dark palette — overlay surfaces read as dark glass (Linear /
+// Phantom command-palette style) regardless of the page's light/dark theme.
+const BG    = "#060810"
+const SURF  = "#0b0e16"
+const SURF2 = "#0e121d"
+const T1    = "#eef1f8"
+const T2    = "#8b93a7"
+const T3    = "#565e72"
+const BDR   = "rgba(255,255,255,0.08)"
+const ARC   = "#3b6bff"
+const USDC  = "#00c896"
 const SANS  = "'Geist', ui-sans-serif, system-ui, sans-serif"
 const MONO  = "'DM Mono', ui-monospace, SFMono-Regular, Menlo, monospace"
 
@@ -294,7 +296,7 @@ export default function ArcLensAI() {
           position: "fixed",
           right: 0, top: 0, bottom: 0, zIndex: 50,
           width: "min(500px, 100vw)",
-          background: SURF,
+          background: `radial-gradient(120% 50% at 100% 0%, rgba(59,107,255,0.10), transparent 60%), ${SURF}`,
           borderLeft: `1px solid ${BDR}`,
           display: "flex", flexDirection: "column",
           boxShadow: "-16px 0 48px rgba(0,0,0,0.4)",
