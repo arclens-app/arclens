@@ -122,13 +122,16 @@ export default function WalletPanel({ open, onClose, walletAddr, walletType, ema
 
   return (
     <>
-      <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 59, background: SCRIM, backdropFilter: "blur(6px)", animation: "wpFade .2s ease" }} />
+      <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 59, background: SCRIM, backdropFilter: "blur(8px)", animation: "wpFade .2s ease" }} />
       <div style={{
-        position: "fixed", right: 0, top: 0, bottom: 0, zIndex: 60, width: "min(412px,100vw)",
-        background: `radial-gradient(120% 60% at 100% 0%, rgba(59,107,255,0.10), transparent 60%), ${PANEL}`,
-        borderLeft: `1px solid ${BORDER}`, display: "flex", flexDirection: "column",
-        boxShadow: "-24px 0 64px rgba(0,0,0,0.55)", fontFamily: SANS, color: T1,
-        animation: "wpIn .32s cubic-bezier(0.22,1,0.36,1)",
+        position: "fixed", zIndex: 60, left: "50%", top: "50%",
+        width: "min(420px,94vw)", maxHeight: "88vh",
+        background: `radial-gradient(130% 55% at 100% 0%, rgba(59,107,255,0.14), transparent 60%), ${PANEL}`,
+        border: `1px solid ${BORDER2}`, borderRadius: "26px",
+        display: "flex", flexDirection: "column", overflow: "hidden",
+        boxShadow: "0 40px 100px rgba(0,0,0,0.62), inset 0 1px 0 rgba(255,255,255,0.06)",
+        fontFamily: SANS, color: T1,
+        animation: "wpIn .34s cubic-bezier(0.22,1,0.36,1)",
       }}>
 
         {/* HEADER */}
@@ -264,7 +267,7 @@ export default function WalletPanel({ open, onClose, walletAddr, walletType, ema
 
       <style>{`
         @keyframes wpFade { from { opacity: 0 } to { opacity: 1 } }
-        @keyframes wpIn   { from { transform: translateX(100%); opacity: .5 } to { transform: translateX(0); opacity: 1 } }
+        @keyframes wpIn   { from { transform: translate(-50%,-46%) scale(.96); opacity: 0 } to { transform: translate(-50%,-50%) scale(1); opacity: 1 } }
       `}</style>
     </>
   )

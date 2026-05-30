@@ -283,8 +283,8 @@ export default function ArcLensAI() {
           onClick={() => setOpen(false)}
           style={{
             position: "fixed", inset: 0, zIndex: 49,
-            background: "rgba(4,6,14,0.5)",
-            backdropFilter: "blur(3px)",
+            background: "rgba(4,6,13,0.55)",
+            backdropFilter: "blur(7px)",
             animation: "alFadeIn 200ms ease",
           }}
         />
@@ -293,16 +293,16 @@ export default function ArcLensAI() {
       {/* ── PANEL — slide-in from right ────────────────────────────────── */}
       {open && (
         <div style={{
-          position: "fixed",
-          right: 0, top: 0, bottom: 0, zIndex: 50,
-          width: "min(500px, 100vw)",
-          background: `radial-gradient(120% 50% at 100% 0%, rgba(59,107,255,0.10), transparent 60%), ${SURF}`,
-          borderLeft: `1px solid ${BDR}`,
-          display: "flex", flexDirection: "column",
-          boxShadow: "-16px 0 48px rgba(0,0,0,0.4)",
+          position: "fixed", zIndex: 50,
+          right: "16px", top: "16px", bottom: "16px",
+          width: "min(460px, calc(100vw - 32px))",
+          background: `radial-gradient(130% 45% at 100% 0%, rgba(59,107,255,0.13), transparent 60%), ${SURF}`,
+          border: `1px solid ${BDR}`, borderRadius: "24px",
+          display: "flex", flexDirection: "column", overflow: "hidden",
+          boxShadow: "0 32px 80px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.06)",
           fontFamily: SANS,
           color: T1,
-          animation: "alPanelIn 280ms cubic-bezier(0.22, 1, 0.36, 1)",
+          animation: "alPanelIn 320ms cubic-bezier(0.22, 1, 0.36, 1)",
         }}>
 
           {/* HEADER — Arc·Lens wordmark + live dot */}
@@ -507,7 +507,7 @@ export default function ArcLensAI() {
         @keyframes alFadeIn  { 0% { opacity: 0; } 100% { opacity: 1; } }
         @keyframes alBreathe { 0%, 100% { opacity: 0.4; transform: scale(1); } 50% { opacity: 0.85; transform: scale(1.18); } }
         @keyframes alLive    { 0%, 100% { opacity: 0.6; } 50% { opacity: 1; } }
-        @keyframes alPanelIn { 0% { transform: translateX(100%); opacity: 0.7; } 100% { transform: translateX(0); opacity: 1; } }
+        @keyframes alPanelIn { 0% { transform: translateX(28px) scale(0.98); opacity: 0; } 100% { transform: translateX(0) scale(1); opacity: 1; } }
         @keyframes alPromptIn{ 0% { opacity: 0; transform: translateX(6px); } 100% { opacity: 1; transform: translateX(0); } }
         @keyframes alTurnIn  { 0% { opacity: 0; transform: translateY(4px); } 100% { opacity: 1; transform: translateY(0); } }
         @keyframes alDot     { 0%, 80%, 100% { opacity: 0.25; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-2px); } }
