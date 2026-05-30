@@ -18,10 +18,13 @@ interface Msg {
   content: string
 }
 
+interface DataCard { tool: string; data: any }
+
 interface ChatResponse {
   message: Msg
   conversationId: number | string | null
   context?: { role: string; kb_hits: number; has_page_data: boolean; llm: string }
+  cards?: DataCard[]
 }
 
 interface Turn {
@@ -29,6 +32,7 @@ interface Turn {
   answer:  string | null
   loading: boolean
   ctx?:    ChatResponse["context"]
+  cards?:  DataCard[]
   ms?:     number
 }
 
@@ -120,6 +124,113 @@ function renderInline(s: string): React.ReactNode {
       )
     }
     return <span key={i}>{p}</span>
+  })
+}
+
+// ── Live-data cards — rendered from the AI's tool calls (real DB values) ─────
+function metricLabel(m: string) { return m === "volume" ? "Volume" : m === "revenue" ? "Revenue" : "TVL" }
+
+function CardShell({ title, children }: { title?: string; children: React.ReactNode }) {
+  return (
+    <div style={{ marginTop: "12px", background: SURF2, border: `1px solid ${BDR}`, borderRadius: "14px", overflow: "hidden" }}>
+      {title && <div style={{ padding: "10px 14px", fontFamily: MONO, fontSize: "9.5px", letterSpacing: "0.1em", textTransform: "uppercase", color: T3, borderBottom: `1px solid ${BDR}` }}>{title}</div>}
+      {children}
+    </div>
+  )
+}
+function TokenAvatar({ name }: { name: string }) {
+  const palette = ["#3b6bff", "#00b87a", "#a855f7", "#e0883b", "#2775ca", "#e0506e"]
+  const c = palette[(name?.charCodeAt(0) || 0) % palette.length]
+  return <span style={{ width: 26, height: 26, borderRadius: "50%", flexShrink: 0, background: `linear-gradient(135deg, ${c}, ${c}aa)`, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 11, fontWeight: 700 }}>{(name || "?")[0].toUpperCase()}</span>
+}
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={{ flex: 1, minWidth: 0 }}>
+      <div style={{ fontFamily: MONO, fontSize: "9px", color: T3, textTransform: "uppercase", letterSpacing: "0.07em" }}>{label}</div>
+      <div style={{ fontFamily: MONO, fontSize: "14px", fontWeight: 600, color: T1, marginTop: "2px" }}>{value || "—"}</div>
+    </div>
+  )
+}
+function CardRow({ href, children, first }: { href: string; children: React.ReactNode; first?: boolean }) {
+  return (
+    <a href={href} style={{ display: "flex", alignItems: "center", gap: "11px", padding: "11px 14px", textDecoration: "none", color: T1, borderTop: first ? "none" : `1px solid ${BDR}` }}>{children}</a>
+  )
+}
+
+function renderCards(cards: DataCard[]): React.ReactNode {
+  return cards.map((c, i) => {
+    const d = c.data || {}
+    if (c.tool === "list_top_projects") {
+      const rows: any[] = d.projects || []
+      if (!rows.length) return <CardShell key={i}><div style={{ padding: "13px 14px", fontSize: "12.5px", color: T2, lineHeight: 1.5 }}>{d.note || "Nothing reporting yet."}</div></CardShell>
+      const mk = d.metric === "volume" ? "volume" : d.metric === "revenue" ? "revenue" : "tvl"
+      return (
+        <CardShell key={i} title={`Top Arc projects by ${metricLabel(d.metric)}`}>
+          {rows.map((p, r) => (
+            <CardRow key={r} href={`/ecosystem/${p.slug}`} first={r === 0}>
+              <span style={{ fontFamily: MONO, fontSize: "11px", color: T3, width: 14 }}>{p.rank}</span>
+              <TokenAvatar name={p.name} />
+              <span style={{ flex: 1, fontSize: "13px", fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</span>
+              <span style={{ fontFamily: MONO, fontSize: "14px", fontWeight: 700, color: ARC }}>{p[mk]}</span>
+            </CardRow>
+          ))}
+        </CardShell>
+      )
+    }
+    if (c.tool === "get_project_metrics") {
+      if (d.found === false) return <CardShell key={i}><div style={{ padding: "13px 14px", fontSize: "12.5px", color: T2 }}>{d.note || "Project not found."}</div></CardShell>
+      return (
+        <CardShell key={i}>
+          <CardRow href={`/ecosystem/${d.slug}`} first>
+            <TokenAvatar name={d.name} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: "14px", fontWeight: 700 }}>{d.name}</div>
+              {d.category && <div style={{ fontSize: "10.5px", color: T3 }}>{d.category}</div>}
+            </div>
+          </CardRow>
+          <div style={{ display: "flex", gap: "10px", padding: "2px 14px 14px" }}>
+            <Stat label="TVL" value={d.tvl} /><Stat label="Volume" value={d.volume} /><Stat label="Revenue" value={d.revenue} />
+          </div>
+        </CardShell>
+      )
+    }
+    if (c.tool === "compare_projects") {
+      const found: any[] = d.found || []
+      if (!found.length) return null
+      return (
+        <CardShell key={i} title="Comparison">
+          <div style={{ display: "flex" }}>
+            {found.map((p, ci) => (
+              <div key={ci} style={{ flex: 1, padding: "13px 14px", borderLeft: ci ? `1px solid ${BDR}` : "none", minWidth: 0 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}><TokenAvatar name={p.name} /><span style={{ fontSize: "13px", fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</span></div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "9px" }}>
+                  <Stat label="TVL" value={p.tvl} /><Stat label="Volume" value={p.volume} /><Stat label="Revenue" value={p.revenue} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardShell>
+      )
+    }
+    if (c.tool === "search_ecosystem") {
+      const rows: any[] = d.projects || []
+      if (!rows.length) return null
+      return (
+        <CardShell key={i} title={`${d.count} project${d.count === 1 ? "" : "s"}`}>
+          {rows.map((p, r) => (
+            <CardRow key={r} href={`/ecosystem/${p.slug}`} first={r === 0}>
+              <TokenAvatar name={p.name} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: "13px", fontWeight: 600 }}>{p.name}</div>
+                {p.tagline && <div style={{ fontSize: "10.5px", color: T3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.tagline}</div>}
+              </div>
+              {p.tvl && <span style={{ fontFamily: MONO, fontSize: "12px", color: T2, flexShrink: 0 }}>{p.tvl}</span>}
+            </CardRow>
+          ))}
+        </CardShell>
+      )
+    }
+    return null
   })
 }
 
@@ -229,7 +340,7 @@ export default function ArcLensAI() {
       const answer = (sep >= 0 ? buf.slice(0, sep) : buf) || "Something went wrong — try again."
       let meta: ChatResponse | null = null
       if (sep >= 0) { try { meta = JSON.parse(buf.slice(sep + 1)) } catch {} }
-      setTurns(prev => prev.map((t, i) => i === prev.length - 1 ? { ...t, answer, loading: false, ctx: meta?.context, ms } : t))
+      setTurns(prev => prev.map((t, i) => i === prev.length - 1 ? { ...t, answer, loading: false, ctx: meta?.context, cards: meta?.cards, ms } : t))
       if (meta?.conversationId != null) setConvId(meta.conversationId)
     } catch {
       setTurns(prev => prev.map((t, i) => i === prev.length - 1 ? { ...t, answer: "Network error — try again.", loading: false, ms: Date.now() - t0 } : t))
@@ -462,6 +573,7 @@ export default function ArcLensAI() {
                         ) : t.answer ? (
                           <>
                             {renderAnswer(t.answer)}
+                            {t.cards && t.cards.length > 0 && renderCards(t.cards)}
                             {t.ctx?.llm && t.ctx.llm !== "stub" && (
                               <div style={{ marginTop: "10px", fontFamily: MONO, fontSize: "9.5px", color: T3, letterSpacing: "0.04em", display: "flex", alignItems: "center", gap: "6px" }}>
                                 <span style={{ width: 5, height: 5, borderRadius: "50%", background: USDC, boxShadow: `0 0 5px ${USDC}` }} />

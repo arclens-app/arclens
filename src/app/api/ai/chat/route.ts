@@ -62,6 +62,7 @@ export async function POST(req: NextRequest) {
     async start(controller) {
       let answerText = ""
       let live = false
+      let cards: Array<{ tool: string; data: any }> = []
       try {
         if (apiKey) {
           try {
@@ -71,6 +72,14 @@ export async function POST(req: NextRequest) {
               controller.enqueue(encoder.encode(delta))
             }
             live = answerText.length > 0
+            // Capture structured tool results so the client can render data cards.
+            try {
+              const trs: any[] = await (result as any).toolResults
+              const KNOWN = new Set(["list_top_projects", "compare_projects", "search_ecosystem", "get_project_metrics"])
+              cards = (trs || [])
+                .map(tr => ({ tool: tr.toolName, data: tr.output ?? tr.result }))
+                .filter(c => KNOWN.has(c.tool) && c.data)
+            } catch { /* no tool results */ }
           } catch (e: any) {
             console.error("[ai/chat] Gemini error:", e?.message || e)
             answerText = stubAnswer(lastUser, ctx)
@@ -102,6 +111,7 @@ export async function POST(req: NextRequest) {
             has_page_data: !!ctx.pageData,
             llm:           live ? "gemini-2.5-flash" : "stub",
           },
+          cards,
         }
         controller.enqueue(encoder.encode("\x1e" + JSON.stringify(trailer)))
       } catch (e: any) {
