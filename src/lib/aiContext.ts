@@ -185,7 +185,7 @@ async function semanticSearch(query: string, limit: number): Promise<KbHit[] | n
   ])
   const google = createGoogleGenerativeAI({ apiKey })
   const { embedding } = await embed({
-    model: google.textEmbeddingModel("text-embedding-004"),
+    model: google.textEmbeddingModel("gemini-embedding-001"),
     value: query,
   })
   const scored = rows.rows
