@@ -230,6 +230,26 @@ function renderCards(cards: DataCard[]): React.ReactNode {
         </CardShell>
       )
     }
+    if (c.tool === "get_top_movers") {
+      const rows: any[] = d.projects || []
+      if (!rows.length) return <CardShell key={i}><div style={{ padding: "13px 14px", fontSize: "12.5px", color: T2, lineHeight: 1.5 }}>{d.note || "No movement yet."}</div></CardShell>
+      return (
+        <CardShell key={i} title={`${metricLabel(d.metric)} movers · last ${d.period_days}d`}>
+          {rows.map((p, r) => {
+            const up = !p.change_pct || p.change_pct.startsWith("+")
+            return (
+              <CardRow key={r} href={`/ecosystem/${p.slug}`} first={r === 0}>
+                <span style={{ fontFamily: MONO, fontSize: "11px", color: T3, width: 14 }}>{p.rank}</span>
+                <TokenAvatar name={p.name} />
+                <span style={{ flex: 1, fontSize: "13px", fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</span>
+                <span style={{ fontFamily: MONO, fontSize: "13px", fontWeight: 700, color: T1 }}>{p.value || p.current}</span>
+                {p.change_pct && <span style={{ fontFamily: MONO, fontSize: "11px", fontWeight: 600, color: up ? USDC : "#ff5a6e", minWidth: 44, textAlign: "right" }}>{p.change_pct}</span>}
+              </CardRow>
+            )
+          })}
+        </CardShell>
+      )
+    }
     return null
   })
 }
