@@ -147,7 +147,7 @@ function Sparkline({ points, color, height = 38, width = 220 }: {
     .map((p, i) => `${i === 0 ? "M" : "L"} ${(i * dx).toFixed(2)} ${(height - ((p - min) / range) * (height - 4) - 2).toFixed(2)}`)
     .join(" ") + ` L ${width} ${height} L 0 ${height} Z`
   return (
-    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={{ display: "block" }}>
+    <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" style={{ display: "block" }}>
       <defs>
         <linearGradient id={`spark-${color.replace("#", "")}`} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor={color} stopOpacity="0.25" />
@@ -225,6 +225,11 @@ export default function TvlCards({ project, tvl, theme, slug }: Props) {
     }
   }
 
+  // Sparkline series — declared before any early return (Rules of Hooks).
+  const series    = useMemo(() => (tvl?.series ?? []).map(p => Number(BigInt(p.total_usd_e6)) / 1e6), [tvl?.series])
+  const revSeries = useMemo(() => (tvl?.revenue_series ?? []).map(p => Number(BigInt(p.total_usd_e6)) / 1e6), [tvl?.revenue_series])
+  const volSeries = useMemo(() => (tvl?.volume_series ?? []).map(p => Number(BigInt(p.total_usd_e6)) / 1e6), [tvl?.volume_series])
+
   // Don't render anything if the founder hasn't opted in.
   if (!project.tvl_tracking_enabled) return null
 
@@ -251,33 +256,26 @@ export default function TvlCards({ project, tvl, theme, slug }: Props) {
     )
   }
 
-  const series = useMemo(
-    () => (tvl?.series ?? []).map(p => Number(BigInt(p.total_usd_e6)) / 1e6),
-    [tvl?.series],
-  )
-  const revSeries = useMemo(
-    () => (tvl?.revenue_series ?? []).map(p => Number(BigInt(p.total_usd_e6)) / 1e6),
-    [tvl?.revenue_series],
-  )
-  const volSeries = useMemo(
-    () => (tvl?.volume_series ?? []).map(p => Number(BigInt(p.total_usd_e6)) / 1e6),
-    [tvl?.volume_series],
-  )
-
   const tvlContracts = (tvl?.contracts ?? []).filter(c => c.role === "tvl")
   const revContracts = (tvl?.contracts ?? []).filter(c => c.role === "revenue")
   const volContracts = (tvl?.contracts ?? []).filter(c => c.role === "volume")
 
-  // 3-up grid when all three present; 2-up when two; 1-up when one.
+  // One panel; only reported metrics get a cell. Hairline dividers via a 1px
+  // grid gap over the border color. Stacks to a single column on mobile.
   const presentCount = [tvlFmt, volCumFmt, revCumFmt].filter(Boolean).length
-  const gridCols = presentCount >= 3 ? "1fr 1fr 1fr" : presentCount === 2 ? "1fr 1fr" : "1fr"
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: gridCols, gap: "14px", marginBottom: "16px" }}>
+    <div style={{ marginBottom: "16px", background: surf, border: "1px solid " + bdr, borderRadius: "16px", overflow: "hidden" }}>
+      <style>{`.al-metric-cells{display:grid;gap:1px;background:${bdr};grid-template-columns:repeat(${presentCount || 1},minmax(0,1fr))}@media(max-width:680px){.al-metric-cells{grid-template-columns:1fr}}`}</style>
+      <div style={{ padding: "14px 22px", borderBottom: "1px solid " + bdr, display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px" }}>
+        <span style={{ fontSize: "10px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.12em" }}>Protocol Metrics</span>
+        <span style={{ fontSize: "8.5px", fontFamily: mono, padding: "2px 8px", borderRadius: "4px", background: "rgba(0,184,122,0.08)", color: USDC_GREEN, border: "1px solid rgba(0,184,122,0.25)" }}>✓ verified on-chain</span>
+      </div>
+      <div className="al-metric-cells">
 
       {/* ── TVL CARD ── */}
       {tvlFmt && (
-        <div style={{ background: surf, border: "1px solid " + bdr, borderRadius: "14px", padding: "22px 26px", display: "flex", flexDirection: "column", gap: "14px" }}>
+        <div style={{ background: surf, padding: "22px 24px", display: "flex", flexDirection: "column", gap: "14px" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px" }}>
             <div style={{ fontSize: "10px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.1em" }}>
               Total Value Locked
@@ -410,7 +408,7 @@ export default function TvlCards({ project, tvl, theme, slug }: Props) {
           : { label: "✓ swap-event precise", bg: "rgba(0,184,122,0.08)", color: USDC_GREEN, border: "rgba(0,184,122,0.25)",
               title: "Counted from the protocol's own Swap event — exact ABI-decoded amounts." }
         return (
-        <div style={{ background: surf, border: "1px solid " + bdr, borderRadius: "14px", padding: "22px 26px", display: "flex", flexDirection: "column", gap: "14px" }}>
+        <div style={{ background: surf, padding: "22px 24px", display: "flex", flexDirection: "column", gap: "14px" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px" }}>
             <div style={{ fontSize: "10px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.1em" }}>
               Volume (cumulative)
@@ -459,7 +457,7 @@ export default function TvlCards({ project, tvl, theme, slug }: Props) {
 
       {/* ── REVENUE CARD ── */}
       {revCumFmt && (
-        <div style={{ background: surf, border: "1px solid " + bdr, borderRadius: "14px", padding: "22px 26px", display: "flex", flexDirection: "column", gap: "14px" }}>
+        <div style={{ background: surf, padding: "22px 24px", display: "flex", flexDirection: "column", gap: "14px" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px" }}>
             <div style={{ fontSize: "10px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.1em" }}>
               Revenue (cumulative)
@@ -600,6 +598,7 @@ export default function TvlCards({ project, tvl, theme, slug }: Props) {
           </div>
         </div>
       )}
+      </div>
     </div>
   )
 }
