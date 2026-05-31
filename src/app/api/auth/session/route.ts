@@ -1,11 +1,8 @@
 export const runtime = "nodejs"
 import { NextRequest, NextResponse } from "next/server"
-import { Pool } from "pg"
 import { verifyMessage } from "viem"
 import { attachSessionCookie, clearSessionCookie, getSession } from "@/lib/session"
 import { enforce } from "@/lib/ratelimit"
-
-const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
 
 const SIG_MAX_AGE_MS = 5 * 60 * 1000
 
@@ -23,7 +20,12 @@ export async function GET(req: NextRequest) {
 /**
  * POST — create a session.
  * Body for browser wallets: { type: "wallet", address, signature, timestamp, nonce }
- * Body for Circle users:    { type: "circle", address, email }
+ *
+ * Circle (email-login) sessions are NOT minted here. They are issued only by the
+ * email-OTP flow (/api/auth/otp/verify and /api/auth/circle/wallet), which proves
+ * control of the email. Trusting a client-supplied { email, address } pair here
+ * previously let anyone who knew a user's email + public wallet address sign in
+ * as them — so that path has been removed.
  */
 export async function POST(req: NextRequest) {
   const blocked = await enforce(req, "session-create", { limit: 20, windowMs: 60_000 })
@@ -66,20 +68,15 @@ export async function POST(req: NextRequest) {
     }
 
     if (body?.type === "circle") {
-      const email = String(body?.email || "").toLowerCase().trim()
-      if (!email) return NextResponse.json({ error: "Missing email" }, { status: 400 })
-
-      const row = await pool.query(
-        "SELECT 1 FROM circle_wallet_users WHERE email = $1 AND LOWER(wallet_address) = $2",
-        [email, address]
+      // Removed: this used to mint a session from a client-supplied { email,
+      // address } pair with no proof, which let anyone who knew a user's email
+      // and public wallet address sign in as them. Circle sessions are now
+      // issued only by the email-OTP flow (/api/auth/otp/verify, then
+      // /api/auth/circle/wallet for first-time PIN setup).
+      return NextResponse.json(
+        { error: "Sign in with your email — verification is required." },
+        { status: 400 },
       )
-      if (!row.rows.length) {
-        return NextResponse.json({ error: "Circle account does not own that wallet" }, { status: 401 })
-      }
-
-      const res = NextResponse.json({ signedIn: true, address, type: "circle" })
-      attachSessionCookie(res, { addr: address, type: "circle" })
-      return res
     }
 
     return NextResponse.json({ error: "Unknown sign-in type" }, { status: 400 })

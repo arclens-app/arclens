@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { Pool } from "pg"
 import { enforce } from "@/lib/ratelimit"
+import { readOtpProof, attachSessionCookie } from "@/lib/session"
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
 const BASE = "https://api.circle.com"
@@ -30,8 +31,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "User not found" }, { status: 404 })
 
     // Cached already
-    if (row.rows[0].wallet_address)
-      return NextResponse.json({ address: row.rows[0].wallet_address })
+    if (row.rows[0].wallet_address) {
+      const addr = String(row.rows[0].wallet_address).toLowerCase()
+      const res  = NextResponse.json({ address: addr })
+      // Only mint a session when this same browser just proved the email via OTP.
+      // (Returning the address itself is harmless — wallet addresses are public.)
+      if (readOtpProof(req) === lower) attachSessionCookie(res, { addr, type: "circle" })
+      return res
+    }
 
     const { circle_user_id } = row.rows[0]
 
@@ -67,7 +74,9 @@ export async function POST(req: NextRequest) {
       [address, walletId, lower]
     )
 
-    return NextResponse.json({ address })
+    const res = NextResponse.json({ address })
+    if (readOtpProof(req) === lower) attachSessionCookie(res, { addr: address, type: "circle" })
+    return res
   } catch (e) {
     console.error("[circle/wallet]", e)
     return NextResponse.json({ error: "Server error" }, { status: 500 })

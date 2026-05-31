@@ -31,13 +31,44 @@ export async function GET() {
        ORDER BY featured DESC, COALESCE(view_count, 0) DESC, created_at DESC`
     )
 
-    // Trending: purely by views — no external API calls
-    const trending = [...result.rows]
-      .sort((a, b) => (b.view_count || 0) - (a.view_count || 0))
-      .slice(0, 5)
-      .map(p => ({ ...p, tx_count: 0 }))
+    // Trending: most unique viewers in the last ~2 weeks. project_views dedups
+    // per device per week (week_num), so this is real recent interest — not the
+    // frozen lifetime view_count tally, which kept the same projects on top
+    // forever. Falls back to all-time views when recent data is sparse so the
+    // rail is never empty. No external API calls.
+    const projectsRows = result.rows
+    const currentWeek  = Math.floor(Date.now() / (7 * 24 * 60 * 60 * 1000))
+    let trending: any[] = []
+    try {
+      const recent = await pool.query(
+        `SELECT project_id, COUNT(*)::int AS recent_views
+           FROM project_views
+          WHERE week_num >= $1
+          GROUP BY project_id
+          ORDER BY recent_views DESC
+          LIMIT 12`,
+        [currentWeek - 1],
+      )
+      // projects.id is bigint (pg returns a string) while project_views.project_id
+      // is integer (pg returns a number) — normalize both to String to match.
+      const byId = new Map(projectsRows.map((p: any) => [String(p.id), p]))
+      trending = recent.rows
+        .map((r: any) => { const p = byId.get(String(r.project_id)); return p ? { ...p, tx_count: r.recent_views } : null })
+        .filter(Boolean)
+        .slice(0, 5)
+    } catch { trending = [] }
 
-    return NextResponse.json({ projects: result.rows, trending }, {
+    if (trending.length < 5) {
+      const seen = new Set(trending.map((p: any) => p.id))
+      const fill = [...projectsRows]
+        .sort((a, b) => (b.view_count || 0) - (a.view_count || 0))
+        .filter((p: any) => !seen.has(p.id))
+        .slice(0, 5 - trending.length)
+        .map((p: any) => ({ ...p, tx_count: 0 }))
+      trending = [...trending, ...fill]
+    }
+
+    return NextResponse.json({ projects: projectsRows, trending }, {
       headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600" },
     })
   } catch {

@@ -68,6 +68,21 @@ export async function GET(req: NextRequest) {
 
     clearTimeout(timeout)
 
+    // Defense-in-depth: fetch follows redirects by default, so an allowed host
+    // could 3xx us toward an internal address (e.g. cloud metadata). Re-validate
+    // the FINAL url's host+protocol against the same allowlist before trusting it.
+    try {
+      const finalUrl   = new URL(res.url || url)
+      const finalHost  = finalUrl.hostname.toLowerCase()
+      const finalOk    = allowed.some(h => finalHost === h || finalHost.endsWith("." + h))
+      if (!finalOk || (finalUrl.protocol !== "http:" && finalUrl.protocol !== "https:")) {
+        console.error("[image-proxy] redirect to disallowed host", res.url)
+        return fallbackPixel()
+      }
+    } catch {
+      return fallbackPixel()
+    }
+
     if (!res.ok) {
       console.error("[image-proxy] upstream", res.status, url)
       return fallbackPixel()

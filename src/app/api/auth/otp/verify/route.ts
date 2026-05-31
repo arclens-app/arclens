@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { Pool } from "pg"
 import crypto from "crypto"
 import { enforce } from "@/lib/ratelimit"
+import { attachSessionCookie, attachOtpProof } from "@/lib/session"
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
 const BASE = "https://api.circle.com"
@@ -119,11 +120,17 @@ export async function POST(req: NextRequest) {
     // Do NOT return userToken/encryptionKey: client doesn't need them and
     // they would let a network observer trigger PIN challenges on this user.
     if (cachedAddress) {
-      return NextResponse.json({
+      // Email ownership is proven (valid OTP) and the DB maps this email to this
+      // wallet — mint the session here. This is the ONLY place a Circle session is
+      // born for returning users; we no longer trust a client-supplied pair.
+      const res = NextResponse.json({
         success:       true,
         address:       cachedAddress,
         needsPinSetup: false,
       })
+      attachSessionCookie(res, { addr: cachedAddress, type: "circle" })
+      attachOtpProof(res, lower)
+      return res
     }
 
     // Check if Circle already has a wallet for this user
@@ -137,11 +144,14 @@ export async function POST(req: NextRequest) {
         "UPDATE circle_wallet_users SET wallet_address = $1, wallet_id = $2 WHERE email = $3",
         [addr, existing.id, lower]
       )
-      return NextResponse.json({
+      const res = NextResponse.json({
         success:       true,
         address:       addr,
         needsPinSetup: false,
       })
+      attachSessionCookie(res, { addr, type: "circle" })
+      attachOtpProof(res, lower)
+      return res
     }
 
     // First-time user — needs to set a PIN via Circle's iframe
@@ -160,7 +170,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Failed to initialize wallet" }, { status: 500 })
     }
 
-    return NextResponse.json({
+    // First-time user: no wallet address yet (it appears after PIN setup). We
+    // can't mint the session now, so we set a short-lived OTP-proof cookie that
+    // /api/auth/circle/wallet will exchange for a session once the wallet exists.
+    const res = NextResponse.json({
       success:        true,
       address:        null,
       userToken,
@@ -168,6 +181,8 @@ export async function POST(req: NextRequest) {
       needsPinSetup:  true,
       challengeId:    initData.data.challengeId,
     })
+    attachOtpProof(res, lower)
+    return res
   } catch (e: any) {
     console.error("[otp/verify]", e)
     return NextResponse.json({ error: "Verification failed" }, { status: 500 })

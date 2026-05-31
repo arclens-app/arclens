@@ -187,14 +187,10 @@ export default function ArcLayout({ children, active }: { children: React.ReactN
       if (existing?.signedIn && existing.address?.toLowerCase() === addr) return
 
       if (type === "circle") {
-        const email = localStorage.getItem("arclens-circle-email")
-        if (!email) return
-        await fetch("/api/auth/session", {
-          method:  "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({ type: "circle", address: addr, email }),
-        })
+        // Circle sessions are minted by the email-OTP flow (otp/verify +
+        // circle/wallet), so the cookie is already set right after sign-in.
+        // We can't silently re-mint here without re-verifying the email — if the
+        // cookie has expired the user re-verifies on their next protected action.
         return
       }
 

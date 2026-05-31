@@ -3,6 +3,14 @@ import { Pool } from "pg"
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
 
+// Self-heal: the view-record INSERT below uses ON CONFLICT (project_id, device_id,
+// week_num), which REQUIRES this unique index. If the index is ever missing the
+// insert throws and view recording silently dies (it did, for ~5 weeks). Ensure
+// it exists once at startup so recording can't break that way again.
+void pool
+  .query(`CREATE UNIQUE INDEX IF NOT EXISTS project_views_uniq ON project_views (project_id, device_id, week_num)`)
+  .catch(e => console.error("[ecosystem/[id]] project_views index init:", e?.message || e))
+
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -36,7 +44,6 @@ export async function GET(
     )
 
     if (result.rows.length === 0) {
-      // Debug: check without approved/live filter
       return NextResponse.json({ error: "Not found" }, { status: 404 })
     }
 
