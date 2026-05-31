@@ -83,7 +83,7 @@ export async function POST(req: NextRequest) {
                   trs = (steps || []).flatMap(s => s.toolResults || [])
                 } catch {}
               }
-              const KNOWN = new Set(["list_top_projects", "compare_projects", "search_ecosystem", "get_project_metrics", "get_top_movers", "get_project_builder", "list_projects"])
+              const KNOWN = new Set(["list_top_projects", "compare_projects", "search_ecosystem", "get_project_metrics", "get_top_movers", "get_project_builder", "list_projects", "list_open_trials", "get_ecosystem_stats"])
               cards = (trs || [])
                 .map(tr => ({ tool: tr.toolName, data: tr.output ?? tr.result }))
                 .filter(c => KNOWN.has(c.tool) && c.data)
@@ -98,8 +98,10 @@ export async function POST(req: NextRequest) {
           controller.enqueue(encoder.encode(answerText))
         }
 
-        // Knowledge-gap log when we couldn't really answer.
-        if (!live && ctx.kbHits.length === 0) {
+        // Knowledge-gap log: any UNGROUNDED answer (no tool result + no KB hit),
+        // live or stub — surfaces real unanswered questions in the admin gaps panel
+        // so coverage is driven by what users actually ask, not guesswork.
+        if (cards.length === 0 && ctx.kbHits.length === 0) {
           await logKnowledgeGap({ question: lastUser, userAddr: session?.addr ?? null, route })
         }
 
@@ -254,6 +256,8 @@ function buildSystemPrompt(ctx: AiContext): string {
   parts.push("- get_top_movers: rank by GROWTH over a period — use for 'who gained the most TVL this week', 'fastest growing', 'who's up this week'. (tvl = change vs window start; volume/revenue = total over the window.)")
   parts.push("- get_project_builder: who built/owns a project — use for 'who built X', 'who's behind X', 'who's the team'.")
   parts.push("- list_projects: list/filter projects — use for 'which projects are claimed by a builder', 'verified builders', 'newest projects', 'show me <category> projects', 'what's featured'.")
+  parts.push("- list_open_trials: open trial campaigns testers can join — use for 'what trials are open', 'how do I earn', 'campaigns I can do'.")
+  parts.push("- get_ecosystem_stats: high-level Arc totals — use for 'how many projects on Arc', 'total TVL across Arc', 'ecosystem overview'.")
   parts.push("Call a tool whenever the user asks about rankings, comparisons, growth/this-week, or a project's numbers. Only state numbers a tool or the page data returned. If a tool returns an empty list or a 'none yet' note, say so plainly.")
 
   parts.push("")

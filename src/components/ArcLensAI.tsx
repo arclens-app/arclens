@@ -250,6 +250,36 @@ function renderCards(cards: DataCard[]): React.ReactNode {
         </CardShell>
       )
     }
+    if (c.tool === "get_ecosystem_stats") {
+      return (
+        <CardShell key={i} title="Arc ecosystem">
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "18px", padding: "16px" }}>
+            <Stat label="Projects" value={String(d.projects ?? "—")} />
+            <Stat label="Total TVL" value={d.total_tvl} />
+            <Stat label="Total Volume" value={d.total_volume} />
+            <Stat label="Builders" value={String(d.builder_profiles ?? "—")} />
+          </div>
+        </CardShell>
+      )
+    }
+    if (c.tool === "list_open_trials") {
+      const rows: any[] = d.trials || []
+      if (!rows.length) return <CardShell key={i}><div style={{ padding: "13px 14px", fontSize: "12.5px", color: T2, lineHeight: 1.5 }}>{d.note || "No open trials right now."}</div></CardShell>
+      return (
+        <CardShell key={i} title={`${d.count} open trial${d.count === 1 ? "" : "s"}`}>
+          {rows.map((t, r) => (
+            <CardRow key={r} href={`/trials/${t.slug}`} first={r === 0}>
+              <TokenAvatar name={t.project || t.title} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: "13px", fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t.title}</div>
+                <div style={{ fontSize: "10.5px", color: T3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t.reward ? `Reward: ${t.reward}` : (t.project || "")}</div>
+              </div>
+              {t.slots && <span style={{ fontFamily: MONO, fontSize: "10.5px", color: T2, flexShrink: 0 }}>{t.slots}</span>}
+            </CardRow>
+          ))}
+        </CardShell>
+      )
+    }
     if (c.tool === "list_projects") {
       const rows: any[] = d.projects || []
       if (!rows.length) return <CardShell key={i}><div style={{ padding: "13px 14px", fontSize: "12.5px", color: T2, lineHeight: 1.5 }}>{d.note || "No projects match."}</div></CardShell>
