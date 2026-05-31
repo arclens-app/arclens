@@ -34,6 +34,7 @@ interface Turn {
   ctx?:    ChatResponse["context"]
   cards?:  DataCard[]
   ms?:     number
+  rating?: "up" | "down"
 }
 
 // ── theme tokens ───────────────────────────────────────────────────────────
@@ -322,6 +323,20 @@ function renderCards(cards: DataCard[]): React.ReactNode {
   })
 }
 
+// Thumbs icon (rotated 180° for "down") + button style for answer ratings.
+function ThumbIcon({ dir }: { dir: "up" | "down" }) {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: dir === "down" ? "rotate(180deg)" : undefined }}>
+      <path d="M7 10v12" />
+      <path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z" />
+    </svg>
+  )
+}
+const thumbBtn: React.CSSProperties = {
+  background: "transparent", border: "none", color: T3, cursor: "pointer",
+  padding: "2px 4px", display: "flex", alignItems: "center", borderRadius: "5px", transition: "color 0.12s",
+}
+
 // Route-aware suggestions.
 function suggestions(pathname: string): string[] {
   if (pathname.startsWith("/dashboard/")) return [
@@ -446,6 +461,17 @@ export default function ArcLensAI() {
     setTurns([])
     setConvId(null)
   }
+
+  const rate = useCallback(async (idx: number, rating: "up" | "down", turn: Turn) => {
+    setTurns(prev => prev.map((t, i) => i === idx ? { ...t, rating } : t))
+    try {
+      await fetch("/api/ai/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ conversationId: convId, rating, question: turn.query, answer: turn.answer ?? "", route: pathname }),
+      })
+    } catch {}
+  }, [convId, pathname])
 
   return (
     <>
@@ -662,12 +688,33 @@ export default function ArcLensAI() {
                           <>
                             {renderAnswer(t.answer)}
                             {t.cards && t.cards.length > 0 && renderCards(t.cards)}
-                            {t.ctx?.llm && t.ctx.llm !== "stub" && (
-                              <div style={{ marginTop: "10px", fontFamily: MONO, fontSize: "9.5px", color: T3, letterSpacing: "0.04em", display: "flex", alignItems: "center", gap: "6px" }}>
-                                <span style={{ width: 5, height: 5, borderRadius: "50%", background: USDC, boxShadow: `0 0 5px ${USDC}` }} />
-                                grounded in live Arc data
-                              </div>
-                            )}
+                            <div style={{ marginTop: "10px", display: "flex", alignItems: "center", gap: "10px" }}>
+                              {t.ctx?.llm && t.ctx.llm !== "stub" && (
+                                <span style={{ fontFamily: MONO, fontSize: "9.5px", color: T3, letterSpacing: "0.04em", display: "flex", alignItems: "center", gap: "6px" }}>
+                                  <span style={{ width: 5, height: 5, borderRadius: "50%", background: USDC, boxShadow: `0 0 5px ${USDC}` }} />
+                                  grounded in live Arc data
+                                </span>
+                              )}
+                              <span style={{ flex: 1 }} />
+                              {t.rating ? (
+                                <span style={{ fontFamily: MONO, fontSize: "9.5px", color: T3 }}>thanks ✓</span>
+                              ) : (
+                                <>
+                                  <button onClick={() => rate(i, "up", t)} title="Helpful"
+                                    style={thumbBtn}
+                                    onMouseEnter={e => (e.currentTarget.style.color = USDC)}
+                                    onMouseLeave={e => (e.currentTarget.style.color = T3)}>
+                                    <ThumbIcon dir="up" />
+                                  </button>
+                                  <button onClick={() => rate(i, "down", t)} title="Not helpful"
+                                    style={thumbBtn}
+                                    onMouseEnter={e => (e.currentTarget.style.color = "#ff5a6e")}
+                                    onMouseLeave={e => (e.currentTarget.style.color = T3)}>
+                                    <ThumbIcon dir="down" />
+                                  </button>
+                                </>
+                              )}
+                            </div>
                           </>
                         ) : null}
                       </div>

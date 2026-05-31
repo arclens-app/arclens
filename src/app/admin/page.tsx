@@ -45,7 +45,7 @@ export default function AdminPage() {
   const [pw, setPw]                   = useState("")
   const [password, setPassword]       = useState("")
   const [loading, setLoading]         = useState(false)
-  const [tab, setTab]                 = useState<"pending"|"updates"|"campaign-updates"|"projects"|"contracts"|"events"|"locations"|"campaigns"|"stats"|"trust"|"tracked">("pending")
+  const [tab, setTab]                 = useState<"pending"|"updates"|"campaign-updates"|"projects"|"contracts"|"events"|"locations"|"campaigns"|"stats"|"trust"|"tracked"|"ai">("pending")
   // Trust tab state: alerts + disputes, fetched on demand.
   const [trust, setTrust]             = useState<{ alerts: any[]; disputes: any[]; counts: { open_alerts: number; open_disputes: number } } | null>(null)
   const [trustLoading, setTrustLoading] = useState(false)
@@ -54,6 +54,10 @@ export default function AdminPage() {
   const [tracked, setTracked]         = useState<{ contracts: any[]; counts: { total: number; working: number; errored: number; quiet: number; awaiting: number; revoked: number } } | null>(null)
   const [trackedLoading, setTrackedLoading] = useState(false)
   const [trackedError, setTrackedError] = useState("")
+  // ArcLens AI insights tab (knowledge gaps + answer ratings).
+  const [aiInsights, setAiInsights] = useState<{ gaps: { total: number; top: any[] }; ratings: { up: number; down: number; recent: any[] } } | null>(null)
+  const [aiLoading, setAiLoading] = useState(false)
+  const [aiError, setAiError] = useState("")
   const [trackedEdit, setTrackedEdit] = useState<{ id: number; field: string; value: string } | null>(null)
   const [submissions, setSubmissions] = useState<Project[]>([])
   const [projects, setProjects]       = useState<Project[]>([])
@@ -190,6 +194,7 @@ export default function AdminPage() {
       loadTrust(p).catch(() => {})
       // Tracked Contracts — fetched alongside for sidebar count accuracy.
       loadTracked(p).catch(() => {})
+      loadAiInsights(p).catch(() => {})
     } finally { setLoading(false) }
   }
 
@@ -239,6 +244,19 @@ export default function AdminPage() {
     } catch (e: any) {
       setTrackedError(e?.message || "Network error")
     } finally { setTrackedLoading(false) }
+  }
+
+  async function loadAiInsights(p: string = pw) {
+    if (!p) return
+    setAiLoading(true); setAiError("")
+    try {
+      const r = await fetch("/api/admin/ai-insights", { headers: { Authorization: `Bearer ${p}` }, cache: "no-store" })
+      const d = await r.json()
+      if (!r.ok) throw new Error(d.error || "Failed")
+      setAiInsights(d)
+    } catch (e: any) {
+      setAiError(e?.message || "Network error")
+    } finally { setAiLoading(false) }
   }
 
   async function saveTrackedEdit(id: number, patch: Record<string, any>) {
@@ -440,6 +458,7 @@ export default function AdminPage() {
     { id: "tracked"   as const, label: "Tracked Contracts", count: tracked?.counts.total ?? 0, urgent: !!tracked && tracked.counts.errored > 0 },
   ]
   const manageTabs = [
+    { id: "ai"        as const, label: "ArcLens AI",      count: aiInsights?.gaps.total ?? 0, urgent: false },
     { id: "stats"     as const, label: "Stats Dashboard", count: 0,                urgent: false },
     { id: "projects"  as const, label: "All Projects",    count: projects.length,  urgent: false },
     { id: "contracts" as const, label: "Contracts",       count: contracts.length, urgent: false },
@@ -549,6 +568,7 @@ export default function AdminPage() {
                : tab === "stats"            ? "Stats Dashboard"
                : tab === "trust"            ? "Trust — Alerts & Disputes"
                : tab === "tracked"          ? "Tracked Contracts"
+               : tab === "ai"               ? "ArcLens AI"
                : "Location Mapping"}
             </div>
             <div style={{ fontSize:"11px", fontFamily:mono, color:t3, marginTop:"4px" }}>
@@ -562,6 +582,7 @@ export default function AdminPage() {
                : tab === "stats"     ? "Site-wide metrics · milestone tracker · payout wallet"
                : tab === "trust"     ? "Indexer self-audit + visitor-flagged disputes"
                : tab === "tracked"   ? `${tracked?.counts.working ?? 0} working · ${tracked?.counts.errored ?? 0} errored · ${tracked?.counts.quiet ?? 0} quiet · ${tracked?.counts.revoked ?? 0} revoked`
+               : tab === "ai"        ? `${aiInsights?.gaps.total ?? 0} unanswered · ${aiInsights?.ratings.up ?? 0} 👍 / ${aiInsights?.ratings.down ?? 0} 👎`
                : `${missingLoc} missing coordinates`}
             </div>
           </div>
@@ -1712,6 +1733,59 @@ export default function AdminPage() {
               )}
 
               {/* ── TRACKED CONTRACTS: founder-registered TVL/Volume/Revenue rows ── */}
+              {tab === "ai" && (
+                <div style={{ display:"flex", flexDirection:"column", gap:"18px" }}>
+                  <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:"10px", flexWrap:"wrap" }}>
+                    <div style={{ fontSize:"13px", color:t2 }}>
+                      {aiLoading ? "Loading…" : aiInsights
+                        ? <><span style={{color:"#00b87a"}}>{aiInsights.ratings.up} 👍</span>{"  ·  "}<span style={{color:"#e03348"}}>{aiInsights.ratings.down} 👎</span>{"  ·  "}<span style={{color:t3}}>{aiInsights.gaps.total} unanswered question{aiInsights.gaps.total===1?"":"s"}</span></>
+                        : "—"}
+                    </div>
+                    <button onClick={() => loadAiInsights()} disabled={aiLoading}
+                      style={{ height:"30px", padding:"0 12px", background:"rgba(26,86,255,0.07)", color:"#8aaeff", fontSize:"11px", fontFamily:mono, border:"1px solid rgba(26,86,255,0.25)", borderRadius:"6px", cursor: aiLoading?"not-allowed":"pointer" }}>
+                      Refresh
+                    </button>
+                  </div>
+                  {aiError && <div style={{ padding:"10px 14px", background:"rgba(224,51,72,0.05)", border:"1px solid rgba(224,51,72,0.25)", borderRadius:"8px", fontSize:"12px", color:"#e03348", fontFamily:mono }}>{aiError}</div>}
+
+                  <div>
+                    <div style={{ fontSize:"11px", fontFamily:mono, color:t3, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:"10px" }}>Questions the AI couldn&apos;t answer</div>
+                    {(!aiInsights || aiInsights.gaps.top.length === 0) ? (
+                      <EmptyState icon="◌" title="Nothing logged yet" sub="When the AI can't answer a question, it lands here so you can add a fact or a tool to cover it." />
+                    ) : (
+                      <div style={{ display:"flex", flexDirection:"column", gap:"6px" }}>
+                        {aiInsights.gaps.top.map((g:any, i:number) => (
+                          <div key={i} style={{ display:"flex", alignItems:"center", gap:"12px", padding:"11px 14px", background:surf, border:"1px solid "+bdr, borderRadius:"8px" }}>
+                            <span style={{ fontSize:"10px", fontFamily:mono, color:"#e08810", padding:"2px 7px", borderRadius:"4px", background:"rgba(224,136,16,0.1)", border:"1px solid rgba(224,136,16,0.25)", flexShrink:0 }}>{g.times}×</span>
+                            <span style={{ flex:1, fontSize:"13px", color:t1, minWidth:0 }}>{g.question}</span>
+                            <span style={{ fontSize:"10px", fontFamily:mono, color:t3, flexShrink:0 }}>{new Date(g.last_asked).toLocaleDateString()}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <div style={{ fontSize:"11px", fontFamily:mono, color:t3, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:"10px" }}>Recent answer ratings</div>
+                    {(!aiInsights || aiInsights.ratings.recent.length === 0) ? (
+                      <div style={{ fontSize:"12px", color:t3, fontFamily:mono }}>No ratings yet — 👍/👎 on AI answers show up here.</div>
+                    ) : (
+                      <div style={{ display:"flex", flexDirection:"column", gap:"8px" }}>
+                        {aiInsights.ratings.recent.map((r:any, i:number) => (
+                          <div key={i} style={{ padding:"11px 14px", background:surf, border:"1px solid "+bdr, borderRadius:"8px", borderLeft:"3px solid "+(r.rating===1?"#00b87a":"#e03348") }}>
+                            <div style={{ display:"flex", justifyContent:"space-between", gap:"10px", alignItems:"flex-start" }}>
+                              <span style={{ fontSize:"13px", color:t1, fontWeight:600 }}>{r.rating===1?"👍":"👎"} {r.question}</span>
+                              <span style={{ fontSize:"10px", fontFamily:mono, color:t3, flexShrink:0 }}>{new Date(r.created_at).toLocaleString()}</span>
+                            </div>
+                            {r.answer && <div style={{ fontSize:"12px", color:t2, lineHeight:1.55, marginTop:"6px" }}>{String(r.answer).slice(0,260)}{String(r.answer).length>260?"…":""}</div>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {tab === "tracked" && (
                 <div style={{ display:"flex", flexDirection:"column", gap:"14px" }}>
                   <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:"10px", flexWrap:"wrap" }}>
