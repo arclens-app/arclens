@@ -217,7 +217,7 @@ export default function EcosystemPage() {
   const bdr    = "var(--bdr, rgba(255,255,255,0.06))"
 
   const filtered = projects.filter(p => {
-    const matchCat    = filter === "All" || p.category === filter
+    const matchCat    = filter === "All" || (p.category || "").trim().toLowerCase() === filter.trim().toLowerCase()
     const matchSearch = !search || p.name.toLowerCase().includes(search.toLowerCase()) || p.tagline?.toLowerCase().includes(search.toLowerCase())
     const matchSort   = sortBy === "all" ? true
       : sortBy === "trending"  ? true
@@ -256,7 +256,11 @@ export default function EcosystemPage() {
   const totalPages  = Math.max(1, Math.ceil(filtered.length / pageSize))
   const paginated   = filtered.slice((page - 1) * pageSize, page * pageSize)
 
-  function setFilterAndReset(val: string) { setFilter(val); setPage(1) }
+  // Picking a category is a "browse this type" action, so it always shows every
+  // project in that type. We reset the sort to "all" because the metric tabs
+  // (TVL/Volume/Revenue) hide projects without that metric — leaving one active
+  // made categories like "AI" look empty even when they have projects.
+  function setFilterAndReset(val: string) { setFilter(val); setSortBy("all"); setPage(1) }
   function setSortAndReset(val: typeof sortBy) { setSortBy(val); setPage(1) }
   function setSearchAndReset(val: string) { setSearch(val); setPage(1) }
 

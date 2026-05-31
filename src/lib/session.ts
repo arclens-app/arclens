@@ -120,4 +120,53 @@ export function clearSessionCookie(res: NextResponse) {
   })
 }
 
+// ─── Short-lived OTP proof ────────────────────────────────────────────────────
+// Set when a user completes the email OTP. It lets the wallet-finalize step
+// (/api/auth/circle/wallet) mint a real session after first-time PIN setup
+// WITHOUT re-trusting a client-supplied email/address pair. HMAC-signed +
+// httpOnly so it can't be forged or read by JS. Verifies control of the email,
+// which is the actual proof of identity for Circle (email-login) users.
+const OTP_PROOF_COOKIE  = "arclens-otp-proof"
+const OTP_PROOF_TTL_SEC = 15 * 60          // 15 minutes — just long enough to set a PIN
+
+export function attachOtpProof(res: NextResponse, email: string) {
+  const obj     = { email: email.toLowerCase().trim(), exp: Math.floor(Date.now() / 1000) + OTP_PROOF_TTL_SEC }
+  const payload = b64url(JSON.stringify(obj))
+  res.cookies.set({
+    name:     OTP_PROOF_COOKIE,
+    value:    `${payload}.${hmac(payload)}`,
+    httpOnly: true,
+    secure:   process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path:     "/",
+    maxAge:   OTP_PROOF_TTL_SEC,
+  })
+}
+
+/** Returns the verified email if a valid, unexpired OTP-proof cookie is present, else null. */
+export function readOtpProof(req: NextRequest | Request): string | null {
+  const token = (req as any).cookies?.get?.(OTP_PROOF_COOKIE)?.value
+             ?? parseCookieHeader((req as Request).headers.get("cookie"))[OTP_PROOF_COOKIE]
+  if (!token || typeof token !== "string") return null
+  const [payload, sig] = token.split(".")
+  if (!payload || !sig) return null
+  const expected = hmac(payload)
+  const a = Buffer.from(sig), b = Buffer.from(expected)
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null
+  try {
+    const data = JSON.parse(b64urlDecode(payload).toString("utf8")) as { email?: string; exp?: number }
+    if (!data?.email || !data.exp || data.exp < Math.floor(Date.now() / 1000)) return null
+    return data.email
+  } catch {
+    return null
+  }
+}
+
+export function clearOtpProof(res: NextResponse) {
+  res.cookies.set({
+    name: OTP_PROOF_COOKIE, value: "", httpOnly: true,
+    secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/", maxAge: 0,
+  })
+}
+
 export { COOKIE_NAME as SESSION_COOKIE_NAME }
