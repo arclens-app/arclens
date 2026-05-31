@@ -266,13 +266,19 @@ export async function GET(req: NextRequest) {
        FROM stablecoins s
        WHERE s.active = true AND s.peg_currency <> 'USD'`,
     )
+    // ECB (our forex source) only publishes on weekdays, so a Friday rate is
+    // legitimately ~72h old by Monday. Tolerate the weekend gap: 80h threshold
+    // on Sat/Sun/Mon, 48h on normal weekdays — so a real provider outage still
+    // alerts within 2 days without crying wolf every weekend.
+    const dow = new Date().getUTCDay() // 0=Sun … 6=Sat
+    const thresholdMs = (dow === 0 || dow === 6 || dow === 1 ? 80 : 48) * 60 * 60 * 1000
     for (const row of stalefx.rows) {
       const stale =
         !row.last_rate_date ||
-        (Date.now() - new Date(row.last_rate_date).getTime() > 48 * 60 * 60 * 1000)
+        (Date.now() - new Date(row.last_rate_date).getTime() > thresholdMs)
       if (!stale) continue
       await recordAlert(client, null, "forex_stale", "warning",
-        `No forex rate for ${row.peg_currency} in the last 48h — non-USD stablecoin conversions are using ${row.last_rate_date ?? "no"} rate.`,
+        `No fresh forex rate for ${row.peg_currency} — non-USD stablecoin conversions are using the ${row.last_rate_date ?? "no"} rate.`,
         { currency: row.peg_currency, last_rate_date: row.last_rate_date },
       )
       stats.forexAlerts++
