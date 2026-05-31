@@ -292,19 +292,69 @@ export function buildTools() {
         const p = r.rows[0]
         if (!p.owner_wallet) return { found: true, project: p.name, builder: null, note: "This project hasn't been claimed by a builder yet." }
         const addr = String(p.owner_wallet).toLowerCase()
+        const claimed = !!p.display_name
         return {
           found: true,
           project: p.name,
           slug: p.slug,
           builder: {
             name: p.display_name || `${addr.slice(0, 6)}…${addr.slice(-4)}`,
-            claimed: !!p.claimed_at || !!p.display_name,
+            claimed,
             verified: !!p.verified,
             twitter: p.twitter || null,
-            address: addr,
             profile_url: `/builder/${addr}`,
           },
-          note: p.display_name ? undefined : "Owner wallet is known, but they haven't set up a builder profile yet.",
+          note: claimed
+            ? undefined
+            : "This builder hasn't published a public profile yet. Answer briefly and professionally — say the team behind {project} hasn't set up a public builder profile yet, and link the profile page. Do NOT print the full wallet address, and don't pad the answer with extra background.",
+        }
+      },
+    }),
+
+    list_projects: tool({
+      description:
+        "List or filter Arc projects — use for 'which projects are claimed by a builder', 'projects with a verified builder', " +
+        "'newest projects', 'show me Gaming projects', 'what's featured'. Filter by category / claimed-by-a-builder / verified-builder; " +
+        "sort by tvl, volume, newest, or featured.",
+      inputSchema: jsonSchema<{ category?: string; claimed_only?: boolean; verified_builder_only?: boolean; sort?: "tvl" | "volume" | "newest" | "featured"; limit?: number }>({
+        type: "object",
+        properties: {
+          category:              { type: "string", description: "Optional category filter, e.g. 'DeFi', 'Gaming'." },
+          claimed_only:          { type: "boolean", description: "Only projects claimed by a builder." },
+          verified_builder_only: { type: "boolean", description: "Only projects whose builder is verified." },
+          sort:                  { type: "string", enum: ["tvl", "volume", "newest", "featured"], description: "Default featured." },
+          limit:                 { type: "number", description: "Max results (1-20). Default 10." },
+        },
+      }),
+      execute: async ({ category, claimed_only, verified_builder_only, sort = "featured", limit = 10 }) => {
+        const lim = Math.min(Math.max(Number(limit) || 10, 1), 20)
+        const where = ["p.approved", "p.live"]
+        const params: any[] = []
+        if (category) { params.push(category); where.push(`p.category ILIKE $${params.length}`) }
+        if (claimed_only) where.push(`(p.claimed_at IS NOT NULL OR b.address IS NOT NULL)`)
+        if (verified_builder_only) where.push(`b.verified = true`)
+        const order = sort === "tvl" ? "p.tvl_usd_e6 DESC NULLS LAST"
+          : sort === "volume" ? "p.volume_cum_usd_e6 DESC NULLS LAST"
+          : sort === "newest" ? "p.created_at DESC"
+          : "p.featured DESC, COALESCE(p.view_count, 0) DESC"
+        params.push(lim)
+        const r = await pool.query(
+          `SELECT p.name, p.slug, p.category, p.tagline, p.tvl_usd_e6::text AS tvl,
+                  b.display_name AS builder_name, b.verified AS builder_verified
+           FROM projects p LEFT JOIN builder_profiles b ON b.address = LOWER(p.owner_wallet)
+           WHERE ${where.join(" AND ")}
+           ORDER BY ${order}
+           LIMIT $${params.length}`,
+          params,
+        )
+        return {
+          count: r.rows.length,
+          projects: r.rows.map(x => ({
+            name: x.name, slug: x.slug, category: x.category, tagline: x.tagline,
+            tvl: x.tvl && Number(x.tvl) > 0 ? fmtUsd(x.tvl) : null,
+            builder: x.builder_name || null, builder_verified: !!x.builder_verified,
+          })),
+          note: r.rows.length === 0 ? "No projects match that filter yet." : undefined,
         }
       },
     }),

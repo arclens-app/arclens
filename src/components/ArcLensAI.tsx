@@ -250,6 +250,26 @@ function renderCards(cards: DataCard[]): React.ReactNode {
         </CardShell>
       )
     }
+    if (c.tool === "list_projects") {
+      const rows: any[] = d.projects || []
+      if (!rows.length) return <CardShell key={i}><div style={{ padding: "13px 14px", fontSize: "12.5px", color: T2, lineHeight: 1.5 }}>{d.note || "No projects match."}</div></CardShell>
+      return (
+        <CardShell key={i} title={`${d.count} project${d.count === 1 ? "" : "s"}`}>
+          {rows.map((p, r) => (
+            <CardRow key={r} href={`/ecosystem/${p.slug}`} first={r === 0}>
+              <TokenAvatar name={p.name} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: "13px", fontWeight: 600, display: "flex", alignItems: "center", gap: "6px" }}>
+                  {p.name}{p.builder_verified && <span style={{ color: USDC, fontSize: "10px" }}>✓</span>}
+                </div>
+                <div style={{ fontSize: "10.5px", color: T3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.builder ? `by ${p.builder}` : (p.tagline || p.category || "")}</div>
+              </div>
+              {p.tvl && <span style={{ fontFamily: MONO, fontSize: "12px", color: T2, flexShrink: 0 }}>{p.tvl}</span>}
+            </CardRow>
+          ))}
+        </CardShell>
+      )
+    }
     if (c.tool === "get_project_builder") {
       if (d.found === false || !d.builder) return <CardShell key={i}><div style={{ padding: "13px 14px", fontSize: "12.5px", color: T2, lineHeight: 1.5 }}>{d.note || "No builder on record yet."}</div></CardShell>
       const b = d.builder
