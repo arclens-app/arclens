@@ -94,7 +94,10 @@ const FACTS = [
   { topic: "wallet", fact: "ArcLens has a built-in wallet panel — click your connected wallet to see your USDC and EURC balances. Circle email-wallet users can Send tokens to any Arc address and Receive to their own; ArcLens never custodies the funds, the user authorizes every send with their Circle PIN.", source_url: "/" },
 
   // ─── Plug-and-play contract registration ─────────────────────────────────
-  { topic: "founder-onboarding", fact: "Registering a contract for tracking works no matter how it was deployed. ArcLens proves the founder's authority via any of: the deployer signature, the wallet that sent the deploy transaction (covers factory deploys), the contract's owner()/admin(), or its EIP-1967 proxy-admin. The founder signs once with a wallet that deployed or controls the contract.", source_url: "/dashboard/[slug]" },
+  { topic: "founder-onboarding", fact: "Registering a contract for tracking is simple and works no matter how the contract was deployed — directly, through a factory, or behind a proxy. You just sign a quick message with the wallet that deployed or controls the contract, and ArcLens verifies you're authorized automatically. No manual approval and no back-and-forth.", source_url: "/dashboard/[slug]" },
+
+  // ─── Getting help / contact ──────────────────────────────────────────────
+  { topic: "support", fact: "Need help or want to reach the ArcLens team? Email support@arclenz.xyz. Founders manage their project from the dashboard; testers can browse and join campaigns on the Trials page.", source_url: "/about" },
 ]
 
 async function main() {

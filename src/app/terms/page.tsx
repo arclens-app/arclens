@@ -7,7 +7,7 @@ const sections = [
   {
     id: "1",
     title: "Acceptance of Terms",
-    body: `By accessing or using ArcLens (arclens.xyz), you agree to be bound by these Terms of Service ("Terms"). If you do not agree to these Terms, do not use the platform. These Terms apply to all visitors, users, and builders who access or use any part of the ArcLens platform.`,
+    body: `By accessing or using ArcLens (arclenz.xyz), you agree to be bound by these Terms of Service ("Terms"). If you do not agree to these Terms, do not use the platform. These Terms apply to all visitors, users, and builders who access or use any part of the ArcLens platform.`,
   },
   {
     id: "2",
@@ -124,7 +124,7 @@ Any dispute, controversy, or claim arising out of or relating to these Terms or 
   {
     id: "14",
     title: "Contact",
-    body: `For questions, concerns, or legal notices regarding these Terms, contact us at:\n\nsupport@arclens.xyz`,
+    body: `For questions, concerns, or legal notices regarding these Terms, contact us at:\n\nsupport@arclenz.xyz`,
   },
 ]
 
@@ -187,7 +187,7 @@ export default function TermsPage() {
         <div style={{ marginTop: "16px", padding: "20px", borderRadius: "10px", background: "rgba(26,86,255,0.04)", border: "1px solid rgba(26,86,255,0.1)", textAlign: "center" }}>
           <p style={{ fontSize: "12px", fontFamily: mono, color: t3, margin: 0 }}>
             Questions? Contact us at{" "}
-            <a href="mailto:support@arclens.xyz" style={{ color: "#8aaeff", textDecoration: "none" }}>support@arclens.xyz</a>
+            <a href="mailto:support@arclenz.xyz" style={{ color: "#8aaeff", textDecoration: "none" }}>support@arclenz.xyz</a>
           </p>
         </div>
 
