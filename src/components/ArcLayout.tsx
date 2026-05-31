@@ -926,7 +926,7 @@ export default function ArcLayout({ children, active }: { children: React.ReactN
                 { label: "About",   href: "/about" },
                 { label: "Terms",   href: "/terms" },
                 { label: "Privacy", href: "/privacy" },
-                { label: "support@arclens.xyz", href: "mailto:support@arclens.xyz" },
+                { label: "support@arclenz.xyz", href: "mailto:support@arclenz.xyz" },
               ].map(l => (
                 <a key={l.label} href={l.href}
                   style={{ fontSize: "11px", fontFamily: mono, color: t3, textDecoration: "none", transition: "color .12s" }}

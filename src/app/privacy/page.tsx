@@ -7,9 +7,9 @@ const sections = [
   {
     id: "1",
     title: "Who We Are",
-    body: `ArcLens (arclens.xyz) is a blockchain intelligence platform operated from Nigeria. We are the data controller for personal data collected through this platform.
+    body: `ArcLens (arclenz.xyz) is a blockchain intelligence platform operated from Nigeria. We are the data controller for personal data collected through this platform.
 
-Data contact: support@arclens.xyz`,
+Data contact: support@arclenz.xyz`,
   },
   {
     id: "2",
@@ -76,7 +76,7 @@ Wallet addresses, transaction hashes, contract addresses, and on-chain activity 
 • Right to data portability — to receive your data in a structured, machine-readable format
 • Right to object — to object to processing based on legitimate interests
 
-To exercise any of these rights, please contact us at support@arclens.xyz with your request. We will respond within 30 days. We may need to verify your identity before processing your request.`,
+To exercise any of these rights, please contact us at support@arclenz.xyz with your request. We will respond within 30 days. We may need to verify your identity before processing your request.`,
   },
   {
     id: "8",
@@ -100,7 +100,7 @@ We use browser localStorage (not cookies) to store two functional preferences lo
   {
     id: "11",
     title: "Children's Privacy",
-    body: `ArcLens is not directed at or intended for use by persons under the age of 18. We do not knowingly collect personal data from minors. If you believe that a minor has submitted personal data to our platform, please contact us at support@arclens.xyz and we will take prompt steps to delete such data.`,
+    body: `ArcLens is not directed at or intended for use by persons under the age of 18. We do not knowingly collect personal data from minors. If you believe that a minor has submitted personal data to our platform, please contact us at support@arclenz.xyz and we will take prompt steps to delete such data.`,
   },
   {
     id: "12",
@@ -112,7 +112,7 @@ We use browser localStorage (not cookies) to store two functional preferences lo
     title: "Contact and Complaints",
     body: `For questions, concerns, or requests regarding this Privacy Policy or your personal data, contact our data team at:
 
-support@arclens.xyz
+support@arclenz.xyz
 
 If you are dissatisfied with our response, you have the right to lodge a complaint with the Nigeria Data Protection Commission (NDPC) at ndpc.gov.ng.`,
   },
@@ -185,7 +185,7 @@ export default function PrivacyPage() {
           </p>
           <p style={{ fontSize: "12px", fontFamily: mono, color: t3, margin: 0 }}>
             Data contact:{" "}
-            <a href="mailto:support@arclens.xyz" style={{ color: "#8aaeff", textDecoration: "none" }}>support@arclens.xyz</a>
+            <a href="mailto:support@arclenz.xyz" style={{ color: "#8aaeff", textDecoration: "none" }}>support@arclenz.xyz</a>
           </p>
         </div>
 

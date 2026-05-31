@@ -574,7 +574,7 @@ function FullNodeGuide({ c }: { c: Colors }) {
       <Step n="9" title="Verify the node is running" c={c}>
         <P c={c}>Open a third terminal and check the current block your node has reached:</P>
         <Copy id="fn-verify" code={FULL_VERIFY} c={c} />
-        <P c={c} extra="12px 0 8px">Compare that block number to <a href="https://arclens.xyz" target="_blank" rel="noopener noreferrer" style={{ color: c.link }}>arclens.xyz</a> — the gap shrinks as your node catches up. You can also watch logs live:</P>
+        <P c={c} extra="12px 0 8px">Compare that block number to <a href="https://arclenz.xyz" target="_blank" rel="noopener noreferrer" style={{ color: c.link }}>arclenz.xyz</a> — the gap shrinks as your node catches up. You can also watch logs live:</P>
         <Copy id="fn-logs" code={FULL_LOGS} c={c} />
       </Step>
 
