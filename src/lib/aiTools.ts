@@ -267,5 +267,46 @@ export function buildTools() {
         return { metric, period_days: days, projects: r.rows.map((row, i) => ({ rank: i + 1, name: row.name, slug: row.slug, value: fmtUsd(row.period_total) })) }
       },
     }),
+
+    get_project_builder: tool({
+      description:
+        "Find who built / owns a specific Arc project — use for 'who built X', 'who's behind X', 'who's the team behind X'. " +
+        "Returns the builder's profile name (or wallet if no profile yet) and a link to their builder profile.",
+      inputSchema: jsonSchema<{ project: string }>({
+        type: "object",
+        properties: { project: { type: "string", description: "Project name or slug." } },
+        required: ["project"],
+      }),
+      execute: async ({ project }) => {
+        const r = await pool.query(
+          `SELECT p.name, p.slug, p.owner_wallet,
+                  b.display_name, b.verified, b.twitter, b.claimed_at
+           FROM projects p
+           LEFT JOIN builder_profiles b ON b.address = LOWER(p.owner_wallet)
+           WHERE p.approved AND p.live AND (p.slug ILIKE $1 OR p.name ILIKE $1)
+           ORDER BY (p.slug = LOWER($2)) DESC
+           LIMIT 1`,
+          [`%${project}%`, project.toLowerCase()],
+        )
+        if (!r.rows[0]) return { found: false, note: `No live project matching "${project}".` }
+        const p = r.rows[0]
+        if (!p.owner_wallet) return { found: true, project: p.name, builder: null, note: "This project hasn't been claimed by a builder yet." }
+        const addr = String(p.owner_wallet).toLowerCase()
+        return {
+          found: true,
+          project: p.name,
+          slug: p.slug,
+          builder: {
+            name: p.display_name || `${addr.slice(0, 6)}…${addr.slice(-4)}`,
+            claimed: !!p.claimed_at || !!p.display_name,
+            verified: !!p.verified,
+            twitter: p.twitter || null,
+            address: addr,
+            profile_url: `/builder/${addr}`,
+          },
+          note: p.display_name ? undefined : "Owner wallet is known, but they haven't set up a builder profile yet.",
+        }
+      },
+    }),
   }
 }

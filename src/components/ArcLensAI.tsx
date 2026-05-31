@@ -250,6 +250,24 @@ function renderCards(cards: DataCard[]): React.ReactNode {
         </CardShell>
       )
     }
+    if (c.tool === "get_project_builder") {
+      if (d.found === false || !d.builder) return <CardShell key={i}><div style={{ padding: "13px 14px", fontSize: "12.5px", color: T2, lineHeight: 1.5 }}>{d.note || "No builder on record yet."}</div></CardShell>
+      const b = d.builder
+      return (
+        <CardShell key={i} title={`Builder of ${d.project}`}>
+          <CardRow href={b.profile_url} first>
+            <TokenAvatar name={b.name} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: "13px", fontWeight: 600, display: "flex", alignItems: "center", gap: "6px" }}>
+                {b.name}{b.verified && <span style={{ color: USDC, fontSize: "11px" }}>✓</span>}
+              </div>
+              <div style={{ fontSize: "10.5px", color: T3 }}>{b.claimed ? "Builder profile" : "Profile not set up yet"}</div>
+            </div>
+            <span style={{ fontFamily: MONO, fontSize: "11px", color: ARC, flexShrink: 0 }}>View →</span>
+          </CardRow>
+        </CardShell>
+      )
+    }
     return null
   })
 }
