@@ -52,6 +52,7 @@ interface ProjectContract {
   revoked_at: string | null
   revoke_reason: string | null
   created_at: string
+  volume_method?: "swap_event" | "outflow_transfer" | null
   volume_event_signature?: string | null
   volume_event_topic?: string | null
   volume_amount_arg?: number | null
@@ -90,6 +91,9 @@ export default function TvlTrackingPanel({ slug, token, connectedWallet, theme }
   const [contracts, setContracts] = useState<ProjectContract[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState("")
+  // Inline label edit per row (cosmetic only — no resign needed).
+  const [labelEditId, setLabelEditId] = useState<number | null>(null)
+  const [labelEditValue, setLabelEditValue] = useState("")
 
   const [addr, setAddr] = useState("")
   const [role, setRole] = useState<"tvl" | "revenue" | "treasury" | "volume">("tvl")
@@ -338,6 +342,53 @@ export default function TvlTrackingPanel({ slug, token, connectedWallet, theme }
     }
   }
 
+  // Cosmetic edit — label only. Material edits (role, volume config, start_block)
+  // require the founder to re-sign, which they do by clicking "Reconfigure"
+  // and going through the existing form + signing flow.
+  async function saveLabelEdit(id: number) {
+    setSubmitError("")
+    try {
+      const res = await fetch(`/api/project-contracts/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ label: labelEditValue }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "Failed to update")
+      setLabelEditId(null)
+      setLabelEditValue("")
+      await load()
+    } catch (e: any) {
+      setSubmitError(e?.message || "Network error")
+    }
+  }
+
+  // Pre-fills the registration form with the contract's current values so the
+  // founder can edit any material field and re-sign. The existing POST
+  // endpoint upserts on (project_id, address, role) — same row gets updated
+  // with the new signed config.
+  function reconfigure(c: ProjectContract) {
+    setAddr(c.address)
+    setRole(c.role)
+    setLabel(c.label ?? "")
+    setStartBlock(String(c.start_block))
+    if (c.role === "volume") {
+      setVolMethod((c.volume_method as any) ?? "swap_event")
+      setVolSignature(c.volume_event_signature ?? "")
+      setVolAmountArg(c.volume_amount_arg != null ? String(c.volume_amount_arg) : "")
+      setVolStablecoinId(c.volume_stablecoin_id != null ? String(c.volume_stablecoin_id) : "")
+      setVolPreset("custom")
+    }
+    setSubmitError("")
+    setSubmitSuccess("")
+    setChallenge(null)
+    // Scroll the form into view so the founder sees the prefilled fields.
+    setTimeout(() => {
+      const el = document.querySelector('[data-tvl-form]') as HTMLElement | null
+      el?.scrollIntoView({ behavior: "smooth", block: "start" })
+    }, 50)
+  }
+
   // ── styles ─────────────────────────────────────────────────────────────────
   const labelStyle: React.CSSProperties = {
     display: "block",
@@ -419,16 +470,59 @@ export default function TvlTrackingPanel({ slug, token, connectedWallet, theme }
                 flexShrink: 0,
               }}>{c.role}</span>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: "12px", fontFamily: mono, color: t1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {c.label || c.address}
-                </div>
-                <div style={{ fontSize: "10px", fontFamily: mono, color: t3, marginTop: "2px" }}>
-                  {c.label ? c.address + " · " : ""}from block {Number(c.start_block).toLocaleString()}
-                </div>
+                {labelEditId === c.id ? (
+                  <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                    <input
+                      value={labelEditValue}
+                      onChange={e => setLabelEditValue(e.target.value)}
+                      autoFocus
+                      placeholder="display label"
+                      style={{ flex: 1, minWidth: 0, height: "26px", background: surf, border: "1px solid " + bdr, borderRadius: "5px", padding: "0 8px", fontSize: "11.5px", fontFamily: mono, color: t1, outline: "none" }}
+                    />
+                    <button onClick={() => saveLabelEdit(c.id)}
+                      style={{ height: "26px", padding: "0 10px", background: "rgba(0,184,122,0.1)", color: green, border: "1px solid rgba(0,184,122,0.3)", borderRadius: "5px", cursor: "pointer", fontSize: "10px", fontFamily: mono }}>Save</button>
+                    <button onClick={() => { setLabelEditId(null); setLabelEditValue("") }}
+                      style={{ height: "26px", padding: "0 8px", background: "transparent", color: t3, border: "1px solid " + bdr, borderRadius: "5px", cursor: "pointer", fontSize: "10px", fontFamily: mono }}>Cancel</button>
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                      <span style={{ fontSize: "12px", fontFamily: mono, color: t1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0, flex: 1 }}>
+                        {c.label || c.address}
+                      </span>
+                      <button onClick={() => { setLabelEditId(c.id); setLabelEditValue(c.label || "") }}
+                        title="Edit label"
+                        style={{ fontSize: "9.5px", padding: "1px 6px", background: "transparent", color: "#8aaeff", border: "1px solid rgba(26,86,255,0.2)", borderRadius: "4px", cursor: "pointer", fontFamily: mono, flexShrink: 0 }}>
+                        edit
+                      </button>
+                    </div>
+                    <div style={{ fontSize: "10px", fontFamily: mono, color: t3, marginTop: "2px" }}>
+                      {c.label ? c.address + " · " : ""}from block {Number(c.start_block).toLocaleString()}
+                    </div>
+                  </>
+                )}
               </div>
               <span style={{ fontSize: "9px", fontFamily: mono, color: green, padding: "2px 7px", borderRadius: "4px", background: "rgba(0,184,122,0.08)", border: "1px solid rgba(0,184,122,0.25)", flexShrink: 0 }}>
                 ✓ verified by deployer
               </span>
+              <button
+                onClick={() => reconfigure(c)}
+                title="Pre-fill the form to change role / volume config — you'll need to re-sign"
+                style={{
+                  height: "28px",
+                  padding: "0 10px",
+                  background: "rgba(26,86,255,0.08)",
+                  color: "#8aaeff",
+                  border: "1px solid rgba(26,86,255,0.25)",
+                  borderRadius: "6px",
+                  cursor: "pointer",
+                  fontSize: "10px",
+                  fontFamily: mono,
+                  flexShrink: 0,
+                }}
+              >
+                Reconfigure
+              </button>
               <button
                 onClick={() => revoke(c.id)}
                 style={{
@@ -453,7 +547,7 @@ export default function TvlTrackingPanel({ slug, token, connectedWallet, theme }
       )}
 
       {/* ── ADD FORM ── */}
-      <div style={{ borderTop: "1px solid " + bdr, paddingTop: "20px" }}>
+      <div data-tvl-form style={{ borderTop: "1px solid " + bdr, paddingTop: "20px" }}>
         <div style={{ fontSize: "11px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "12px" }}>
           Add a contract
         </div>
@@ -513,7 +607,6 @@ export default function TvlTrackingPanel({ slug, token, connectedWallet, theme }
                 <option value="tvl">TVL — holds user deposits</option>
                 <option value="volume">Volume — emits Swap events</option>
                 <option value="revenue">Revenue — collects fees</option>
-                <option value="treasury">Treasury — protocol-owned</option>
               </select>
             </div>
             <div>

@@ -95,6 +95,88 @@ export async function verifyDeployerSignature(
   }
 }
 
+// ─── Multi-candidate authorization (the plug-and-play "proof ladder") ─────────
+//
+// A contract's right to be claimed shouldn't hinge on a SINGLE proof method.
+// The original creator may be a factory contract, the contract may be a proxy,
+// or the founder may only hold the `owner()` role today. So we resolve a SET of
+// acceptable signers (creator EOA, creation-tx sender, owner()/admin(), proxy
+// admin slot — assembled by the caller) and accept a signature from ANY of them.
+//
+// Trust is preserved: every candidate is read authoritatively from chain /
+// explorer, never from the request. `method` records WHICH rung matched so the
+// UI can show an honest provenance badge.
+
+export interface AuthorizedCandidate {
+  address: string   // lowercase 0x…, an on-chain-resolved authority
+  method:  string   // 'deployer' | 'deployer_tx_sender' | 'owner' | 'admin' | 'proxy_admin'
+}
+
+export interface AuthorizedVerifyResult {
+  ok:        boolean
+  method?:   string                 // the candidate rung that matched
+  proof?:    "eoa" | "eip1271"      // how it was proven
+  matched?:  string                 // the candidate address that authorized
+  recovered?: string
+  reason?:   string
+}
+
+/**
+ * Verify `signature` over `message` against a set of acceptable signers.
+ * Recovers the EOA once and checks set membership; otherwise tries EIP-1271
+ * against each candidate that is itself a contract (Safe etc).
+ */
+export async function verifyAuthorizedSigner(
+  message: string,
+  signature: string,
+  candidates: AuthorizedCandidate[],
+  provider: ethers.Provider,
+): Promise<AuthorizedVerifyResult> {
+  if (!signature || !/^0x[0-9a-fA-F]+$/.test(signature)) {
+    return { ok: false, reason: "signature is not hex" }
+  }
+  if (!candidates || candidates.length === 0) {
+    return { ok: false, reason: "no on-chain authority could be resolved for this contract" }
+  }
+  const byAddr = new Map(candidates.map(c => [c.address.toLowerCase(), c]))
+
+  // 1) EOA path — recover once, check membership in the candidate set.
+  let recovered: string | undefined
+  try {
+    recovered = ethers.verifyMessage(message, signature).toLowerCase()
+    const hit = byAddr.get(recovered)
+    if (hit) return { ok: true, method: hit.method, proof: "eoa", matched: hit.address, recovered }
+  } catch {
+    // malformed for EOA recovery — fall through to EIP-1271
+  }
+
+  // 2) EIP-1271 — try each candidate that is a smart-contract wallet.
+  const hash = ethers.hashMessage(message)
+  for (const c of candidates) {
+    let code: string
+    try { code = await provider.getCode(c.address) } catch { continue }
+    if (code === "0x") continue
+    try {
+      const contract = new ethers.Contract(c.address, EIP1271_ABI, provider)
+      const result: string = await contract.isValidSignature(hash, signature)
+      if (typeof result === "string" && result.toLowerCase() === EIP1271_MAGIC) {
+        return { ok: true, method: c.method, proof: "eip1271", matched: c.address }
+      }
+    } catch {
+      // not an EIP-1271 wallet — try the next candidate
+    }
+  }
+
+  const list = candidates.map(c => `${c.address.slice(0, 10)}…(${c.method})`).join(", ")
+  return {
+    ok: false,
+    recovered,
+    reason: recovered
+      ? `signature recovered to ${recovered}, which isn't an authorized signer. Accepted: ${list}.`
+      : `signature didn't match any authorized signer. Accepted: ${list}.`,
+  }
+}
+
 /**
  * Build the canonical, human-readable message that the deployer signs.
  * The text is deliberately self-describing so a founder pasting it into a

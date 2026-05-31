@@ -6,16 +6,28 @@
 
 import { ethers } from "ethers"
 
-// Arc public RPC caps `eth_getLogs` at 20,000 results. For a busy stablecoin
-// Transfer event a 5,000-block window can blow past that. Wrap getLogs with
-// recursive bisection: on the specific "too many results" error, halve the
-// range and retry each side, recurse until the RPC accepts it. Surfaces ALL
-// other errors normally — we only special-case the documented oversize one.
+// Arc's public RPC rejects `eth_getLogs` calls that are too large in two
+// distinct ways, and a busy contract's 5,000-block window can trip either:
+//   • too many RESULTS  → HTTP 413 "Request Entity Too Large"
+//   • too wide a RANGE  → JSON-RPC -32614 "eth_getLogs is limited to a 10,000 range"
+// On any of these we bisect: halve the range and retry each side, recursing
+// until the RPC accepts it. ALL other errors (transient network blips, etc.)
+// surface normally so the caller can alert + retry on the next tick rather
+// than silently lose logs.
+//
+// IMPORTANT: these patterns must track the messages Arc actually returns. If
+// none match, the call THROWS instead of bisecting, the cursor never advances
+// past the oversized window, and the contract gets stuck re-failing it every
+// tick. (Observed live: -32614 + 413 were not matched by the old patterns.)
 const RPC_OVERSIZE_PATTERNS = [
   /max\s*results?/i,
   /exceeds?\s+\d+/i,
   /too many results/i,
-  /-32602/, // Arc's specific code for this on the testnet RPC
+  /(entity )?too large/i,    // HTTP 413 "Request Entity Too Large" (oversize response)
+  /\b413\b/,                 // some providers surface the bare status code
+  /limited to a [\d,]+/i,    // Arc: "eth_getLogs is limited to a 10,000 range"
+  /-32602/,                  // generic invalid-params oversize
+  /-32614/,                  // Arc testnet: range/size limit
 ]
 export async function getLogsBisecting(
   provider: ethers.JsonRpcProvider,
