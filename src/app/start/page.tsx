@@ -7,7 +7,7 @@ const CHAIN = {
   chainId: "0x4cef52", chainName: "Arc Testnet",
   nativeCurrency: { name: "USDC", symbol: "USDC", decimals: 18 },
   rpcUrls: ["https://rpc.testnet.arc.network"],
-  blockExplorerUrls: ["https://arclens.xyz"],
+  blockExplorerUrls: ["https://arclenz.xyz"],
 }
 
 const COMMUNITY = [
@@ -152,7 +152,7 @@ export const arcTestnet = defineChain({
   name: "Arc Testnet",
   nativeCurrency: { name: "USDC", symbol: "USDC", decimals: 18 },
   rpcUrls: { default: { http: ["https://rpc.testnet.arc.network"] } },
-  blockExplorers: { default: { name: "ArcLens", url: "https://arclens.xyz" } },
+  blockExplorers: { default: { name: "ArcLens", url: "https://arclenz.xyz" } },
   testnet: true,
 })
 
@@ -611,7 +611,7 @@ export default function StartPage() {
             {/* L6 */}
             <LM id="L6" n="L6" title="You are in the ecosystem" deliverable="Your project has a page on ArcLens" time="15 min"
               aiBest={null} done={done.has("L6")} onToggle={toggleDone}
-              checkpoint={["Contract is registered on ArcLens Registry", "Project appears on arclens.xyz/ecosystem", "You have a founder dashboard for your listing"]}>
+              checkpoint={["Contract is registered on ArcLens Registry", "Project appears on arclenz.xyz/ecosystem", "You have a founder dashboard for your listing"]}>
               <SL label="1" title="Register your contract">
                 <P>Add your deployed contract to the ArcLens Contract Registry. This verifies it is legitimate, makes it discoverable, and lets other builders find your code.</P>
                 <Row><FlatLink href="/registry" label="Contract Registry" /></Row>
@@ -661,7 +661,7 @@ export default function StartPage() {
                   ["Chain ID",   "5042002  (0x4cef52)"],
                   ["RPC",        "https://rpc.testnet.arc.network"],
                   ["WebSocket",  "wss://rpc.testnet.arc.network"],
-                  ["Explorer",   "https://arclens.xyz"],
+                  ["Explorer",   "https://arclenz.xyz"],
                   ["Gas token",  "USDC — ERC-20 native, not ETH"],
                   ["EVM parity", "Full — Solidity ^0.8.x, all opcodes"],
                   ["Finality",   "< 1s"],
@@ -771,7 +771,7 @@ export default function StartPage() {
                   </div>
                 ))}
               </div>
-              <div style={{ fontSize: "11px", fontFamily: mono, color: t3 }}>Base: arclens.xyz — no API key needed</div>
+              <div style={{ fontSize: "11px", fontFamily: mono, color: t3 }}>Base: arclenz.xyz — no API key needed</div>
             </DevSection>
 
             <DevSection title="Pre-Deploy Checklist" mono={mono} t3={t3}>

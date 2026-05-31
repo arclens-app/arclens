@@ -95,7 +95,7 @@ export default function AboutPage() {
               <a href="/ecosystem" style={{ height: "42px", padding: "0 22px", background: "transparent", color: t1, fontSize: "13px", fontWeight: 500, borderRadius: "9px", textDecoration: "none", display: "inline-flex", alignItems: "center", border: "1px solid " + bdr }}>
                 Browse Ecosystem
               </a>
-              <a href="mailto:support@arclens.xyz" style={{ height: "42px", padding: "0 22px", background: "transparent", color: "#8aaeff", fontSize: "13px", fontWeight: 500, borderRadius: "9px", textDecoration: "none", display: "inline-flex", alignItems: "center", border: "1px solid rgba(26,86,255,0.25)" }}>
+              <a href="mailto:support@arclenz.xyz" style={{ height: "42px", padding: "0 22px", background: "transparent", color: "#8aaeff", fontSize: "13px", fontWeight: 500, borderRadius: "9px", textDecoration: "none", display: "inline-flex", alignItems: "center", border: "1px solid rgba(26,86,255,0.25)" }}>
                 Contact Us
               </a>
             </div>
@@ -181,12 +181,12 @@ export default function AboutPage() {
                   Whether you're a builder wanting to list your project, a team looking to partner, or a user who needs help — reach out.
                 </p>
                 <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                  <a href="mailto:support@arclens.xyz"
+                  <a href="mailto:support@arclenz.xyz"
                     style={{ display: "inline-flex", alignItems: "center", gap: "10px", padding: "12px 18px", borderRadius: "9px", border: "1px solid " + bdr, textDecoration: "none", color: t2, fontSize: "13px", transition: "all .12s" }}
                     onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(26,86,255,0.4)"; e.currentTarget.style.color = t1 }}
                     onMouseLeave={e => { e.currentTarget.style.borderColor = bdr; e.currentTarget.style.color = t2 }}>
                     <span style={{ fontSize: "14px" }}>✉</span>
-                    support@arclens.xyz
+                    support@arclenz.xyz
                   </a>
                   <a href="https://x.com/arclens_app" target="_blank" rel="noopener noreferrer"
                     style={{ display: "inline-flex", alignItems: "center", gap: "10px", padding: "12px 18px", borderRadius: "9px", border: "1px solid " + bdr, textDecoration: "none", color: t2, fontSize: "13px", transition: "all .12s" }}

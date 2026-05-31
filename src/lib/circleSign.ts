@@ -12,6 +12,29 @@ async function runSDKChallenge(userToken: string, encryptionKey: string, challen
   document.getElementById("sdkIframe")?.remove()
   const sdk = new W3SSdk()
   sdk.setAppSettings({ appId: APP_ID })
+  // Brand the PIN popup to match ArcLens (dark glass + Arc blue) instead of
+  // Circle's default white modal.
+  try {
+    sdk.setThemeColor({
+      backdrop: "#04060d", backdropOpacity: 0.66, divider: "rgba(255,255,255,0.08)",
+      bg: "#0b0e16", success: "#00c896", error: "#ff5a6e",
+      textMain: "#eef1f8", textAuxiliary: "#8b93a7", textSummary: "#8b93a7",
+      textSummaryHighlight: "#eef1f8", textPlaceholder: "#565e72",
+      textDetailToggle: "#6691ff", textInteractive: "#6691ff",
+      interactiveBg: "rgba(59,107,255,0.12)",
+      pinDotBase: "rgba(255,255,255,0.18)", pinDotBaseBorder: "rgba(255,255,255,0.28)",
+      pinDotActivated: "#3b6bff", enteredPinText: "#eef1f8",
+      inputText: "#eef1f8", inputBg: "#0e121d", inputBorderFocused: "#3b6bff",
+      inputBorderFocusedError: "#ff5a6e", inputBgDisabled: "#0b0e16",
+      dropdownBg: "#0e121d",
+      mainBtnText: "#ffffff", mainBtnTextOnHover: "#ffffff", mainBtnTextDisabled: "#8b93a7",
+      mainBtnBg: "#3b6bff", mainBtnBgOnHover: "#5b84ff", mainBtnBgDisabled: "rgba(59,107,255,0.3)",
+      secondBtnText: "#eef1f8", secondBtnTextOnHover: "#eef1f8",
+      secondBtnBorder: "rgba(255,255,255,0.12)", secondBtnBorderOnHover: "rgba(255,255,255,0.22)",
+      secondBtnBgOnHover: "rgba(255,255,255,0.05)",
+      tooltipBg: "#0e121d", tooltipText: "#eef1f8",
+    } as any)
+  } catch {}
   sdk.setAuthentication({ userToken, encryptionKey })
   return new Promise((resolve, reject) => {
     sdk.execute(challengeId, (error: any) => {
