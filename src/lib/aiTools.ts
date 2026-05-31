@@ -358,5 +358,60 @@ export function buildTools() {
         }
       },
     }),
+
+    list_open_trials: tool({
+      description:
+        "List open trial campaigns testers can join right now — use for 'what trials are open', 'campaigns I can do', " +
+        "'how do I earn on ArcLens'. Returns an empty list with a note when none are open.",
+      inputSchema: jsonSchema<{ limit?: number }>({
+        type: "object",
+        properties: { limit: { type: "number", description: "Max results (1-15). Default 8." } },
+      }),
+      execute: async ({ limit = 8 }) => {
+        const lim = Math.min(Math.max(Number(limit) || 8, 1), 15)
+        const r = await pool.query(
+          `SELECT title, slug, tagline, project_name, total_slots, filled_slots, reward_type, reward_description
+           FROM campaigns
+           WHERE ended_at IS NULL AND status NOT IN ('ended','cancelled','draft','rejected','pending')
+           ORDER BY created_at DESC NULLS LAST
+           LIMIT $1`,
+          [lim],
+        ).catch(() => ({ rows: [] as any[] }))
+        if (!r.rows.length) return { count: 0, trials: [], note: "No open trials right now — check the Trials page for what's coming." }
+        return {
+          count: r.rows.length,
+          trials: r.rows.map((c: any) => ({
+            title: c.title, slug: c.slug, project: c.project_name || null, tagline: c.tagline,
+            slots: c.total_slots ? `${c.filled_slots ?? 0}/${c.total_slots} filled` : null,
+            reward: c.reward_description || (c.reward_type ? String(c.reward_type).replace(/_/g, " ") : null),
+          })),
+        }
+      },
+    }),
+
+    get_ecosystem_stats: tool({
+      description:
+        "High-level Arc ecosystem numbers — use for 'how many projects on Arc', 'total TVL across Arc', 'ecosystem overview'.",
+      inputSchema: jsonSchema<Record<string, never>>({ type: "object", properties: {} }),
+      execute: async () => {
+        const r = await pool.query(
+          `SELECT
+             COUNT(*) FILTER (WHERE approved AND live)::int AS projects,
+             COUNT(*) FILTER (WHERE approved AND live AND tvl_tracking_enabled)::int AS tracking,
+             COALESCE(SUM(tvl_usd_e6)        FILTER (WHERE approved AND live), 0)::text AS tvl,
+             COALESCE(SUM(volume_cum_usd_e6) FILTER (WHERE approved AND live), 0)::text AS volume
+           FROM projects`,
+        )
+        const b = await pool.query(`SELECT COUNT(*)::int n FROM builder_profiles`).catch(() => ({ rows: [{ n: 0 }] }))
+        const s = r.rows[0]
+        return {
+          projects: s.projects,
+          projects_reporting_metrics: s.tracking,
+          total_tvl: fmtUsd(s.tvl),
+          total_volume: fmtUsd(s.volume),
+          builder_profiles: b.rows[0].n,
+        }
+      },
+    }),
   }
 }
