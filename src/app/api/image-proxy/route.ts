@@ -94,7 +94,10 @@ export async function GET(req: NextRequest) {
     return new NextResponse(buffer, {
       headers: {
         "Content-Type": contentType,
-        "Cache-Control": "public, s-maxage=604800, stale-while-revalidate=86400",
+        // Cache in the visitor's browser too (max-age), not just the CDN (s-maxage),
+        // so logos/avatars don't re-hit Vercel on every page they open. Each logo URL
+        // is unique per upload, so a changed logo = a new URL = a fresh fetch.
+        "Cache-Control": "public, max-age=86400, s-maxage=604800, stale-while-revalidate=86400, immutable",
         "Access-Control-Allow-Origin": "*",
       },
     })
