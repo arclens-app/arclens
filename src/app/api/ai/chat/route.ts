@@ -90,11 +90,20 @@ export async function POST(req: NextRequest) {
             } catch { /* no tool results */ }
           } catch (e: any) {
             console.error("[ai/chat] Gemini error:", e?.message || e)
-            answerText = stubAnswer(lastUser, ctx)
+            answerText = busyFallback()
             controller.enqueue(encoder.encode(answerText))
           }
         } else {
           answerText = stubAnswer(lastUser, ctx)
+          controller.enqueue(encoder.encode(answerText))
+        }
+
+        // If the model streamed nothing — a quota/rate-limit hit, a safety block,
+        // or an empty completion that didn't throw — and produced no cards, send a
+        // clean fallback so the user never gets a blank bubble. (stubAnswer is only
+        // for the no-API-key dev case below; it's a debug view, not user-facing.)
+        if (apiKey && !answerText.trim() && cards.length === 0) {
+          answerText = busyFallback()
           controller.enqueue(encoder.encode(answerText))
         }
 
@@ -179,6 +188,17 @@ function stubAnswer(userMsg: string, ctx: AiContext): string {
   lines.push("")
   lines.push(`*Ask the admin to set GEMINI_API_KEY and I'll start answering for real.*`)
   return lines.join("\n")
+}
+
+// User-facing fallback when Gemini IS configured but returns nothing — a
+// rate/quota limit, a safety block, or a transient error. Must read like a
+// normal assistant reply and never expose internal context, keys, or debug info.
+function busyFallback(): string {
+  return [
+    "Sorry — I couldn't put that together just now. I'm getting a lot of questions at the moment, so give me a few seconds and try again.",
+    "",
+    "In the meantime you can explore live projects and metrics on the [ecosystem page](/ecosystem).",
+  ].join("\n")
 }
 
 // ────────────────────────────────────────────────────────────────────────────
