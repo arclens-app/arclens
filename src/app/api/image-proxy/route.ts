@@ -14,8 +14,6 @@ export async function GET(req: NextRequest) {
     "blob.vercel-storage.com",
     "assets.coingecko.com",
     "arclens.app",
-    "cloudflare-ipfs.com",
-    "ipfs.io",
     "logo.clearbit.com",
     "icon.horse",
   ]
@@ -88,8 +86,15 @@ export async function GET(req: NextRequest) {
       return fallbackPixel()
     }
 
-    const buffer = await res.arrayBuffer()
     const contentType = res.headers.get("content-type") || "image/jpeg"
+    // Only ever serve actual images — never HTML/JS/etc. This stops the proxy
+    // being used to launder arbitrary (non-image) content through our domain,
+    // which is exactly what gets a domain onto spam/abuse blocklists.
+    if (!contentType.toLowerCase().startsWith("image/")) {
+      console.error("[image-proxy] blocked non-image content-type", contentType, url)
+      return fallbackPixel()
+    }
+    const buffer = await res.arrayBuffer()
 
     return new NextResponse(buffer, {
       headers: {
