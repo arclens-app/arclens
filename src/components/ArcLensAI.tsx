@@ -54,6 +54,30 @@ const USDC  = "#00c896"
 const SANS  = "'Geist', ui-sans-serif, system-ui, sans-serif"
 const MONO  = "'DM Mono', ui-monospace, SFMono-Regular, Menlo, monospace"
 
+// Per-device key for persisting the active conversation across close/reload.
+// The session resumes within the inactivity window, then auto-resets — so it
+// survives a reload but doesn't haunt the user for days (and the replayed
+// thread sent to the model never grows unbounded).
+const AI_STORE_KEY = "arclens-ai-session-v1"
+const AI_SESSION_TTL_MS = 24 * 60 * 60 * 1000 // 24h of inactivity → fresh start
+
+// Stable per-device id so anonymous (signed-out) usage can be rate-limited
+// without an account. Signed-in users are limited by wallet server-side; this
+// is only the fallback identity for visitors who haven't authenticated.
+const AI_DEVICE_KEY = "arclens-device-id"
+function deviceId(): string {
+  try {
+    let id = localStorage.getItem(AI_DEVICE_KEY)
+    if (!id) {
+      id = (typeof crypto !== "undefined" && crypto.randomUUID)
+        ? crypto.randomUUID()
+        : Math.random().toString(36).slice(2) + Date.now().toString(36)
+      localStorage.setItem(AI_DEVICE_KEY, id)
+    }
+    return id
+  } catch { return "nodev" }
+}
+
 // The brand mark — a lens aperture. ArcLens = a lens; this is a meaningful,
 // geometric mark, not a generic sparkle. Arc-gradient rounded square with a
 // white ring inside.
@@ -386,6 +410,32 @@ export default function ArcLensAI() {
   const inputRef  = useRef<HTMLTextAreaElement>(null)
   const streamRef = useRef<HTMLDivElement>(null)
 
+  // Persist the session so the conversation survives closing the panel,
+  // navigating between pages, and full reloads — a real assistant remembers.
+  // localStorage keeps it instant + private to the device; the server-side
+  // conversationId is kept too so we can rehydrate from the DB later if needed.
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(AI_STORE_KEY) || "null")
+      // Expired by inactivity → discard and start fresh.
+      if (saved && Date.now() - (saved.savedAt || 0) > AI_SESSION_TTL_MS) {
+        localStorage.removeItem(AI_STORE_KEY); return
+      }
+      if (Array.isArray(saved?.turns)) {
+        setTurns(saved.turns.filter((t: Turn) => t && t.answer != null).map((t: Turn) => ({ ...t, loading: false })))
+      }
+      if (saved?.convId != null) setConvId(saved.convId)
+    } catch {}
+  }, [])
+
+  useEffect(() => {
+    try {
+      const settled = turns.filter(t => t.answer != null && !t.loading)
+      if (settled.length === 0 && convId == null) { localStorage.removeItem(AI_STORE_KEY); return }
+      localStorage.setItem(AI_STORE_KEY, JSON.stringify({ turns: settled, convId, savedAt: Date.now() }))
+    } catch {}
+  }, [turns, convId])
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
@@ -422,9 +472,18 @@ export default function ArcLensAI() {
       thread.push({ role: "user", content: trimmed })
       const res = await fetch("/api/ai/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "x-arclens-device": deviceId() },
         body: JSON.stringify({ messages: thread, route: pathname, conversationId: convId }),
       })
+      // Daily free limit (or any non-OK) → show the message, don't stream JSON.
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({} as any))
+        const msg = d?.error || (res.status === 429
+          ? "You've reached today's free limit on ArcLens AI."
+          : "Something went wrong — try again.")
+        setTurns(prev => prev.map((t, i) => i === prev.length - 1 ? { ...t, answer: msg, loading: false, ms: Date.now() - t0 } : t))
+        return
+      }
       if (!res.body) throw new Error("no stream")
       // Stream protocol: answer text, then \x1e + JSON trailer (id + context).
       const reader = res.body.getReader()
@@ -460,6 +519,7 @@ export default function ArcLensAI() {
   function clearSession() {
     setTurns([])
     setConvId(null)
+    try { localStorage.removeItem(AI_STORE_KEY) } catch {}
   }
 
   const rate = useCallback(async (idx: number, rating: "up" | "down", turn: Turn) => {
