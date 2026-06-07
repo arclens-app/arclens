@@ -529,6 +529,18 @@ export async function POST(req: NextRequest) {
       } else {
         await pool.query("UPDATE projects SET approved = true, live = true WHERE id = $1", [id])
         await sendProjectEmail(Number(id), "approved")
+        // Publish the project on-chain the moment it goes live, at its current
+        // tier (listed unless already higher) — every accepted project lands in
+        // the registry, not just ones that later earn a tier change. Env-gated.
+        try {
+          const after = (await pool.query(
+            `SELECT trust_level, recognition, slug,
+                    (SELECT address FROM project_contracts WHERE project_id = projects.id AND verified_at IS NOT NULL AND revoked_at IS NULL LIMIT 1) AS proven
+               FROM projects WHERE id = $1`, [id]
+          )).rows[0]
+          const subject = subjectFor({ provenContract: after?.proven, slug: after?.slug })
+          if (subject) attestOnChain(subject, after.trust_level, after.recognition, "arclenz.xyz/ecosystem/" + (after.slug || "")).catch(() => {})
+        } catch {}
       }
       return NextResponse.json({ success: true })
     }
@@ -617,7 +629,8 @@ export async function POST(req: NextRequest) {
            FROM projects WHERE id = $1`, [id]
       )).rows[0]
       const subject = subjectFor({ provenContract: after?.proven, slug: after?.slug })
-      if (subject && tierKey(after?.recognition, after?.trust_level) !== beforeKey) {
+      const firstPublish = !wasApproved // newly approved/live via this update → publish even if tier is unchanged
+      if (subject && (firstPublish || tierKey(after?.recognition, after?.trust_level) !== beforeKey)) {
         attestOnChain(subject, after.trust_level, after.recognition, "arclenz.xyz/ecosystem/" + (after.slug || "")).catch(() => {})
       }
 

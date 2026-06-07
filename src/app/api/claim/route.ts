@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { Pool } from "pg"
 import { randomBytes } from "crypto"
+import { attestOnChain, subjectFor } from "@/lib/registry"
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
 
@@ -202,6 +203,20 @@ export async function PUT(req: NextRequest) {
        WHERE id = $2`,
       [addr, result.rows[0].id]
     )
+
+    // Mirror the new trust state on-chain (env-gated no-op until the registry is
+    // configured). Claiming moves the ladder listed→claimed, so the published
+    // attestation should reflect it — keeps the chain a complete, current record.
+    try {
+      const after = (await pool.query(
+        `SELECT trust_level, recognition, slug,
+                (SELECT address FROM project_contracts WHERE project_id = projects.id AND verified_at IS NOT NULL AND revoked_at IS NULL LIMIT 1) AS proven
+           FROM projects WHERE id = $1`, [result.rows[0].id]
+      )).rows[0]
+      const subject = subjectFor({ provenContract: after?.proven, slug: after?.slug })
+      if (subject) attestOnChain(subject, after.trust_level, after.recognition, "arclenz.xyz/ecosystem/" + (after.slug || "")).catch(() => {})
+    } catch {}
+
     return NextResponse.json({ success: true })
   } catch (err) { console.error("[Claim PUT]", err); return NextResponse.json({ error: "Server error" }, { status: 500 }) }
 }
