@@ -419,10 +419,13 @@ export default function TvlTrackingPanel({ slug, token, connectedWallet, theme }
       <div style={{ fontSize: "14px", fontWeight: 600, color: t1, marginBottom: "4px" }}>
         TVL &amp; Revenue tracking
       </div>
-      <div style={{ fontSize: "11px", fontFamily: mono, color: t3, marginBottom: "22px", lineHeight: 1.6 }}>
+      <div style={{ fontSize: "11px", fontFamily: mono, color: t3, marginBottom: "12px", lineHeight: 1.6 }}>
         Register the contracts that hold user deposits (TVL) or collect fees (Revenue).
         We verify your ownership by matching the contract&apos;s on-chain deployer to your signed-in wallet —
         the same gate used for contract claims. Numbers appear on /ecosystem within 5 minutes.
+      </div>
+      <div style={{ fontSize: "11px", fontFamily: mono, color: "#a8c2ff", background: "rgba(26,86,255,0.06)", border: "1px solid rgba(26,86,255,0.18)", borderRadius: "7px", padding: "9px 12px", marginBottom: "22px", lineHeight: 1.6 }}>
+        Verification is a one-time off-chain signature that proves you control the contract. It gives ArcLens no control over it — ownership stays entirely yours.
       </div>
 
       {/* ── LIVE LIST ── */}

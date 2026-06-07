@@ -9,6 +9,7 @@ interface Project {
   id: number; name: string; tagline: string; category: string; description: string
   logo_url: string|null; email: string|null; website: string|null; twitter: string|null
   github: string|null; discord: string|null; contract: string|null; contracts: string[]|null; badge: string|null
+  trust_level?: string|null; recognition?: string|null
   approved: boolean; live: boolean; featured: boolean; created_at: string
   city: string|null; country: string|null; lat: number|null; lng: number|null
 }
@@ -45,9 +46,10 @@ export default function AdminPage() {
   const [pw, setPw]                   = useState("")
   const [password, setPassword]       = useState("")
   const [loading, setLoading]         = useState(false)
+  const [loadedOnce, setLoadedOnce]   = useState(false)
   const [tab, setTab]                 = useState<"pending"|"updates"|"campaign-updates"|"projects"|"contracts"|"events"|"locations"|"campaigns"|"stats"|"trust"|"tracked"|"ai">("pending")
   // Trust tab state: alerts + disputes, fetched on demand.
-  const [trust, setTrust]             = useState<{ alerts: any[]; disputes: any[]; counts: { open_alerts: number; open_disputes: number } } | null>(null)
+  const [trust, setTrust]             = useState<{ alerts: any[]; disputes: any[]; audits: any[]; flagged: any[]; counts: { open_alerts: number; open_disputes: number; open_audits: number; open_flags: number } } | null>(null)
   const [trustLoading, setTrustLoading] = useState(false)
   const [trustError, setTrustError]   = useState("")
   // Tracked Contracts tab state.
@@ -120,6 +122,10 @@ export default function AdminPage() {
   const [rejectReason, setRejectReason] = useState("")
   const [editing, setEditing]         = useState<Project|null>(null)
   const [editForm, setEditForm]       = useState<Partial<Project>>({})
+  const [assess, setAssess]           = useState<any>(null)
+  const [assessing, setAssessing]     = useState(false)
+  const [estCheck, setEstCheck]       = useState<any>(null)
+  const [estChecking, setEstChecking] = useState(false)
   const [expandedContract, setExpandedContract] = useState<string|null>(null)
   const [showEventForm, setShowEventForm] = useState(false)
   const [creatingEvent, setCreatingEvent] = useState(false)
@@ -195,7 +201,7 @@ export default function AdminPage() {
       // Tracked Contracts — fetched alongside for sidebar count accuracy.
       loadTracked(p).catch(() => {})
       loadAiInsights(p).catch(() => {})
-    } finally { setLoading(false) }
+    } finally { setLoading(false); setLoadedOnce(true) }
   }
 
   async function loadTrust(p: string = pw) {
@@ -229,6 +235,28 @@ export default function AdminPage() {
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${pw}` },
       body: JSON.stringify({ kind: "dispute", id, action, notes }),
     }).catch(() => {})
+    await loadTrust()
+  }
+
+  async function actionCaution(id: number) {
+    if (!pw) return
+    const r = await fetch("/api/admin/trust", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${pw}` },
+      body: JSON.stringify({ kind: "caution", id, action: "acknowledge" }),
+    }).catch(() => null)
+    if (r?.ok) showToast(true, "Acknowledged")
+    await loadTrust()
+  }
+
+  async function actionAudit(id: number, action: "approve" | "reject") {
+    if (!pw) return
+    const r = await fetch("/api/admin/trust", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${pw}` },
+      body: JSON.stringify({ kind: "audit", id, action }),
+    }).catch(() => null)
+    if (r?.ok) showToast(true, action === "approve" ? "Verified — audit approved" : "Audit rejected")
     await loadTrust()
   }
 
@@ -346,7 +374,9 @@ export default function AdminPage() {
 
   function startEdit(p: Project) {
     setEditing(p)
-    setEditForm({ ...p })
+    setEditForm({ ...p, audited: ((p as any).trust_level === "verified" || (p as any).audit_status === "approved") } as any)
+    setAssess(null)
+    setEstCheck(null)
   }
 
   async function geocodeProject(id: number, fallback?: { city: string; country: string }) {
@@ -454,14 +484,13 @@ export default function AdminPage() {
     { id: "campaign-updates" as const, label: "Campaign Edits",   count: pendingCampaignUpdates.length, urgent: pendingCampaignUpdates.length > 0 },
     { id: "campaigns"        as const, label: "Campaigns",         count: pendingCampaigns.length,       urgent: pendingCampaigns.length > 0 },
     { id: "events"    as const, label: "Events",        count: pendingEvents,            urgent: pendingEvents > 0 },
-    { id: "trust"     as const, label: "Trust",         count: (trust?.counts.open_alerts ?? 0) + (trust?.counts.open_disputes ?? 0), urgent: !!trust && ((trust.counts.open_alerts > 0) || (trust.counts.open_disputes > 0)) },
+    { id: "trust"     as const, label: "Trust",         count: (trust?.counts.open_alerts ?? 0) + (trust?.counts.open_disputes ?? 0) + (trust?.counts.open_audits ?? 0) + (trust?.counts.open_flags ?? 0), urgent: !!trust && ((trust.counts.open_alerts > 0) || (trust.counts.open_disputes > 0) || (trust.counts.open_audits > 0) || (trust.counts.open_flags > 0)) },
     { id: "tracked"   as const, label: "Tracked Contracts", count: tracked?.counts.total ?? 0, urgent: !!tracked && tracked.counts.errored > 0 },
   ]
   const manageTabs = [
     { id: "ai"        as const, label: "ArcLens AI",      count: aiInsights?.gaps.total ?? 0, urgent: false },
     { id: "stats"     as const, label: "Stats Dashboard", count: 0,                urgent: false },
     { id: "projects"  as const, label: "All Projects",    count: projects.length,  urgent: false },
-    { id: "contracts" as const, label: "Contracts",       count: contracts.length, urgent: false },
     { id: "locations" as const, label: "Locations",       count: missingLoc,       urgent: missingLoc > 0 },
   ]
 
@@ -580,7 +609,7 @@ export default function AdminPage() {
                : tab === "projects"  ? `${projects.length} approved projects on Arc Ecosystem`
                : tab === "contracts" ? `${contracts.length} total · ${contracts.filter(c=>!c.verified).length} unverified`
                : tab === "stats"     ? "Site-wide metrics · milestone tracker · payout wallet"
-               : tab === "trust"     ? "Indexer self-audit + visitor-flagged disputes"
+               : tab === "trust"     ? "Indexer alerts · reports & disputes · pending audits"
                : tab === "tracked"   ? `${tracked?.counts.working ?? 0} working · ${tracked?.counts.errored ?? 0} errored · ${tracked?.counts.quiet ?? 0} quiet · ${tracked?.counts.revoked ?? 0} revoked`
                : tab === "ai"        ? `${aiInsights?.gaps.total ?? 0} unanswered · ${aiInsights?.ratings.up ?? 0} 👍 / ${aiInsights?.ratings.down ?? 0} 👎`
                : `${missingLoc} missing coordinates`}
@@ -762,7 +791,7 @@ export default function AdminPage() {
             )
           })()}
 
-          {loading ? (
+          {loading && !loadedOnce ? (
             <div style={{ padding:"60px", textAlign:"center", fontFamily:mono, fontSize:"11px", color:t3 }}>Loading...</div>
           ) : (
             <>
@@ -1636,6 +1665,36 @@ export default function AdminPage() {
                     </div>
                   )}
 
+                  {/* Risk-engine flags — admin-only, never shown to users */}
+                  <div>
+                    <div style={{ fontSize:"10px", fontFamily:mono, color:t3, textTransform:"uppercase", letterSpacing:"0.1em", marginBottom:"10px" }}>
+                      Flagged by the risk engine (admin-only — users never see these)
+                    </div>
+                    {(!trust || trust.flagged.length === 0) ? (
+                      <EmptyState icon="✓" title="Nothing flagged" sub="No project is risk-flagged or awaiting caution review." />
+                    ) : (
+                      <div style={{ display:"flex", flexDirection:"column", gap:"8px" }}>
+                        {trust.flagged.map((f: any) => (
+                          <div key={f.id} style={{ background:surf, border:"1px solid "+(f.hard_risk?"rgba(224,51,72,0.3)":"rgba(224,160,32,0.25)"), borderRadius:"10px", padding:"14px 18px" }}>
+                            <div style={{ display:"flex", alignItems:"center", gap:"8px", marginBottom:"6px", flexWrap:"wrap" }}>
+                              <span style={{ fontSize:"9px", fontFamily:mono, padding:"2px 7px", borderRadius:"4px", background:f.hard_risk?"rgba(224,51,72,0.1)":"rgba(224,160,32,0.12)", color:f.hard_risk?"#e03348":"#e0a020", border:"1px solid "+(f.hard_risk?"rgba(224,51,72,0.25)":"rgba(224,160,32,0.3)"), textTransform:"uppercase", letterSpacing:"0.08em" }}>
+                                {f.hard_risk ? "risk" : "caution"}
+                              </span>
+                              <a href={`/ecosystem/${f.slug}`} target="_blank" rel="noopener noreferrer" style={{ fontSize:"11px", fontFamily:mono, color:"#8aaeff", textDecoration:"none" }}>{f.name || f.slug}</a>
+                            </div>
+                            <div style={{ fontSize:"12px", color:t1, marginBottom:"8px", lineHeight:1.5 }}>{f.hard_risk ? (f.risk_reason || "confirmed risk — website on scam list") : (f.caution_note || "caution")}</div>
+                            {!f.hard_risk && (
+                              <button onClick={() => actionCaution(Number(f.id))}
+                                style={{ height:"28px", padding:"0 12px", background:"rgba(0,184,122,0.08)", color:"#00b87a", fontSize:"11px", fontFamily:mono, border:"1px solid rgba(0,184,122,0.25)", borderRadius:"6px", cursor:"pointer" }}>
+                                Acknowledge — reviewed, it's fine
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
                   {/* Indexer alerts */}
                   <div>
                     <div style={{ fontSize:"10px", fontFamily:mono, color:t3, textTransform:"uppercase", letterSpacing:"0.1em", marginBottom:"10px" }}>
@@ -1677,10 +1736,10 @@ export default function AdminPage() {
                   {/* Public disputes */}
                   <div>
                     <div style={{ fontSize:"10px", fontFamily:mono, color:t3, textTransform:"uppercase", letterSpacing:"0.1em", marginBottom:"10px" }}>
-                      Public disputes (visitor-flagged)
+                      Reports & disputes (visitor-flagged)
                     </div>
                     {(!trust || trust.disputes.length === 0) ? (
-                      <EmptyState icon="✓" title="No open public disputes" sub="No one has flagged a number for review." />
+                      <EmptyState icon="✓" title="No open reports" sub="No one has flagged this listing or a number for review." />
                     ) : (
                       <div style={{ display:"flex", flexDirection:"column", gap:"8px" }}>
                         {trust.disputes.map((d: any) => (
@@ -1722,6 +1781,40 @@ export default function AdminPage() {
                               <button onClick={() => actionDispute(Number(d.id), "dismiss")}
                                 style={{ height:"28px", padding:"0 12px", background:"rgba(224,51,72,0.06)", color:"#e03348", fontSize:"11px", fontFamily:mono, border:"1px solid rgba(224,51,72,0.2)", borderRadius:"6px", cursor:"pointer" }}>
                                 Dismiss
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Pending audits — founders who submitted via "Get Verified" */}
+                  <div style={{ marginTop:"24px" }}>
+                    <div style={{ fontSize:"10px", fontFamily:mono, color:t3, textTransform:"uppercase", letterSpacing:"0.1em", marginBottom:"10px" }}>
+                      Pending audits (founder-submitted)
+                    </div>
+                    {(!trust || trust.audits.length === 0) ? (
+                      <EmptyState icon="✓" title="No pending audits" sub="No founder has submitted an audit for review." />
+                    ) : (
+                      <div style={{ display:"flex", flexDirection:"column", gap:"8px" }}>
+                        {trust.audits.map((a: any) => (
+                          <div key={a.id} style={{ background:surf, border:"1px solid "+bdr, borderRadius:"10px", padding:"14px 18px" }}>
+                            <div style={{ display:"flex", alignItems:"center", gap:"8px", marginBottom:"6px", flexWrap:"wrap" }}>
+                              <span style={{ fontSize:"9px", fontFamily:mono, padding:"2px 7px", borderRadius:"4px", background:"rgba(0,200,150,0.1)", color:"#00c896", border:"1px solid rgba(0,200,150,0.25)", textTransform:"uppercase", letterSpacing:"0.08em" }}>audit</span>
+                              <a href={`/ecosystem/${a.slug}`} target="_blank" rel="noopener noreferrer" style={{ fontSize:"11px", fontFamily:mono, color:"#8aaeff", textDecoration:"none" }}>{a.name || a.slug}</a>
+                              <span style={{ fontSize:"10px", fontFamily:mono, color:t3, marginLeft:"auto" }}>{a.trust_updated_at ? new Date(a.trust_updated_at).toLocaleString() : ""}</span>
+                            </div>
+                            <div style={{ fontSize:"13px", color:t1, marginBottom:"4px" }}>Auditor: {a.auditor || "—"}</div>
+                            {a.audit_url && <div style={{ fontSize:"11px", fontFamily:mono, marginBottom:"8px" }}><a href={a.audit_url} target="_blank" rel="noopener noreferrer" style={{ color:"#8aaeff", textDecoration:"underline", wordBreak:"break-all" }}>{a.audit_url}</a></div>}
+                            <div style={{ display:"flex", gap:"8px", flexWrap:"wrap" }}>
+                              <button onClick={() => actionAudit(Number(a.id), "approve")}
+                                style={{ height:"28px", padding:"0 12px", background:"rgba(0,184,122,0.08)", color:"#00b87a", fontSize:"11px", fontFamily:mono, border:"1px solid rgba(0,184,122,0.25)", borderRadius:"6px", cursor:"pointer" }}>
+                                Approve — grant Verified
+                              </button>
+                              <button onClick={() => actionAudit(Number(a.id), "reject")}
+                                style={{ height:"28px", padding:"0 12px", background:"rgba(224,51,72,0.06)", color:"#e03348", fontSize:"11px", fontFamily:mono, border:"1px solid rgba(224,51,72,0.2)", borderRadius:"6px", cursor:"pointer" }}>
+                                Reject
                               </button>
                             </div>
                           </div>
@@ -1968,21 +2061,121 @@ export default function AdminPage() {
                 + Add Contract
               </button>
             </div>
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px", marginBottom:"10px" }}>
-              <div>
-                <label style={{ display:"block", fontSize:"10px", fontFamily:mono, color:t3, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:"4px" }}>Category</label>
-                <select value={editForm.category||""} onChange={e=>setEditForm(p=>({...p,category:e.target.value}))}
+            <div style={{ marginBottom:"10px" }}>
+              <label style={{ display:"block", fontSize:"10px", fontFamily:mono, color:t3, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:"4px" }}>Category</label>
+              <select value={editForm.category||""} onChange={e=>setEditForm(p=>({...p,category:e.target.value}))}
+                style={{ width:"100%", height:"36px", background:"var(--surf2,#0e1224)", border:"1px solid var(--bdr,rgba(255,255,255,0.06))", borderRadius:"7px", padding:"0 10px", fontSize:"12px", fontFamily:mono, color:t1, outline:"none" }}>
+                {CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+            <div style={{ fontSize:"11px", fontFamily:mono, color:t2, textTransform:"uppercase", letterSpacing:"0.1em", margin:"6px 0 12px", paddingTop:"14px", borderTop:"1px solid var(--bdr,rgba(255,255,255,0.08))" }}>Trust &amp; verification</div>
+            <div style={{ display:"flex", gap:"16px", marginBottom:"18px" }}>
+              <div style={{ flex:1 }}>
+                <label style={{ display:"block", fontSize:"10px", fontFamily:mono, color:t3, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:"4px" }}>Trust level <span style={{ textTransform:"none", letterSpacing:0, color:t3 }}>· automatic</span></label>
+                <div style={{ height:"36px", display:"flex", alignItems:"center", gap:"8px", background:"var(--surf2,#0e1224)", border:"1px solid var(--bdr,rgba(255,255,255,0.06))", borderRadius:"7px", padding:"0 10px", fontSize:"12px", fontFamily:mono, color:t2 }}>
+                  {editForm.trust_level||"listed"}
+                  <span style={{ fontSize:"10px", color:t3 }}>— set by claim + contract checks</span>
+                </div>
+              </div>
+              <div style={{ flex:1 }}>
+                <label style={{ display:"block", fontSize:"10px", fontFamily:mono, color:t3, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:"4px" }}>Recognition</label>
+                <select value={editForm.recognition||"none"} onChange={e=>setEditForm(p=>({...p,recognition:e.target.value}))}
                   style={{ width:"100%", height:"36px", background:"var(--surf2,#0e1224)", border:"1px solid var(--bdr,rgba(255,255,255,0.06))", borderRadius:"7px", padding:"0 10px", fontSize:"12px", fontFamily:mono, color:t1, outline:"none" }}>
-                  {CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}
+                  <option value="none">None</option>
+                  <option value="partner">Arc Partner</option>
+                  <option value="official">Arc Official</option>
                 </select>
               </div>
-              <div>
-                <label style={{ display:"block", fontSize:"10px", fontFamily:mono, color:t3, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:"4px" }}>Badge</label>
-                <select value={editForm.badge||""} onChange={e=>setEditForm(p=>({...p,badge:e.target.value}))}
-                  style={{ width:"100%", height:"36px", background:"var(--surf2,#0e1224)", border:"1px solid var(--bdr,rgba(255,255,255,0.06))", borderRadius:"7px", padding:"0 10px", fontSize:"12px", fontFamily:mono, color:t1, outline:"none" }}>
-                  {BADGES.map(b=><option key={b} value={b}>{b||"None"}</option>)}
-                </select>
+            </div>
+            <div style={{ background:"var(--surf2,#0e1224)", border:"1px solid var(--bdr,rgba(255,255,255,0.06))", borderRadius:"8px", padding:"12px 14px", marginBottom:"18px" }}>
+              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:"10px" }}>
+                <div style={{ fontSize:"10px", fontFamily:mono, color:t3, textTransform:"uppercase", letterSpacing:"0.08em" }}>Safety checks (advisory — you still decide)</div>
+                <button
+                  onClick={async () => {
+                    if (!editing) return
+                    setAssessing(true); setAssess(null)
+                    try {
+                      const r = await fetch("/api/admin", { method:"POST", headers:{ "Content-Type":"application/json", Authorization:`Bearer ${password}` }, body: JSON.stringify({ id: editing.id, action:"assess-project" }) })
+                      const j = await r.json().catch(()=>({})); if (r.ok) setAssess(j)
+                    } finally { setAssessing(false) }
+                  }}
+                  disabled={assessing}
+                  style={{ height:"28px", padding:"0 12px", background:"transparent", color:t2, fontSize:"11px", fontFamily:mono, border:"1px solid var(--bdr,rgba(255,255,255,0.12))", borderRadius:"6px", cursor: assessing ? "default" : "pointer" }}>
+                  {assessing ? "Checking…" : "Run checks"}
+                </button>
               </div>
+              {assess && (
+                <div style={{ fontSize:"11px", fontFamily:mono, color:t2, lineHeight:1.7, marginTop:"10px" }}>
+                  {assess.hardRisk && <div style={{ color:"#e03348", fontWeight:700, marginBottom:"4px" }}>HARD RISK — website on scam list (auto-red)</div>}
+                  {assess.profile?.caution && <div style={{ color:"#e0a020", fontWeight:600, marginBottom:"4px" }}>caution: {assess.profile.caution_note}</div>}
+                  <div>website: {assess.profile?.website?.verdict || "—"}</div>
+                  {((assess.profile?.contracts || []).length === 0) && <div style={{ color:t3 }}>no contracts registered</div>}
+                  {(assess.profile?.contracts || []).map((c:any, idx:number) => (
+                    <div key={idx} style={{ marginTop:"4px", color:t1 }}>
+                      {c.role} {String(c.address).slice(0,8)}… — source {c.source_verified ? "verified" : "NOT verified"} · {c.upgradeable ? "upgradeable(" + c.admin + ")" : "immutable"} · owner {c.ownership}{c.powers_to_review?.length ? " · powers: " + c.powers_to_review.join(",") : ""}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div style={{ background:"var(--surf2,#0e1224)", border:"1px solid var(--bdr,rgba(255,255,255,0.06))", borderRadius:"8px", padding:"12px 14px", marginBottom:"18px" }}>
+              <div style={{ fontSize:"10px", fontFamily:mono, color:t3, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:"8px" }}>
+                Verified — independent audit
+                {(editForm as any).audit_status === "pending" && <span style={{ marginLeft:"8px", color:"#e08810", textTransform:"none", letterSpacing:0 }}>· founder submitted, awaiting review</span>}
+              </div>
+              <div style={{ display:"flex", gap:"10px", marginBottom:"10px" }}>
+                <input value={(editForm as any).auditor || ""} onChange={e=>setEditForm(p=>({...p, auditor:e.target.value}))} placeholder="Auditor (e.g. Hacken, CertiK)"
+                  style={{ flex:1, height:"34px", background:"var(--surf,#070b18)", border:"1px solid var(--bdr,rgba(255,255,255,0.1))", borderRadius:"6px", padding:"0 10px", fontSize:"12px", fontFamily:mono, color:t1, outline:"none" }} />
+                <input value={(editForm as any).audit_url || ""} onChange={e=>setEditForm(p=>({...p, audit_url:e.target.value}))} placeholder="Report URL"
+                  style={{ flex:2, height:"34px", background:"var(--surf,#070b18)", border:"1px solid var(--bdr,rgba(255,255,255,0.1))", borderRadius:"6px", padding:"0 10px", fontSize:"12px", fontFamily:mono, color:t1, outline:"none" }} />
+              </div>
+              <label style={{ display:"flex", alignItems:"center", gap:"8px", cursor:"pointer", fontSize:"12px", color:(editForm as any).audited ? "#00c896" : t2 }}>
+                <input type="checkbox" checked={!!(editForm as any).audited} onChange={e=>setEditForm(p=>({...p, audited:e.target.checked}))} />
+                Verified — audit confirmed (grants the green ✓)
+              </label>
+            </div>
+            <div style={{ background:"var(--surf2,#0e1224)", border:"1px solid var(--bdr,rgba(255,255,255,0.06))", borderRadius:"8px", padding:"12px 14px", marginBottom:"18px" }}>
+              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:"10px" }}>
+                <div style={{ fontSize:"10px", fontFamily:mono, color:t3, textTransform:"uppercase", letterSpacing:"0.08em" }}>
+                  Established — track record
+                  {(editForm as any).established && <span style={{ marginLeft:"8px", color:"#8aaeff", textTransform:"none", letterSpacing:0 }}>· granted</span>}
+                </div>
+                <button
+                  onClick={async () => {
+                    if (!editing) return
+                    setEstChecking(true); setEstCheck(null)
+                    try {
+                      const r = await fetch("/api/admin", { method:"POST", headers:{ "Content-Type":"application/json", Authorization:`Bearer ${password}` }, body: JSON.stringify({ id: editing.id, action:"check-established" }) })
+                      const j = await r.json().catch(()=>({})); if (r.ok) setEstCheck(j)
+                    } finally { setEstChecking(false) }
+                  }}
+                  disabled={estChecking}
+                  style={{ height:"28px", padding:"0 12px", background:"transparent", color:t2, fontSize:"11px", fontFamily:mono, border:"1px solid var(--bdr,rgba(255,255,255,0.12))", borderRadius:"6px", cursor: estChecking ? "default":"pointer" }}>
+                  {estChecking ? "Checking…" : "Check eligibility"}
+                </button>
+              </div>
+              {estCheck && (
+                <div style={{ fontSize:"11px", fontFamily:mono, color:t2, lineHeight:1.7, marginTop:"10px" }}>
+                  <div style={{ color: estCheck.eligible ? "#00c896" : "#e08810", fontWeight:700 }}>
+                    {estCheck.eligible ? "✓ ELIGIBLE" : "✗ NOT ELIGIBLE"}
+                  </div>
+                  <div>deploy age: {estCheck.ageDays ?? "unknown"}{estCheck.ageDays!=null?"d":""} · distinct callers: {estCheck.distinctCallers} · claimed: {String(estCheck.claimed)}</div>
+                  {(estCheck.reasons||[]).length>0 && <div style={{ color:t3 }}>blocked by: {estCheck.reasons.join(", ")}</div>}
+                </div>
+              )}
+              <label style={{ display:"flex", alignItems:"center", gap:"8px", cursor:((editForm as any).established || estCheck?.eligible) ? "pointer":"not-allowed", fontSize:"12px", color:(editForm as any).established ? "#8aaeff" : t2, marginTop:"10px", opacity:((editForm as any).established || estCheck?.eligible) ? 1 : 0.5 }}>
+                <input type="checkbox" checked={!!(editForm as any).established}
+                  disabled={!((editForm as any).established || estCheck?.eligible)}
+                  onChange={async e => {
+                    const next = e.target.checked
+                    try {
+                      const r = await fetch("/api/admin", { method:"POST", headers:{ "Content-Type":"application/json", Authorization:`Bearer ${password}` }, body: JSON.stringify({ id: editing!.id, action:"set-established", data:{ established: next } }) })
+                      if (r.ok) { setEditForm(p=>({...p, established: next } as any)); showToast(true, next ? "Established granted" : "Established removed") }
+                      else showToast(false, "Failed")
+                    } catch { showToast(false, "Network error") }
+                  }} />
+                Grant Established (only enabled once it passes the eligibility check)
+              </label>
             </div>
             <div style={{ display:"flex", gap:"16px", marginBottom:"18px" }}>
               {[{k:"featured",l:"Featured"},{k:"live",l:"Live"}].map((f:any) => (
@@ -2037,3 +2230,4 @@ function EmptyState({ icon, title, sub }: { icon: string; title: string; sub: st
     </div>
   )
 }
+

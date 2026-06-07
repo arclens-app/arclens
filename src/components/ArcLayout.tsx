@@ -25,7 +25,6 @@ const NAV = [
   ]},
   { section: "DEVELOPERS", items: [
     { id: "builders",     label: "Builder Profiles",  icon: "◎", href: "/builders" },
-    { id: "registry",     label: "Contract Registry", icon: "✦", href: "/registry" },
     { id: "dev",          label: "Dev Console",       icon: "⌘", href: "/dev" },
   ]},
 ]

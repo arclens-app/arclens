@@ -36,8 +36,8 @@ export async function POST(req: NextRequest) {
     const { slug, metric, reason, evidence_url, reporter_email } = body
 
     if (!slug) return NextResponse.json({ error: "slug required" }, { status: 400 })
-    if (!metric || !["tvl", "revenue", "volume"].includes(metric)) {
-      return NextResponse.json({ error: "metric must be tvl, revenue, or volume" }, { status: 400 })
+    if (!metric || !["tvl", "revenue", "volume", "listing"].includes(metric)) {
+      return NextResponse.json({ error: "metric must be tvl, revenue, volume, or listing" }, { status: 400 })
     }
     if (!reason || typeof reason !== "string" || reason.trim().length < 10) {
       return NextResponse.json({ error: "Please explain the issue in at least 10 characters." }, { status: 400 })

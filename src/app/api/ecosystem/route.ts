@@ -9,6 +9,7 @@ export async function GET() {
       `SELECT id, name, tagline, description, category, logo_url,
               website, twitter, github, discord, contract,
               featured, color, launched_at, slug, badge,
+              trust_level, recognition, trust_profile, established,
               city, country, lat, lng,
               COALESCE(view_count, 0) as view_count,
               created_at,
@@ -78,7 +79,8 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   const body = await req.json()
-  const { name, tagline, description, category, website, twitter, github, discord, contract, contracts: extraContracts, logo_url, email, city, country } = body
+  const { name, tagline, description, category, website, twitter, github, discord, contract, contracts: extraContracts, logo_url, email, city, country, founder } = body
+  const founderSocial = typeof founder === "string" ? founder.trim() || null : null
   const contractsArr = Array.isArray(extraContracts) ? extraContracts.map((c: string) => c.trim()).filter(Boolean) : []
 
   if (!name?.trim())    return NextResponse.json({ error: "Project name required" }, { status: 400 })
@@ -105,11 +107,12 @@ export async function POST(req: NextRequest) {
                name = $1, tagline = $2, description = $3, category = $4,
                logo_url = COALESCE($5, logo_url),
                website = $6, twitter = $7, github = $8, discord = $9,
+               founder_social = COALESCE($11, founder_social),
                approved = false, live = false
              WHERE contract = $10`,
             [name.trim(), tagline.trim(), description?.trim()||null, category||"DeFi",
              logo_url||null, website?.trim()||null, twitter?.trim()||null,
-             github?.trim()||null, discord?.trim()||null, contract.trim().toLowerCase()]
+             github?.trim()||null, discord?.trim()||null, contract.trim().toLowerCase(), founderSocial]
           )
           return NextResponse.json({ success: true, updated: true })
         } else {
@@ -135,13 +138,13 @@ export async function POST(req: NextRequest) {
     const finalSlug = slug
 
     await pool.query(
-      `INSERT INTO projects (name, tagline, description, category, logo_url, website, twitter, github, discord, contract, contracts, email, city, country, approved, live, slug)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,false,false,$15)`,
+      `INSERT INTO projects (name, tagline, description, category, logo_url, website, twitter, github, discord, contract, contracts, email, city, country, founder_social, approved, live, slug)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,false,false,$16)`,
       [name.trim(), tagline.trim(), description?.trim()||null, category||"DeFi",
        logo_url||null, website?.trim()||null, twitter?.trim()||null,
        github?.trim()||null, discord?.trim()||null,
        contract?.trim()?.toLowerCase()||null, contractsArr, email.trim(),
-       city?.trim()||null, country?.trim()||null, finalSlug]
+       city?.trim()||null, country?.trim()||null, founderSocial, finalSlug]
     )
     return NextResponse.json({ success: true, updated: false })
   } catch (err) {

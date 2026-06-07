@@ -55,7 +55,10 @@ export default function DashboardPage() {
   const [walletSaved, setWalletSaved]                   = useState(false)
 
   // Edit form
-  const [editForm, setEditForm]   = useState({ tagline: "", description: "", website: "", twitter: "", github: "", discord: "", contract: "", color: "", city: "", country: "" })
+  const [editForm, setEditForm]   = useState({ tagline: "", description: "", website: "", twitter: "", github: "", discord: "", contract: "", color: "", city: "", country: "", founder_social: "" })
+  const [auditForm, setAuditForm] = useState({ auditor: "", audit_url: "" })
+  const [auditMsg, setAuditMsg]   = useState<{ ok: boolean; text: string } | null>(null)
+  const [auditSubmitting, setAuditSubmitting] = useState(false)
   const [extraContracts, setExtraContracts] = useState<string[]>([])
   const [saving, setSaving]       = useState(false)
   const [saveSuccess, setSaveSuccess] = useState(false)
@@ -138,6 +141,7 @@ export default function DashboardPage() {
           github: data.project.github || "", discord: data.project.discord || "",
           contract: data.project.contract || "", color: data.project.color || "",
           city: data.project.city || "", country: data.project.country || "",
+          founder_social: data.project.founder_social || "",
         })
         setExtraContracts(Array.isArray(data.project.contracts) ? data.project.contracts : [])
       } catch { setError("Failed to load dashboard") }
@@ -1067,7 +1071,7 @@ export default function DashboardPage() {
           )}
 
           {/* ── EDIT LISTING ── */}
-          {activeTab === "edit" && (
+          {activeTab === "edit" && (<>
             <div style={{ background: surf, border: "1px solid " + bdr, borderRadius: "12px", padding: "24px 26px" }}>
               <div style={{ fontSize: "14px", fontWeight: 600, color: t1, marginBottom: "4px" }}>Edit your listing</div>
               <div style={{ fontSize: "11px", fontFamily: mono, color: t3, marginBottom: "22px" }}>Changes go through admin review before going live</div>
@@ -1075,7 +1079,7 @@ export default function DashboardPage() {
                 {[
                   { key: "tagline",     label: "Tagline",          ph: "One-line description" },
                   { key: "website",     label: "Website",          ph: "https://..." },
-                  { key: "twitter",     label: "X / Twitter",      ph: "@handle or https://x.com/..." },
+                  { key: "twitter",     label: "Project X / Twitter", ph: "@yourproject" },
                   { key: "github",      label: "GitHub",           ph: "https://github.com/..." },
                   { key: "discord",     label: "Discord",          ph: "https://discord.gg/..." },
                   { key: "contract",    label: "Primary Contract Address", ph: "0x..." },
@@ -1092,6 +1096,21 @@ export default function DashboardPage() {
                     />
                   </div>
                 ))}
+                {/* FOUNDER — the person, distinct from the project's own links above. */}
+                <div style={{ paddingTop: "14px", borderTop: "1px solid " + bdr }}>
+                  <label style={{ display: "block", fontSize: "9.5px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "5px" }}>
+                    Founder <span style={{ color: t3, textTransform: "none", letterSpacing: 0 }}>— optional</span>
+                  </label>
+                  <input
+                    value={editForm.founder_social}
+                    onChange={e => setEditForm(p => ({ ...p, founder_social: e.target.value }))}
+                    placeholder="Your personal X, LinkedIn, or site — e.g. @yourname"
+                    style={inputStyle}
+                  />
+                  <div style={{ fontSize: "10px", fontFamily: mono, color: t3, marginTop: "5px", lineHeight: 1.5 }}>
+                    This is <strong style={{ color: t2 }}>you</strong> — the person behind the project, not the project's own account. Shown on your project page.
+                  </div>
+                </div>
                 {/* Additional contracts */}
                 <div>
                   <label style={{ display: "block", fontSize: "9.5px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "6px" }}>Additional Contract Addresses</label>
@@ -1127,7 +1146,41 @@ export default function DashboardPage() {
                 </button>
               </div>
             </div>
-          )}
+
+            {/* GET VERIFIED — submit a third-party audit for review */}
+            <div style={{ background: surf, border: "1px solid " + bdr, borderRadius: "12px", padding: "24px 26px", marginTop: "16px" }}>
+              <div style={{ fontSize: "14px", fontWeight: 600, color: t1, marginBottom: "4px" }}>Get Verified</div>
+              <div style={{ fontSize: "11px", fontFamily: mono, color: t3, marginBottom: "18px", lineHeight: 1.6 }}>
+                Have an independent security audit? Submit it and we'll review. Verified projects show a green ✓. (Not a paid badge — we just confirm the report.)
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                <div>
+                  <label style={{ display: "block", fontSize: "9.5px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "5px" }}>Auditor</label>
+                  <input value={auditForm.auditor} onChange={e => setAuditForm(p => ({ ...p, auditor: e.target.value }))} placeholder="e.g. Hacken, CertiK, Sherlock" style={inputStyle} />
+                </div>
+                <div>
+                  <label style={{ display: "block", fontSize: "9.5px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "5px" }}>Report link</label>
+                  <input value={auditForm.audit_url} onChange={e => setAuditForm(p => ({ ...p, audit_url: e.target.value }))} placeholder="https://link-to-the-audit-report" style={inputStyle} />
+                </div>
+                {auditMsg && <div style={{ fontSize: "12px", fontFamily: mono, color: auditMsg.ok ? green : "#e03348" }}>{auditMsg.ok ? "✓ " : ""}{auditMsg.text}</div>}
+                <button
+                  onClick={async () => {
+                    if (!auditForm.auditor.trim() || !auditForm.audit_url.trim()) { setAuditMsg({ ok: false, text: "Add the auditor and the report link" }); return }
+                    setAuditSubmitting(true); setAuditMsg(null)
+                    try {
+                      const res = await fetch("/api/audit", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token, slug, wallet: connectedWallet, auditor: auditForm.auditor, audit_url: auditForm.audit_url }) })
+                      const d = await res.json().catch(() => ({}))
+                      setAuditMsg(res.ok ? { ok: true, text: "Submitted — we'll review your audit." } : { ok: false, text: d.error || "Could not submit" })
+                    } catch { setAuditMsg({ ok: false, text: "Network error — try again" }) }
+                    finally { setAuditSubmitting(false) }
+                  }}
+                  disabled={auditSubmitting}
+                  style={{ height: "40px", background: "rgba(0,184,122,0.1)", color: green, fontSize: "13px", fontWeight: 600, border: "1px solid rgba(0,184,122,0.3)", borderRadius: "8px", cursor: auditSubmitting ? "not-allowed" : "pointer", fontFamily: mono }}>
+                  {auditSubmitting ? "Submitting…" : "Submit for review"}
+                </button>
+              </div>
+            </div>
+          </>)}
 
           {activeTab === "tvl" && (
             <TvlTrackingPanel

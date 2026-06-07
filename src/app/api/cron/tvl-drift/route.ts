@@ -42,15 +42,16 @@ function isAuthorized(req: NextRequest): boolean {
   return req.headers.get("authorization") === `Bearer ${expected}`
 }
 
-// Tolerance for balance drift: 0.01% of the larger side, or $1 absolute
-// (whichever is greater). Below this we treat it as floating-point noise.
+// Tolerance for balance drift: 0.2% of the larger side, or $25 absolute
+// (whichever is greater). A live-updating TVL drifts a little just from snapshot
+// vs head timing — below this it's noise, not a real discrepancy.
 function exceedsDriftTolerance(cached: bigint, actual: bigint): boolean {
   const diff = cached > actual ? cached - actual : actual - cached
   if (diff === BigInt(0)) return false
   const bigger = cached > actual ? cached : actual
-  const onePctBp = bigger / BigInt(10_000) // 0.01%
-  const oneDollar = BigInt(1_000_000)      // $1 in usd_e6
-  const tolerance = onePctBp > oneDollar ? onePctBp : oneDollar
+  const pct = bigger / BigInt(500)        // 0.2%
+  const floor = BigInt(25_000_000)        // $25 in usd_e6
+  const tolerance = pct > floor ? pct : floor
   return diff > tolerance
 }
 
@@ -83,7 +84,30 @@ async function recordAlert(
   severity: "info" | "warning" | "critical",
   message: string,
   details?: Record<string, unknown>,
+  dedupeKey?: string,
 ) {
+  // With a dedupeKey, keep ONE open alert per recurring condition and refresh it
+  // each run instead of inserting a new row every tick (the hourly cursor/forex
+  // checks would otherwise flood the admin with identical duplicates).
+  if (dedupeKey) {
+    const merged = { ...(details || {}), dedupeKey }
+    const existing = await c.query(
+      `SELECT id FROM indexer_alerts WHERE resolved_at IS NULL AND kind = $1 AND details->>'dedupeKey' = $2 LIMIT 1`,
+      [kind, dedupeKey],
+    )
+    if (existing.rows.length) {
+      await c.query(
+        `UPDATE indexer_alerts SET severity = $1, message = $2, details = $3::jsonb, created_at = NOW() WHERE id = $4`,
+        [severity, message, JSON.stringify(merged), existing.rows[0].id],
+      )
+      return
+    }
+    await c.query(
+      `INSERT INTO indexer_alerts (project_id, kind, severity, message, details) VALUES ($1, $2, $3, $4, $5::jsonb)`,
+      [projectId, kind, severity, message, JSON.stringify(merged)],
+    )
+    return
+  }
   await c.query(
     `INSERT INTO indexer_alerts (project_id, kind, severity, message, details)
      VALUES ($1, $2, $3, $4, $5::jsonb)`,
@@ -192,9 +216,10 @@ export async function GET(req: NextRequest) {
     for (const [projectId, { usdE6: actual, slug, cached }] of projectTotals) {
       if (exceedsDriftTolerance(cached, actual)) {
         const diff = cached > actual ? cached - actual : actual - cached
-        await recordAlert(client, projectId, "tvl_drift", "critical",
+        await recordAlert(client, projectId, "tvl_drift", "warning",
           `${slug}: cached TVL $${(Number(cached) / 1e6).toFixed(2)} differs from on-chain $${(Number(actual) / 1e6).toFixed(2)} by $${(Number(diff) / 1e6).toFixed(2)}`,
           { cached_usd_e6: cached.toString(), actual_usd_e6: actual.toString(), head_block: stats.head },
+          `tvl_drift:${projectId}`,
         )
         stats.tvlDriftAlerts++
         stats.totalAlerts++
@@ -227,6 +252,7 @@ export async function GET(req: NextRequest) {
         await recordAlert(client, row.id, `${check.kind}_rollup_drift`, "warning",
           `${row.slug}: cached ${check.kind}_cum $${(Number(cached) / 1e6).toFixed(2)} does not equal SUM of ${check.table} $${(Number(actual) / 1e6).toFixed(2)}`,
           { cached: cached.toString(), actual: actual.toString() },
+          `rollup:${check.kind}:${row.id}`,
         )
         stats.rollupAlerts++
         stats.totalAlerts++
@@ -250,6 +276,7 @@ export async function GET(req: NextRequest) {
       await recordAlert(client, null, "cursor_stale", "warning",
         `Cursor ${row.kind}/sc${row.stablecoin_id} is ${lag.toLocaleString()} blocks behind head — indexer may be stuck`,
         { kind: row.kind, stablecoin_id: row.stablecoin_id, lag, last_block: row.last_block, head: stats.head },
+        `cursor:${row.kind}:${row.stablecoin_id}`,
       )
       stats.cursorAlerts++
       stats.totalAlerts++
@@ -280,6 +307,7 @@ export async function GET(req: NextRequest) {
       await recordAlert(client, null, "forex_stale", "warning",
         `No fresh forex rate for ${row.peg_currency} — non-USD stablecoin conversions are using the ${row.last_rate_date ?? "no"} rate.`,
         { currency: row.peg_currency, last_rate_date: row.last_rate_date },
+        `forex:${row.peg_currency}`,
       )
       stats.forexAlerts++
       stats.totalAlerts++
