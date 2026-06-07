@@ -13,7 +13,7 @@ import { Pool } from "pg"
 import { getSession } from "@/lib/session"
 import { buildContext, logKnowledgeGap, getGeminiKey, type AiContext } from "@/lib/aiContext"
 import { buildTools } from "@/lib/aiTools"
-import { enforce } from "@/lib/ratelimit"
+import { enforce, rateLimit, getIp } from "@/lib/ratelimit"
 
 export const runtime = "nodejs"
 export const maxDuration = 60
@@ -49,6 +49,33 @@ export async function POST(req: NextRequest) {
   }
 
   const session = getSession(req)
+
+  // Free-tier DAILY quota — counted PER USER (wallet) when signed in, so it
+  // can't be dodged by switching networks/IP. Anonymous callers have no
+  // identity, so they fall back to device-id + IP (best-effort) and get nudged
+  // to sign in. This 24h meter is also the foundation the paid API will bill
+  // against. The 20/min burst limiter above stays as flood protection.
+  const DAILY_FREE = 10
+  const device = (req.headers.get("x-arclens-device") || "").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 64)
+  const ip = getIp(req)
+  const identity = session?.addr ? `user:${session.addr}` : `anon:${device || "nodev"}:${ip}`
+  const daily = await rateLimit(`ai-daily:${identity}`, DAILY_FREE, 24 * 60 * 60 * 1000)
+  if (!daily.allowed) {
+    const hrs = Math.max(1, Math.ceil(daily.resetIn / 3_600_000))
+    return NextResponse.json(
+      {
+        error: session?.addr
+          ? `You've used your ${DAILY_FREE} free ArcLens AI messages for today. Your free limit resets in about ${hrs}h.`
+          : `You've reached the ${DAILY_FREE} free ArcLens AI messages for today. Sign in to keep your history and unlock more — resets in about ${hrs}h.`,
+        code: "daily_limit",
+        limit: DAILY_FREE,
+        remaining: 0,
+        resetInMs: daily.resetIn,
+      },
+      { status: 429, headers: { "Retry-After": String(Math.ceil(daily.resetIn / 1000)) } },
+    )
+  }
+
   const route   = String(body.route || "/").slice(0, 200)
   const ctx     = await buildContext({ route, session, userQuery: lastUser })
 
