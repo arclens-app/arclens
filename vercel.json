@@ -12,6 +12,10 @@
     {
       "path": "/api/cron/forex-refresh",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/trust-recheck",
+      "schedule": "30 3 * * *"
     }
   ]
 }

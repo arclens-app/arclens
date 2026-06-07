@@ -5,7 +5,7 @@ import { getSession } from "@/lib/session"
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
 
-const ALLOWED = ["tagline", "description", "website", "twitter", "github", "discord", "contract", "color", "city", "country"]
+const ALLOWED = ["tagline", "description", "website", "twitter", "github", "discord", "contract", "color", "city", "country", "founder_social"]
 const ALLOWED_ARRAY = ["contracts"]
 
 export async function POST(req: NextRequest) {
@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
 
     // Get current project values
     const current = await pool.query(
-      `SELECT tagline, description, website, twitter, github, discord, contract, contracts, color, city, country FROM projects WHERE id = $1`,
+      `SELECT tagline, description, website, twitter, github, discord, contract, contracts, color, city, country, founder_social FROM projects WHERE id = $1`,
       [projectId]
     )
     projectRow = current.rows[0]

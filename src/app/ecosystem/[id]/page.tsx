@@ -3,6 +3,8 @@ import { useEffect, useState } from "react"
 import { useParams } from "next/navigation"
 import ArcLayout from "@/components/ArcLayout"
 import TvlCards from "./TvlCards"
+import { TrustBadge } from "@/components/TrustBadge"
+import { trustBadge } from "@/lib/trustBadge"
 
 function imgSrc(url: string | null): string | null {
   if (!url) return null
@@ -22,6 +24,14 @@ interface Project {
   github: string | null
   discord: string | null
   contract: string | null
+  founder_social: string | null
+  founder_profile: { address: string; display_name: string | null; avatar_url: string | null; verified: boolean; claimed: boolean } | null
+  recognition: string | null
+  trust_level: string | null
+  trust_profile: { hard_risk?: boolean; caution?: boolean; caution_note?: string | null } | null
+  established: boolean
+  auditor: string | null
+  audit_url: string | null
   featured: boolean
   badge: string | null
   color: string | null
@@ -139,6 +149,34 @@ export default function ProjectPage() {
   const [reviewSuccess, setReviewSuccess] = useState(false)
   const [connectedWallet, setConnectedWallet] = useState<string | null>(null)
   const [tvl, setTvl] = useState<any>(null)
+  // ONE flag for the whole page — a category picks what's wrong (the listing, or
+  // a specific number). Everything routes to /api/disputes so there's a single
+  // report path and a single admin queue.
+  const [showReport, setShowReport]   = useState(false)
+  const [reportCategory, setReportCategory] = useState<"listing" | "tvl" | "revenue" | "volume">("listing")
+  const [reportText, setReportText]   = useState("")
+  const [reportEvidence, setReportEvidence] = useState("")
+  const [reportContact, setReportContact] = useState("")
+  const [reportState, setReportState] = useState<"idle" | "sending" | "sent" | "error">("idle")
+  const [reportErr, setReportErr]     = useState("")
+
+  async function submitReport() {
+    if (reportText.trim().length < 10) { setReportErr("Please explain in at least 10 characters"); return }
+    setReportState("sending"); setReportErr("")
+    try {
+      const res = await fetch("/api/disputes", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          slug: String(id), metric: reportCategory, reason: reportText,
+          evidence_url: reportEvidence.trim() || undefined,
+          reporter_email: reportContact.trim() || undefined,
+        }),
+      })
+      const d = await res.json().catch(() => ({}))
+      if (res.ok) setReportState("sent")
+      else { setReportErr(d.error || "Could not submit"); setReportState("error") }
+    } catch { setReportErr("Network error — try again"); setReportState("error") }
+  }
 
   useEffect(() => {
     setMounted(true)
@@ -285,6 +323,40 @@ export default function ProjectPage() {
     : null
   const proxiedLogo = imgSrc(project.logo_url)
 
+  // Founder = the person behind the project, kept distinct from the project's
+  // own links. Priority:
+  //   1) Claimed project → its owner_wallet IS a builder profile. Link there:
+  //      wallet-proven, shows their whole Arc track record. (internal)
+  //   2) Otherwise → the self-disclosed social typed on the listing. (external,
+  //      unverified) Normalize @handle / domain / URL into a safe link.
+  const founder = (() => {
+    const fp = project.founder_profile
+    const s  = (project.founder_social || "").trim()
+
+    // Open disclosure — no badge, no identity stamp. We show who the team says
+    // they are and link to their profile/socials; people rarely misrepresent
+    // their own public accounts, and the quiet report link handles the rest.
+    // 1) Claimed project → its owner's builder profile (wallet-proven ownership).
+    if (fp?.address && fp.display_name) {
+      return { internal: true, url: `/builder/${fp.address}`, label: fp.display_name, note: "builder profile" }
+    }
+    // 2) Self-disclosed handle typed on the listing (taken at face value).
+    if (s) {
+      let url: string, label: string
+      if (/^https?:\/\//i.test(s)) { url = s; label = s.replace(/^https?:\/\/(www\.)?/i, "").replace(/\/$/, "") }
+      else if (s.startsWith("@"))  { url = "https://x.com/" + s.slice(1); label = s }
+      else if (/\.[a-z]{2,}/i.test(s)) { url = "https://" + s; label = s.replace(/\/$/, "") }
+      else { url = "https://x.com/" + s; label = "@" + s }
+      return { internal: false, url, label, note: "self-disclosed" }
+    }
+    // 3) Owner wallet with no name or handle — link to the profile (track record
+    //    still shows), but never present a raw hex as the founder's name.
+    if (fp?.address) {
+      return { internal: true, url: `/builder/${fp.address}`, label: "Builder profile", note: "project owner" }
+    }
+    return null
+  })()
+
   return (
     <ArcLayout active="ecosystem">
       <div style={{ padding: "24px 20px 60px", maxWidth: "860px", margin: "0 auto" }}>
@@ -330,13 +402,29 @@ export default function ProjectPage() {
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", marginBottom: "8px" }}>
                   <h1 style={{ fontSize: "26px", fontWeight: 700, letterSpacing: "-0.04em", color: t1, margin: 0 }}>{project.name}</h1>
-                  {project.badge === "official" && <span style={{ fontSize: "9px", fontFamily: mono, padding: "2px 8px", borderRadius: "4px", background: "rgba(26,86,255,0.12)", color: "#8aaeff", border: "1px solid rgba(26,86,255,0.25)" }}>OFFICIAL</span>}
-                  {project.badge === "verified" && <span style={{ fontSize: "9px", fontFamily: mono, padding: "2px 8px", borderRadius: "4px", background: "rgba(0,184,122,0.1)", color: "#00b87a", border: "1px solid rgba(0,184,122,0.25)" }}>✓ VERIFIED</span>}
-                  {project.featured && <span style={{ fontSize: "9px", fontFamily: mono, padding: "2px 8px", borderRadius: "4px", background: "rgba(192,136,40,0.1)", color: "#c08828", border: "1px solid rgba(192,136,40,0.25)" }}>FEATURED</span>}
+                  {(() => {
+                    // Same single-badge model as the cards: green only on
+                    // recognition (Arc Official / Arc Partner), red on a confirmed
+                    // risk. Listed/Claimed/Vetted carry no chip here.
+                    const tb = trustBadge({ trust_level: project.trust_level, recognition: project.recognition, risk_flagged: project.trust_profile?.hard_risk, legacy_badge: project.badge })
+                    return (tb.mark === "check" || tb.mark === "risk") ? <TrustBadge spec={tb} /> : null
+                  })()}
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "10px", flexWrap: "wrap" }}>
                   <span style={{ fontSize: "9px", fontFamily: mono, padding: "3px 10px", borderRadius: "99px", background: color + "14", color, border: "1px solid " + color + "28" }}>{project.category}</span>
                   <span style={{ fontSize: "10px", fontFamily: mono, color: t3 }}>Listed {new Date(project.created_at).toLocaleDateString("en-US", { month: "short", year: "numeric" })}</span>
+                  {project.trust_level === "verified" && project.auditor && (
+                    <a href={project.audit_url || "#"} {...(project.audit_url ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+                      style={{ fontSize: "9px", fontFamily: mono, padding: "3px 10px", borderRadius: "99px", background: "rgba(0,200,150,0.1)", color: "#00c896", border: "1px solid rgba(0,200,150,0.25)", textDecoration: "none" }}>
+                      ✓ Audited by {project.auditor}{project.audit_url ? " ↗" : ""}
+                    </a>
+                  )}
+                  {project.established && (
+                    <span title="Claimed, established a while, and actively used on-chain"
+                      style={{ fontSize: "9px", fontFamily: mono, padding: "3px 10px", borderRadius: "99px", background: "rgba(91,140,255,0.1)", color: "#8aaeff", border: "1px solid rgba(91,140,255,0.25)" }}>
+                      ◆ Established
+                    </span>
+                  )}
                 </div>
                 <p style={{ fontSize: "15px", color: t2, fontWeight: 400, lineHeight: 1.6, margin: 0 }}>{project.tagline}</p>
               </div>
@@ -355,6 +443,21 @@ export default function ProjectPage() {
               {copied ? "✓ Copied" : "Copy Link"}
             </button>
           </div>
+          {/* FOUNDER — the person behind the project, separated from the
+              project's own links above so the two are never confused. */}
+          {founder && (
+            <>
+              <div style={{ height: "1px", background: bdr }} />
+              <div style={{ padding: "13px 28px", display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+                <span style={{ fontSize: "9px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.1em" }}>Founder</span>
+                <a href={founder.url} {...(founder.internal ? {} : { target: "_blank", rel: "noopener noreferrer" })}
+                  style={{ fontSize: "12px", fontFamily: mono, color: "#8aaeff", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "5px" }}>
+                  {founder.label} <span style={{ color: t3 }}>{founder.internal ? "→" : "↗"}</span>
+                </a>
+                <span style={{ fontSize: "10px", fontFamily: mono, color: t3 }}>· {founder.note}</span>
+              </div>
+            </>
+          )}
         </div>
 
         {/* DESCRIPTION */}
@@ -670,6 +773,52 @@ export default function ProjectPage() {
             onMouseLeave={e => (e.currentTarget.style.color = t3)}>
             Are you the founder? Claim this project →
           </a>
+        </div>
+
+        {/* QUIET DISPUTE — deliberately low-key: a safety valve, not a feature.
+            Anyone can flag a listing; the team reviews and acts. */}
+        <div style={{ textAlign: "center", marginTop: "12px" }}>
+          {reportState === "sent" ? (
+            <span style={{ fontSize: "10px", fontFamily: mono, color: t3 }}>Thanks — we'll take a look.</span>
+          ) : !showReport ? (
+            <button onClick={() => setShowReport(true)}
+              style={{ background: "none", border: "none", color: t3, fontSize: "10px", fontFamily: mono, cursor: "pointer", opacity: 0.6 }}
+              onMouseEnter={e => (e.currentTarget.style.color = t2, e.currentTarget.style.opacity = "1")}
+              onMouseLeave={e => (e.currentTarget.style.color = t3, e.currentTarget.style.opacity = "0.6")}>
+              Report a problem with this listing
+            </button>
+          ) : (
+            <div style={{ maxWidth: "440px", margin: "0 auto", textAlign: "left", background: surf, border: "1px solid " + bdr, borderRadius: "10px", padding: "14px" }}>
+              <label style={{ display: "block", fontSize: "9px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "5px" }}>What's the problem?</label>
+              <select value={reportCategory} onChange={e => setReportCategory(e.target.value as any)}
+                style={{ width: "100%", height: "34px", background: surf2, border: "1px solid " + bdr, borderRadius: "7px", padding: "0 10px", fontSize: "12px", fontFamily: mono, color: t1, outline: "none", marginBottom: "8px", boxSizing: "border-box" }}>
+                <option value="listing">The listing (impersonation, false claim, scam…)</option>
+                <option value="tvl">TVL number looks wrong</option>
+                <option value="revenue">Revenue number looks wrong</option>
+                <option value="volume">Volume number looks wrong</option>
+              </select>
+              <textarea value={reportText} onChange={e => setReportText(e.target.value)}
+                placeholder="Explain the issue (at least one sentence)…"
+                style={{ width: "100%", height: "62px", background: surf2, border: "1px solid " + bdr, borderRadius: "7px", padding: "8px 10px", fontSize: "12px", fontFamily: mono, color: t1, outline: "none", resize: "vertical", lineHeight: 1.5, boxSizing: "border-box" } as React.CSSProperties} />
+              <input value={reportEvidence} onChange={e => setReportEvidence(e.target.value)}
+                placeholder="Link to evidence (optional)"
+                style={{ width: "100%", height: "32px", background: surf2, border: "1px solid " + bdr, borderRadius: "7px", padding: "0 10px", fontSize: "11px", fontFamily: mono, color: t1, outline: "none", marginTop: "8px", boxSizing: "border-box" }} />
+              <input value={reportContact} onChange={e => setReportContact(e.target.value)}
+                placeholder="Your email (optional)"
+                style={{ width: "100%", height: "32px", background: surf2, border: "1px solid " + bdr, borderRadius: "7px", padding: "0 10px", fontSize: "11px", fontFamily: mono, color: t1, outline: "none", marginTop: "8px", boxSizing: "border-box" }} />
+              {reportErr && <div style={{ fontSize: "10px", color: "#e03348", fontFamily: mono, marginTop: "6px" }}>{reportErr}</div>}
+              <div style={{ display: "flex", gap: "8px", marginTop: "10px" }}>
+                <button onClick={submitReport} disabled={reportState === "sending"}
+                  style={{ height: "30px", padding: "0 14px", background: "#1a56ff", color: "#fff", fontSize: "11px", fontFamily: mono, border: "none", borderRadius: "6px", cursor: "pointer" }}>
+                  {reportState === "sending" ? "Sending…" : "Submit report"}
+                </button>
+                <button onClick={() => { setShowReport(false); setReportErr("") }}
+                  style={{ height: "30px", padding: "0 12px", background: "transparent", color: t3, fontSize: "11px", fontFamily: mono, border: "1px solid " + bdr, borderRadius: "6px", cursor: "pointer" }}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
       </div>

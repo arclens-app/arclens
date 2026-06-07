@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { Pool } from "pg"
 import { timingSafeEqual } from "crypto"
+import { attestOnChain, subjectFor } from "@/lib/registry"
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -60,12 +61,47 @@ export async function GET(req: NextRequest) {
        LIMIT 200`,
     )
 
+    // Pending audit submissions (founders who clicked "Get Verified").
+    let auditRows: any[] = []
+    try {
+      const audits = await pool.query(
+        `SELECT id, slug, name, auditor, audit_url, trust_updated_at
+           FROM projects WHERE audit_status = 'pending'
+          ORDER BY trust_updated_at DESC NULLS LAST LIMIT 100`,
+      )
+      auditRows = audits.rows
+    } catch { auditRows = [] }
+
+    // Risk-engine flags: confirmed hard-risk (always) + unreviewed cautions.
+    // These never reach users — the admin reviews/acknowledges them here.
+    let flaggedRows: any[] = []
+    try {
+      const flagged = await pool.query(
+        `SELECT id, slug, name,
+                (trust_profile->>'hard_risk')::bool AS hard_risk,
+                (trust_profile->>'caution')::bool   AS caution,
+                trust_profile->>'caution_note'      AS caution_note,
+                trust_profile->>'risk_reason'       AS risk_reason
+           FROM projects
+          WHERE approved AND live
+            AND ( (trust_profile->>'hard_risk')::bool = true
+                  OR ((trust_profile->>'caution')::bool = true AND caution_reviewed = false) )
+          ORDER BY (trust_profile->>'hard_risk')::bool DESC NULLS LAST, name
+          LIMIT 200`,
+      )
+      flaggedRows = flagged.rows
+    } catch { flaggedRows = [] }
+
     return NextResponse.json({
       alerts: alerts.rows,
       disputes: disputes.rows,
+      audits: auditRows,
+      flagged: flaggedRows,
       counts: {
         open_alerts:   alerts.rowCount ?? 0,
         open_disputes: disputes.rowCount ?? 0,
+        open_audits:   auditRows.length,
+        open_flags:    flaggedRows.length,
       },
     })
   } catch (e: any) {
@@ -122,7 +158,38 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ success: true })
     }
 
-    return NextResponse.json({ error: "kind must be alert or dispute" }, { status: 400 })
+    if (kind === "audit") {
+      if (!["approve", "reject"].includes(action)) {
+        return NextResponse.json({ error: "action must be approve|reject" }, { status: 400 })
+      }
+      if (action === "reject") {
+        await pool.query(`UPDATE projects SET audit_status = 'rejected', trust_updated_at = NOW() WHERE id = $1`, [Number(id)])
+        return NextResponse.json({ success: true })
+      }
+      // Approve → grant Verified (trust_level='verified') + mirror on-chain if changed.
+      const before = (await pool.query(`SELECT trust_level FROM projects WHERE id = $1`, [Number(id)])).rows[0]
+      await pool.query(`UPDATE projects SET trust_level = 'verified', audit_status = 'approved', trust_updated_at = NOW() WHERE id = $1`, [Number(id)])
+      const p = (await pool.query(
+        `SELECT slug, recognition,
+                (SELECT address FROM project_contracts WHERE project_id = projects.id AND verified_at IS NOT NULL AND revoked_at IS NULL LIMIT 1) AS proven
+           FROM projects WHERE id = $1`, [Number(id)]
+      )).rows[0]
+      if (before?.trust_level !== "verified") {
+        const subject = subjectFor({ provenContract: p?.proven, slug: p?.slug })
+        if (subject) attestOnChain(subject, "verified", p?.recognition, "arclenz.xyz/ecosystem/" + (p?.slug || "")).catch(() => {})
+      }
+      return NextResponse.json({ success: true })
+    }
+
+    if (kind === "caution") {
+      if (action !== "acknowledge") {
+        return NextResponse.json({ error: "caution only supports action=acknowledge" }, { status: 400 })
+      }
+      await pool.query(`UPDATE projects SET caution_reviewed = true WHERE id = $1`, [Number(id)])
+      return NextResponse.json({ success: true })
+    }
+
+    return NextResponse.json({ error: "kind must be alert, dispute, audit, or caution" }, { status: 400 })
   } catch (e: any) {
     console.error("[admin/trust PATCH]", e)
     return NextResponse.json({ error: "Server error" }, { status: 500 })

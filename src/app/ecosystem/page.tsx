@@ -1,6 +1,8 @@
 ﻿"use client"
 import { useEffect, useState, useRef } from "react"
 import ArcLayout from "@/components/ArcLayout"
+import { TrustBadge } from "@/components/TrustBadge"
+import { trustBadge } from "@/lib/trustBadge"
 
 interface Project {
   id: number
@@ -16,6 +18,10 @@ interface Project {
   contract: string | null
   featured: boolean
   badge: string | null
+  trust_level?: string | null
+  recognition?: string | null
+  trust_profile?: { hard_risk?: boolean } | null
+  established?: boolean
   color: string | null
   slug: string | null
   created_at?: string
@@ -82,7 +88,7 @@ export default function EcosystemPage() {
   const [filter, setFilter]           = useState("All")
   const [search, setSearch]           = useState("")
   const [showForm, setShowForm]       = useState(false)
-  const [form, setForm]               = useState({ name: "", tagline: "", description: "", category: "DeFi", website: "", twitter: "", github: "", discord: "", contract: "", email: "", city: "", country: "" })
+  const [form, setForm]               = useState({ name: "", tagline: "", description: "", category: "DeFi", website: "", twitter: "", github: "", discord: "", contract: "", email: "", city: "", country: "", founder: "" })
   const [extraContracts, setExtraContracts] = useState<string[]>([])
   const [logoUrl, setLogoUrl]         = useState<string | null>(null)
   const [logoPreview, setLogoPreview] = useState<string | null>(null)
@@ -92,12 +98,13 @@ export default function EcosystemPage() {
   const [isUpdate, setIsUpdate]       = useState(false)
   const [submitError, setSubmitError] = useState("")
   const [nameWarn, setNameWarn]       = useState("")
+  const [similarNames, setSimilarNames] = useState<string[]>([])
   const [contractErr, setContractErr] = useState("")
   const fileRef             = useRef<HTMLInputElement>(null)
   const existingNames       = useRef<Set<string>>(new Set())
   const existingContracts   = useRef<Set<string>>(new Set())
   const [trending, setTrending] = useState<TrendingProject[]>([])
-  const [sortBy, setSortBy] = useState<"all"|"trending"|"new"|"official"|"verified"|"featured"|"tvl"|"revenue"|"volume">("all")
+  const [sortBy, setSortBy] = useState<"all"|"trending"|"new"|"official"|"partner"|"verified"|"established"|"claimed"|"featured"|"tvl"|"revenue"|"volume">("all")
   const [page, setPage] = useState(1)
   const [cols, setCols] = useState(4)
   const gridWrapRef = useRef<HTMLDivElement>(null)
@@ -170,10 +177,28 @@ export default function EcosystemPage() {
   }
 
   function checkName(val: string) {
-    if (val.trim() && existingNames.current.has(val.toLowerCase().trim())) {
+    const v = val.toLowerCase().trim()
+    if (v && existingNames.current.has(v)) {
       setNameWarn("A project with this name already exists. If this is an update, use the same email you registered with.")
     } else {
       setNameWarn("")
+    }
+    // Advisory: surface already-listed projects with a similar name so founders
+    // pick something distinct (avoids confusion + look-alike/impersonation).
+    const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "")
+    const nv = norm(val)
+    if (nv.length >= 3) {
+      const sims = projects
+        .map(p => p.name)
+        // existing-contains-typed (catches "Pay" → "FlowPay"), or typed-contains-
+        // existing only when the existing name is ≥4 chars (so generic shorties
+        // like "Arc" don't match every Arc-prefixed name).
+        .filter(n => { const nn = norm(n); return nn && nn !== nv && (nn.includes(nv) || (nv.includes(nn) && nn.length >= 4)) })
+        .filter((n, i, a) => a.indexOf(n) === i)
+        .slice(0, 5)
+      setSimilarNames(sims)
+    } else {
+      setSimilarNames([])
     }
   }
 
@@ -216,14 +241,40 @@ export default function EcosystemPage() {
   const t3     = "var(--t3, #2e3a5c)"
   const bdr    = "var(--bdr, rgba(255,255,255,0.06))"
 
+  // One resolver for both the chip and the tier filters, so they never drift.
+  const badgeKey = (p: Project) => trustBadge({ trust_level: p.trust_level, recognition: p.recognition, risk_flagged: p.trust_profile?.hard_risk, legacy_badge: p.badge }).key
+
+  // Hide a filter tab when nothing matches it — an empty grid behind a tab reads
+  // as broken. All / Trending / New always show; the rest appear only when there's
+  // something to show, and grow in automatically as the data fills.
+  const tabAvailable = (key: string): boolean => {
+    switch (key) {
+      case "featured": return projects.some(p => p.featured)
+      case "tvl":      return projects.some(p => !!(p.tvl_tracking_enabled && p.tvl_usd_e6 && p.tvl_usd_e6 !== "0"))
+      case "volume":   return projects.some(p => !!(p.tvl_tracking_enabled && p.volume_cum_usd_e6 && p.volume_cum_usd_e6 !== "0"))
+      case "revenue":  return projects.some(p => !!(p.tvl_tracking_enabled && p.revenue_cum_usd_e6 && p.revenue_cum_usd_e6 !== "0"))
+      case "official": return projects.some(p => badgeKey(p) === "arc_official")
+      case "partner":  return projects.some(p => badgeKey(p) === "arc_partner")
+      case "verified": return projects.some(p => badgeKey(p) === "verified")
+      case "established": return projects.some(p => p.established)
+      case "claimed":  return projects.some(p => badgeKey(p) === "claimed")
+      default:         return true
+    }
+  }
+
   const filtered = projects.filter(p => {
     const matchCat    = filter === "All" || (p.category || "").trim().toLowerCase() === filter.trim().toLowerCase()
     const matchSearch = !search || p.name.toLowerCase().includes(search.toLowerCase()) || p.tagline?.toLowerCase().includes(search.toLowerCase())
     const matchSort   = sortBy === "all" ? true
       : sortBy === "trending"  ? true
       : sortBy === "new"       ? (Date.now() - new Date(p.created_at || 0).getTime() < 90 * 24 * 60 * 60 * 1000)
-      : sortBy === "official"  ? p.badge === "official"
-      : sortBy === "verified"  ? p.badge === "verified"
+      // Trust-tier filters use the SAME resolver the card badge uses, so a tab
+      // always matches the chip you see (no drift from the legacy `badge` field).
+      : sortBy === "official"  ? badgeKey(p) === "arc_official"
+      : sortBy === "partner"   ? badgeKey(p) === "arc_partner"
+      : sortBy === "verified"  ? badgeKey(p) === "verified"
+      : sortBy === "established"? !!p.established
+      : sortBy === "claimed"   ? badgeKey(p) === "claimed"
       : sortBy === "featured"  ? p.featured
       // For TVL/Revenue/Volume sort tabs, hide projects with no measured number —
       // a leaderboard that pads with $0 projects is misleading.
@@ -296,9 +347,21 @@ export default function EcosystemPage() {
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: "flex", alignItems: "center", gap: "5px", marginBottom: "4px", flexWrap: "wrap" }}>
               <div style={{ fontSize: "14px", fontWeight: 700, letterSpacing: "-0.025em", color: t1 }}>{p.name}</div>
-              {p.badge === "official"  && <span style={{ fontSize: "7px", fontFamily: mono, padding: "1px 5px", borderRadius: "3px", background: "rgba(26,86,255,0.12)", color: "#8aaeff", border: "1px solid rgba(26,86,255,0.25)", flexShrink: 0 }}>OFFICIAL</span>}
-              {p.badge === "verified"  && <span style={{ fontSize: "7px", fontFamily: mono, padding: "1px 5px", borderRadius: "3px", background: "rgba(0,184,122,0.1)", color: "#00b87a", border: "1px solid rgba(0,184,122,0.25)", flexShrink: 0 }}>✓ VERIFIED</span>}
-              {p.featured && <span style={{ fontSize: "7px", fontFamily: mono, padding: "1px 5px", borderRadius: "3px", background: "rgba(192,136,40,0.1)", color: "#c08828", border: "1px solid rgba(192,136,40,0.25)", flexShrink: 0 }}>FEATURED</span>}
+              {(() => {
+                const tb = trustBadge({ trust_level: p.trust_level, recognition: p.recognition, risk_flagged: p.trust_profile?.hard_risk, legacy_badge: p.badge })
+                // One trust badge per card: green (recognition / Verified) or red
+                // (Risk), else nothing. Listed/Claimed carry no card chip.
+                return (tb.mark === "check" || tb.mark === "risk") ? <TrustBadge spec={tb} /> : null
+              })()}
+              {/* Established — the one extra chip: earned on-chain track record, in
+                  a distinct MUTED BLUE (never green) so it doesn't dilute recognition.
+                  Worst case on a card is two small chips. */}
+              {p.established && (
+                <span title="Established — claimed, here a while, and actively used on-chain"
+                  style={{ display: "inline-flex", alignItems: "center", gap: "3px", fontSize: "9px", fontFamily: "'DM Mono', monospace", fontWeight: 700, padding: "2px 6px", borderRadius: "4px", flexShrink: 0, textTransform: "uppercase", letterSpacing: "0.04em", background: "rgba(91,140,255,0.12)", color: "#8aaeff", border: "1px solid rgba(91,140,255,0.3)" }}>
+                  <span style={{ fontWeight: 900 }}>◆</span> Established
+                </span>
+              )}
             </div>
             <span style={{ fontSize: "8.5px", fontFamily: mono, padding: "2px 7px", borderRadius: "99px", background: color + "14", color, border: "1px solid " + color + "28" }}>{p.category}</span>
           </div>
@@ -394,7 +457,7 @@ export default function EcosystemPage() {
               Every project building on Arc. DeFi, NFTs, payments, and infrastructure running on USDC gas with sub-second finality.
             </div>
           </div>
-          <button onClick={() => { setShowForm(!showForm); setSubmitted(false); setSubmitError(""); setNameWarn(""); setContractErr("") }}
+          <button onClick={() => { setShowForm(!showForm); setSubmitted(false); setSubmitError(""); setNameWarn(""); setSimilarNames([]); setContractErr("") }}
             style={{ height: "40px", padding: "0 20px", background: showForm ? "transparent" : "#1a56ff", color: showForm ? t2 : "#fff", fontSize: "12.5px", fontWeight: 600, border: "1px solid " + (showForm ? border : "#1a56ff"), borderRadius: "9px", cursor: "pointer", fontFamily: "'Geist', sans-serif", whiteSpace: "nowrap", transition: "all .13s", flexShrink: 0 }}>
             {showForm ? "Cancel" : "+ Submit Project"}
           </button>
@@ -435,7 +498,12 @@ export default function EcosystemPage() {
                     <div>
                       <label style={{ display: "block", fontSize: "9.5px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "5px" }}>Project Name *</label>
                       <input style={{ ...inputStyle, borderColor: nameWarn ? "rgba(224,136,16,0.5)" : undefined }} value={form.name} onChange={e => { setForm(p => ({ ...p, name: e.target.value })); checkName(e.target.value) }} placeholder="e.g. ArcSwap" />
-                      {nameWarn && <div style={{ fontSize: "10px", fontFamily: mono, color: "#e08810", marginTop: "4px", lineHeight: 1.5 }}>⚠ {nameWarn}</div>}
+                      {nameWarn && <div style={{ fontSize: "10px", fontFamily: mono, color: "#e08810", marginTop: "4px", lineHeight: 1.5 }}>{nameWarn}</div>}
+                      {!nameWarn && similarNames.length > 0 && (
+                        <div style={{ fontSize: "10px", fontFamily: mono, color: t3, marginTop: "5px", lineHeight: 1.6 }}>
+                          Already listed: <span style={{ color: t2 }}>{similarNames.join(", ")}</span>. Make sure your name is distinct so users don't confuse it.
+                        </div>
+                      )}
                     </div>
                     <div>
                       <label style={{ display: "block", fontSize: "9.5px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "5px" }}>Tagline *</label>
@@ -448,7 +516,7 @@ export default function EcosystemPage() {
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "10px", marginBottom: "10px" }}>
                   {[
                     { k: "website",  l: "Website",      p: "https://..." },
-                    { k: "twitter",  l: "Twitter / X",  p: "@handle" },
+                    { k: "twitter",  l: "Project X / Twitter",  p: "@yourproject" },
                     { k: "github",   l: "GitHub",        p: "https://github.com/..." },
                     { k: "discord",  l: "Discord",       p: "https://discord.gg/..." },
                     { k: "email",    l: "Contact Email *", p: "you@email.com" },
@@ -483,6 +551,18 @@ export default function EcosystemPage() {
                     <select style={{ ...inputStyle }} value={form.category} onChange={e => setForm(p => ({ ...p, category: e.target.value }))}>
                       {["Infrastructure","DeFi","AI","Payments","NFT","Gaming","Social","Developer Tools","Bridge","Identity","Wallet","Exchange","Lending","Prediction Market","RWA","DAO","Stablecoin","Derivatives","Insurance","Launchpad","Oracle","Analytics","Finance","Trading","Custody","Other"].map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
+                  </div>
+                </div>
+
+                {/* FOUNDER — the person, kept visually distinct from the project's
+                    own links above so founders don't just re-paste the project X. */}
+                <div style={{ marginBottom: "14px", paddingTop: "14px", borderTop: "1px solid " + border }}>
+                  <label style={{ display: "block", fontSize: "9.5px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "5px" }}>
+                    Founder <span style={{ color: t3, textTransform: "none", letterSpacing: 0 }}>— optional</span>
+                  </label>
+                  <input style={inputStyle} value={form.founder} onChange={e => setForm(p => ({ ...p, founder: e.target.value }))} placeholder="Your personal X, LinkedIn, or site — e.g. @yourname" spellCheck={false} />
+                  <div style={{ fontSize: "10px", fontFamily: mono, color: t3, marginTop: "5px", lineHeight: 1.5 }}>
+                    This is <strong style={{ color: t2 }}>you</strong> — the person behind the project, not the project's own account. Shown on your project page so people can see who's building it.
                   </div>
                 </div>
 
@@ -529,9 +609,12 @@ export default function EcosystemPage() {
             { key: "trending", label: "Trending" },
             { key: "new",      label: "New" },
             { key: "featured", label: "Featured" },
+            { key: "official", label: "Arc Official" },
+            { key: "partner",  label: "Arc Partner" },
             { key: "verified", label: "Verified" },
-            { key: "official", label: "Official" },
-          ] as const).map(tab => (
+            { key: "established", label: "Established" },
+            { key: "claimed",  label: "Claimed" },
+          ] as const).filter(tab => tabAvailable(tab.key)).map(tab => (
             <button key={tab.key} onClick={() => setSortAndReset(tab.key)}
               style={{ height: "28px", padding: "0 14px", background: sortBy === tab.key ? "rgba(26,86,255,0.12)" : "transparent", color: sortBy === tab.key ? "#8aaeff" : t2, fontSize: "11.5px", fontFamily: mono, border: "1px solid " + (sortBy === tab.key ? "rgba(26,86,255,0.35)" : border), borderRadius: "6px", cursor: "pointer", transition: "all .12s", whiteSpace: "nowrap", fontWeight: sortBy === tab.key ? 600 : 400 }}>
               {tab.label}
@@ -621,7 +704,7 @@ export default function EcosystemPage() {
             <div style={{ fontSize: "13px", color: t2, fontWeight: 300, maxWidth: "400px", lineHeight: 1.65 }}>List your project and get discovered by every Arc user and builder. Free, takes 2 minutes.</div>
           </div>
           <div style={{ display: "flex", gap: "10px", flexShrink: 0, flexWrap: "wrap" }}>
-            <button onClick={() => { setShowForm(true); setSubmitted(false); setSubmitError(""); setNameWarn(""); setContractErr(""); window.scrollTo({ top: 0, behavior: "smooth" }) }}
+            <button onClick={() => { setShowForm(true); setSubmitted(false); setSubmitError(""); setNameWarn(""); setSimilarNames([]); setContractErr(""); window.scrollTo({ top: 0, behavior: "smooth" }) }}
               style={{ height: "40px", padding: "0 20px", background: "#1a56ff", color: "#fff", fontSize: "12.5px", fontWeight: 600, border: "none", borderRadius: "9px", cursor: "pointer", fontFamily: "'Geist', sans-serif", whiteSpace: "nowrap" }}>
               Submit Project
             </button>

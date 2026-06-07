@@ -21,6 +21,9 @@ export async function GET(
     const result = await pool.query(
       `SELECT id, name, slug, tagline, description, category, logo_url,
               website, twitter, github, discord, contract,
+              founder_social, owner_wallet,
+              recognition, trust_level, trust_profile, established,
+              auditor, audit_url,
               featured, badge, color, created_at,
               COALESCE(view_count, 0) as view_count,
               city, country, lat, lng,
@@ -48,6 +51,33 @@ export async function GET(
     }
 
     const project = result.rows[0]
+
+    // Founder linkage: a claimed project's owner_wallet IS a builder profile.
+    // Prefer pointing "Founder" at that wallet-proven profile (rich + verified)
+    // over the self-disclosed social link. If the wallet hasn't filled a profile
+    // yet, the builder page still shows their on-chain track record, so we link
+    // it anyway. Falls back to the typed founder_social on the page when there's
+    // no owner wallet at all.
+    let founderProfile: any = null
+    if (project.owner_wallet) {
+      const owner = String(project.owner_wallet).toLowerCase()
+      try {
+        const bp = await pool.query(
+          `SELECT address, display_name, avatar_url, verified, claimed_at FROM builder_profiles WHERE address = $1`,
+          [owner]
+        )
+        const row = bp.rows[0]
+        founderProfile = {
+          address:      owner,
+          display_name: row?.display_name || null,
+          avatar_url:   row?.avatar_url   || null,
+          verified:     !!row?.verified,
+          claimed:      !!row?.claimed_at,
+        }
+      } catch {
+        founderProfile = { address: owner, display_name: null, avatar_url: null, verified: false, claimed: false }
+      }
+    }
 
     // Fetch tx count for contract if available
     let txCount: string | null = null
@@ -198,7 +228,7 @@ export async function GET(
     }
 
     return NextResponse.json(
-      { project: { ...project, txCount }, related: related.rows, leaderboard, campaignsRun, usingXp, tvl },
+      { project: { ...project, txCount, owner_wallet: undefined, founder_profile: founderProfile }, related: related.rows, leaderboard, campaignsRun, usingXp, tvl },
       { headers: { "Cache-Control": "public, s-maxage=30, stale-while-revalidate=60" } }
     )
   } catch (err) {

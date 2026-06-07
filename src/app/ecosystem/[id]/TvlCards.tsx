@@ -170,15 +170,9 @@ export default function TvlCards({ project, tvl, theme, slug }: Props) {
     tvl: 0, volume: 0, revenue: 0,
   })
 
-  // Which metric (if any) has the dispute form open right now.
-  const [flagOpen, setFlagOpen] = useState<"tvl" | "volume" | "revenue" | null>(null)
-  const [flagReason, setFlagReason] = useState("")
-  const [flagEvidence, setFlagEvidence] = useState("")
-  const [flagEmail, setFlagEmail] = useState("")
-  const [flagSubmitting, setFlagSubmitting] = useState(false)
-  const [flagMessage, setFlagMessage] = useState<{ ok: boolean; text: string } | null>(null)
-
-  // Fetch open-dispute counts when the component mounts / slug changes.
+  // Fetch open-dispute counts when the component mounts / slug changes, to show
+  // the read-only "under review" badge on each metric card. Flagging itself
+  // lives in the single "Report a problem" form at the bottom of the page.
   // Server cache is 30s so this is cheap.
   useEffect(() => {
     fetch(`/api/disputes?slug=${encodeURIComponent(slug)}`)
@@ -190,40 +184,6 @@ export default function TvlCards({ project, tvl, theme, slug }: Props) {
       }))
       .catch(() => {})
   }, [slug])
-
-  async function submitFlag(metric: "tvl" | "volume" | "revenue") {
-    setFlagMessage(null)
-    if (flagReason.trim().length < 10) {
-      setFlagMessage({ ok: false, text: "Please give us at least one full sentence (10+ chars)." })
-      return
-    }
-    setFlagSubmitting(true)
-    try {
-      const res = await fetch("/api/disputes", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          slug, metric,
-          reason: flagReason.trim(),
-          evidence_url: flagEvidence.trim() || undefined,
-          reporter_email: flagEmail.trim() || undefined,
-        }),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        setFlagMessage({ ok: false, text: data.error || "Could not submit" })
-        return
-      }
-      setFlagMessage({ ok: true, text: "Thanks — flagged for admin review." })
-      setFlagReason(""); setFlagEvidence(""); setFlagEmail("")
-      setOpenDisputes(o => ({ ...o, [metric]: o[metric] + 1 }))
-      setTimeout(() => { setFlagOpen(null); setFlagMessage(null) }, 1800)
-    } catch {
-      setFlagMessage({ ok: false, text: "Network error. Try again." })
-    } finally {
-      setFlagSubmitting(false)
-    }
-  }
 
   // Sparkline series — declared before any early return (Rules of Hooks).
   const series    = useMemo(() => (tvl?.series ?? []).map(p => Number(BigInt(p.total_usd_e6)) / 1e6), [tvl?.series])
@@ -377,11 +337,6 @@ export default function TvlCards({ project, tvl, theme, slug }: Props) {
 
           <div style={{ display: "flex", gap: "10px", fontSize: "10px", fontFamily: mono, color: t3 }}>
             <span>{tvlContracts.length} contract{tvlContracts.length === 1 ? "" : "s"} tracked</span>
-            <span style={{ opacity: 0.5 }}>·</span>
-            <button type="button" onClick={() => setFlagOpen(flagOpen === "tvl" ? null : "tvl")}
-              style={{ background: "none", border: "none", padding: 0, color: t3, textDecoration: "underline", fontSize: "10px", fontFamily: mono, cursor: "pointer" }}>
-              {flagOpen === "tvl" ? "Cancel" : "Flag a problem"}
-            </button>
             {openDisputes.tvl > 0 && (
               <span style={{ fontSize: "9px", fontFamily: mono, padding: "1px 6px", borderRadius: "3px", background: "rgba(224,136,16,0.1)", color: "#e08810", border: "1px solid rgba(224,136,16,0.25)" }}>
                 {openDisputes.tvl} under review
@@ -440,11 +395,6 @@ export default function TvlCards({ project, tvl, theme, slug }: Props) {
 
           <div style={{ display: "flex", gap: "10px", fontSize: "10px", fontFamily: mono, color: t3 }}>
             <span>{volContracts.length} swap contract{volContracts.length === 1 ? "" : "s"}</span>
-            <span style={{ opacity: 0.5 }}>·</span>
-            <button type="button" onClick={() => setFlagOpen(flagOpen === "volume" ? null : "volume")}
-              style={{ background: "none", border: "none", padding: 0, color: t3, textDecoration: "underline", fontSize: "10px", fontFamily: mono, cursor: "pointer" }}>
-              {flagOpen === "volume" ? "Cancel" : "Flag a problem"}
-            </button>
             {openDisputes.volume > 0 && (
               <span style={{ fontSize: "9px", fontFamily: mono, padding: "1px 6px", borderRadius: "3px", background: "rgba(224,136,16,0.1)", color: "#e08810", border: "1px solid rgba(224,136,16,0.25)" }}>
                 {openDisputes.volume} under review
@@ -489,11 +439,6 @@ export default function TvlCards({ project, tvl, theme, slug }: Props) {
 
           <div style={{ display: "flex", gap: "10px", fontSize: "10px", fontFamily: mono, color: t3 }}>
             <span>{revContracts.length} fee collector{revContracts.length === 1 ? "" : "s"}</span>
-            <span style={{ opacity: 0.5 }}>·</span>
-            <button type="button" onClick={() => setFlagOpen(flagOpen === "revenue" ? null : "revenue")}
-              style={{ background: "none", border: "none", padding: 0, color: t3, textDecoration: "underline", fontSize: "10px", fontFamily: mono, cursor: "pointer" }}>
-              {flagOpen === "revenue" ? "Cancel" : "Flag a problem"}
-            </button>
             {openDisputes.revenue > 0 && (
               <span style={{ fontSize: "9px", fontFamily: mono, padding: "1px 6px", borderRadius: "3px", background: "rgba(224,136,16,0.1)", color: "#e08810", border: "1px solid rgba(224,136,16,0.25)" }}>
                 {openDisputes.revenue} under review
@@ -503,101 +448,9 @@ export default function TvlCards({ project, tvl, theme, slug }: Props) {
         </div>
       )}
 
-      {/* ── DISPUTE FORM ── Full-width row when any "Flag a problem" is open. */}
-      {flagOpen && (
-        <div style={{
-          gridColumn: "1 / -1",
-          background: surf2,
-          border: "1px solid rgba(224,136,16,0.25)",
-          borderRadius: "12px",
-          padding: "18px 22px",
-          display: "flex",
-          flexDirection: "column",
-          gap: "12px",
-        }}>
-          <div style={{ fontSize: "10px", fontFamily: mono, color: "#e08810", textTransform: "uppercase", letterSpacing: "0.1em" }}>
-            Flag a problem with this project&apos;s {flagOpen.toUpperCase()}
-          </div>
-          <div style={{ fontSize: "12px", fontFamily: mono, color: t2, lineHeight: 1.7 }}>
-            Anyone can flag a number. Admin reviews each report and can mark it acknowledged, resolved, or
-            dismissed. Counts of open flags appear on the metric card so visitors can judge confidence.
-            No login required — just be specific.
-          </div>
-          <textarea
-            value={flagReason}
-            onChange={e => setFlagReason(e.target.value)}
-            placeholder="What's wrong with this number? Be specific — link a block, a tx hash, or a screenshot."
-            style={{
-              width: "100%", minHeight: "84px",
-              background: surf, border: "1px solid " + bdr, borderRadius: "8px",
-              padding: "10px 14px",
-              fontFamily: mono, fontSize: "12px", color: t1, lineHeight: 1.6,
-              outline: "none", resize: "vertical",
-            } as React.CSSProperties}
-            disabled={flagSubmitting}
-          />
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
-            <input
-              value={flagEvidence}
-              onChange={e => setFlagEvidence(e.target.value)}
-              placeholder="Evidence URL (optional)"
-              style={{
-                height: "36px", background: surf, border: "1px solid " + bdr,
-                borderRadius: "8px", padding: "0 12px",
-                fontFamily: mono, fontSize: "12px", color: t1, outline: "none",
-              }}
-              disabled={flagSubmitting}
-            />
-            <input
-              value={flagEmail}
-              onChange={e => setFlagEmail(e.target.value)}
-              placeholder="Your email (optional, for follow-up)"
-              style={{
-                height: "36px", background: surf, border: "1px solid " + bdr,
-                borderRadius: "8px", padding: "0 12px",
-                fontFamily: mono, fontSize: "12px", color: t1, outline: "none",
-              }}
-              disabled={flagSubmitting}
-            />
-          </div>
-          {flagMessage && (
-            <div style={{
-              fontSize: "12px", fontFamily: mono, lineHeight: 1.6,
-              color: flagMessage.ok ? USDC_GREEN : "#e03348",
-            }}>
-              {flagMessage.text}
-            </div>
-          )}
-          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-            <button
-              onClick={() => submitFlag(flagOpen!)}
-              disabled={flagSubmitting || flagReason.trim().length < 10}
-              style={{
-                height: "38px", padding: "0 18px",
-                background: "#e08810", color: "#1a0e02",
-                fontSize: "12.5px", fontWeight: 700,
-                border: "none", borderRadius: "8px",
-                cursor: (flagSubmitting || flagReason.trim().length < 10) ? "not-allowed" : "pointer",
-                fontFamily: mono,
-                opacity: (flagSubmitting || flagReason.trim().length < 10) ? 0.6 : 1,
-              }}>
-              {flagSubmitting ? "Submitting…" : "Submit flag"}
-            </button>
-            <button
-              onClick={() => { setFlagOpen(null); setFlagMessage(null) }}
-              disabled={flagSubmitting}
-              style={{
-                height: "38px", padding: "0 16px",
-                background: "transparent", color: t2,
-                fontSize: "12px", fontFamily: mono,
-                border: "1px solid " + bdr, borderRadius: "8px",
-                cursor: flagSubmitting ? "not-allowed" : "pointer",
-              }}>
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
+      {/* Flagging a number lives in the single "Report a problem" form at the
+          bottom of the page (one flag for the whole listing). The "under review"
+          counts above are read-only signals. */}
       </div>
     </div>
   )

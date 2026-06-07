@@ -71,14 +71,14 @@ export async function GET(req: NextRequest) {
     let projectRow: any = null
     if (wallet) {
       const result = await pool.query(
-        `SELECT id, name, slug, tagline, description, category, logo_url, website, twitter, github, discord, contract, featured, badge, color, email, claimed_at, view_count, owner_wallet, city, country FROM projects WHERE (slug = $1 OR id::text = $1) AND owner_wallet = $2 AND approved = true AND live = true`,
+        `SELECT id, name, slug, tagline, description, category, logo_url, website, twitter, github, discord, contract, founder_social, featured, badge, color, email, claimed_at, view_count, owner_wallet, city, country FROM projects WHERE (slug = $1 OR id::text = $1) AND owner_wallet = $2 AND approved = true AND live = true`,
         [slug, wallet.toLowerCase()]
       )
       if (result.rows.length === 0) return NextResponse.json({ error: "Wallet not authorized for this project" }, { status: 403 })
       projectRow = result.rows[0]
     } else if (token) {
       const result = await pool.query(
-        `SELECT id, name, slug, tagline, description, category, logo_url, website, twitter, github, discord, contract, featured, badge, color, email, claimed_at, view_count, owner_wallet, city, country, claim_token_expires FROM projects WHERE (slug = $1 OR id::text = $1) AND claim_token = $2`,
+        `SELECT id, name, slug, tagline, description, category, logo_url, website, twitter, github, discord, contract, founder_social, featured, badge, color, email, claimed_at, view_count, owner_wallet, city, country, claim_token_expires FROM projects WHERE (slug = $1 OR id::text = $1) AND claim_token = $2`,
         [slug, token]
       )
       if (result.rows.length === 0) return NextResponse.json({ error: "Invalid or expired token" }, { status: 403 })
@@ -190,10 +190,16 @@ export async function PUT(req: NextRequest) {
       }
     }
 
-    // Set both owner_wallet and claimed_at atomically — claimed_at now
-    // truthfully means "wallet attached", not "email link opened"
+    // Set owner_wallet + claimed_at atomically — claimed_at now truthfully means
+    // "wallet attached", not "email link opened". Also auto-promote the trust
+    // ladder to 'claimed' (a real owner controls the listing) — objective, no
+    // manual step. Recognition (Arc Partner/Official) outranks and is left alone.
     await pool.query(
-      `UPDATE projects SET owner_wallet = $1, claimed_at = COALESCE(claimed_at, NOW()) WHERE id = $2`,
+      `UPDATE projects SET
+         owner_wallet = $1,
+         claimed_at   = COALESCE(claimed_at, NOW()),
+         trust_level  = CASE WHEN trust_level = 'listed' OR trust_level IS NULL THEN 'claimed' ELSE trust_level END
+       WHERE id = $2`,
       [addr, result.rows[0].id]
     )
     return NextResponse.json({ success: true })
@@ -205,7 +211,7 @@ export async function PATCH(req: NextRequest) {
     const { wallet } = await req.json()
     if (!wallet) return NextResponse.json({ error: "Missing wallet" }, { status: 400 })
     const result = await pool.query(
-      `SELECT id, name, slug, tagline, category, logo_url, website, twitter, github, discord, contract, featured, badge, color, email, claimed_at, view_count, owner_wallet FROM projects WHERE owner_wallet = $1 AND approved = true AND live = true`,
+      `SELECT id, name, slug, tagline, category, logo_url, website, twitter, github, discord, contract, founder_social, featured, badge, color, email, claimed_at, view_count, owner_wallet FROM projects WHERE owner_wallet = $1 AND approved = true AND live = true`,
       [wallet.toLowerCase()]
     )
     return NextResponse.json({ projects: result.rows })

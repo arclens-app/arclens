@@ -3,6 +3,8 @@ import { Pool } from "pg"
 import { Resend } from "resend"
 import { timingSafeEqual } from "crypto"
 import { enforce } from "@/lib/ratelimit"
+import { attestOnChain, subjectFor } from "@/lib/registry"
+import { loadPhishingList, hostOf, checkWebsite, analyzeContract, assessProject } from "@/lib/trustEngine"
 
 const pool   = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
 
@@ -544,10 +546,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true })
     }
     if (action === "update" && data) {
-      // Check previous approval state before updating
-      const before = await pool.query(`SELECT approved, live FROM projects WHERE id = $1`, [id])
+      // Check previous approval + trust state before updating
+      const before = await pool.query(`SELECT approved, live, trust_level, recognition FROM projects WHERE id = $1`, [id])
       const wasApproved = before.rows[0]?.approved === true
       const wasLive     = before.rows[0]?.live === true
+      const tierKey = (rec: any, lvl: any) => rec === "official" ? "arc_official" : rec === "partner" ? "arc_partner" : (lvl || "listed")
+      const beforeKey = tierKey(before.rows[0]?.recognition, before.rows[0]?.trust_level)
 
       const contractsArr = Array.isArray(data.contracts)
         ? data.contracts.map((c: string) => c.trim()).filter(Boolean)
@@ -580,6 +584,41 @@ export async function POST(req: NextRequest) {
       const goingLive = data.live !== false
       if (goingLive && (!wasApproved || !wasLive)) {
         await sendProjectEmail(Number(id), "approved")
+      }
+
+      // Recognition is the manual lever. Trust level itself is automatic — Claimed
+      // on claim, Verified via the audit grant below — so the editor never writes it.
+      if (data.recognition !== undefined) {
+        await pool.query(`UPDATE projects SET recognition = $1, trust_updated_at = NOW() WHERE id = $2`, [data.recognition === "none" ? null : data.recognition, id])
+      }
+
+      // Verified (audit) — admin grants when a real third-party audit is on
+      // record. Verified sets trust_level='verified'; un-verifying drops back to
+      // claimed (if a founder owns it) or listed. auditor/url stored for display.
+      if (data.audited !== undefined || data.auditor !== undefined || data.audit_url !== undefined) {
+        const verified = !!data.audited
+        const ow = (await pool.query(`SELECT owner_wallet FROM projects WHERE id = $1`, [id])).rows[0]?.owner_wallet
+        const fallback = ow ? "claimed" : "listed"
+        await pool.query(
+          `UPDATE projects SET
+             auditor = $1, audit_url = $2, audit_status = $3,
+             trust_level = CASE WHEN $4 THEN 'verified' WHEN trust_level = 'verified' THEN $5 ELSE trust_level END,
+             trust_updated_at = NOW()
+           WHERE id = $6`,
+          [data.auditor?.trim() || null, data.audit_url?.trim() || null, verified ? "approved" : "none", verified, fallback, id]
+        )
+      }
+
+      // Mirror on-chain ONCE — only when the resulting badge tier actually changed,
+      // so an unrelated edit never burns gas. Env-gated no-op until the registry is set.
+      const after = (await pool.query(
+        `SELECT trust_level, recognition, slug,
+                (SELECT address FROM project_contracts WHERE project_id = projects.id AND verified_at IS NOT NULL AND revoked_at IS NULL LIMIT 1) AS proven
+           FROM projects WHERE id = $1`, [id]
+      )).rows[0]
+      const subject = subjectFor({ provenContract: after?.proven, slug: after?.slug })
+      if (subject && tierKey(after?.recognition, after?.trust_level) !== beforeKey) {
+        attestOnChain(subject, after.trust_level, after.recognition, "arclenz.xyz/ecosystem/" + (after.slug || "")).catch(() => {})
       }
 
       return NextResponse.json({ success: true })
@@ -685,6 +724,120 @@ export async function POST(req: NextRequest) {
     if (action === "badge-event") {
       await pool.query("UPDATE events SET badge = $1 WHERE id = $2", [data?.badge || "community", id])
       return NextResponse.json({ success: true })
+    }
+    // Manual identity verification (the trust-layer "Identified" toggle).
+    // `id` = builder wallet address. An admin confirms the team's X + domain
+    // (the review they already do), and we recompute identity_level. Identified
+    // requires BOTH proven; otherwise it falls back to claimed/none.
+    if (action === "set-identity") {
+      const addr = String(id).toLowerCase()
+      const xv = !!data?.x_verified
+      const dv = !!data?.domain_verified
+      const upd = await pool.query(
+        `UPDATE builder_profiles
+            SET x_verified           = $2,
+                domain_verified      = $3,
+                identity_level       = CASE WHEN $2 AND $3 THEN 'identified'
+                                            WHEN claimed_at IS NOT NULL THEN 'claimed'
+                                            ELSE 'none' END,
+                identity_verified_at = CASE WHEN $2 AND $3 THEN NOW() ELSE identity_verified_at END,
+                updated_at           = NOW()
+          WHERE address = $1
+        RETURNING identity_level`,
+        [addr, xv, dv]
+      )
+      if (!upd.rows.length) return NextResponse.json({ error: "No builder profile for that address" }, { status: 404 })
+      return NextResponse.json({ success: true, identity_level: upd.rows[0].identity_level })
+    }
+    // Grant/remove recognition (Arc Partner / Arc Official). `id` = project id or
+    // slug. Recognition rides on top of the earned trust ladder — separate from it.
+    if (action === "set-recognition") {
+      const rec = data?.recognition
+      const val = (!rec || rec === "none") ? null : String(rec)
+      if (val && val !== "partner" && val !== "official") return NextResponse.json({ error: "recognition must be partner, official, or none" }, { status: 400 })
+      const r = await pool.query("UPDATE projects SET recognition = $1 WHERE id::text = $2 OR slug = $2 RETURNING id", [val, String(id)])
+      if (!r.rows.length) return NextResponse.json({ error: "Project not found" }, { status: 404 })
+      return NextResponse.json({ success: true, recognition: val })
+    }
+    // Advisory: run the safety checks live for one project and return the facts
+    // so an admin can decide the trust level with them in front of them. Read-only.
+    if (action === "assess-project") {
+      const proj = (await pool.query(`SELECT id, website, contract, contracts FROM projects WHERE id::text = $1 OR slug = $1`, [String(id)])).rows[0]
+      if (!proj) return NextResponse.json({ error: "Project not found" }, { status: 404 })
+      const regs = (await pool.query(
+        `SELECT address, role, (verified_at IS NOT NULL) AS verified FROM project_contracts WHERE project_id = $1 AND revoked_at IS NULL`,
+        [proj.id]
+      )).rows
+      // All listed contracts — registered (proven) + primary + extras, deduped.
+      const seen = new Set(regs.map((c: any) => String(c.address).toLowerCase()))
+      const all = regs.map((c: any) => ({ address: c.address, role: c.role, verified: c.verified }))
+      const addOne = (addr: any, role: string) => {
+        const a = String(addr || "").trim()
+        if (/^0x[a-fA-F0-9]{40}$/.test(a) && !seen.has(a.toLowerCase())) { seen.add(a.toLowerCase()); all.push({ address: a, role, verified: false }) }
+      }
+      addOne(proj.contract, "primary")
+      for (const e of (Array.isArray(proj.contracts) ? proj.contracts : [])) addOne(e, "extra")
+      const list = await loadPhishingList()
+      const analyzed = []
+      for (const c of all) analyzed.push(await analyzeContract({ address: c.address, role: c.role, verified: c.verified }))
+      const websiteVerdict = checkWebsite(hostOf(proj.website), list)
+      const { hardRisk, profile } = assessProject({ websiteVerdict, contracts: analyzed })
+      return NextResponse.json({ success: true, hardRisk, profile })
+    }
+    // Established eligibility — the OBJECTIVE on-chain gate an admin checks before
+    // granting Established: claimed + contract deployed >=60d + >=50 distinct
+    // caller wallets (real users, not the project's own) + not risk-flagged. The
+    // grant itself is manual (set-established), so wash-trading can't auto-earn it.
+    if (action === "check-established") {
+      const ARCSCAN = "https://testnet.arcscan.app/api/v2"
+      const proj = (await pool.query(
+        `SELECT id, contract, owner_wallet, trust_profile,
+                (SELECT address FROM project_contracts WHERE project_id = projects.id AND revoked_at IS NULL LIMIT 1) AS reg
+           FROM projects WHERE id::text = $1 OR slug = $1`, [String(id)]
+      )).rows[0]
+      if (!proj) return NextResponse.json({ error: "Project not found" }, { status: 404 })
+      const addr = String(proj.contract || proj.reg || "").toLowerCase()
+      const owner = String(proj.owner_wallet || "").toLowerCase()
+      const claimed = !!proj.owner_wallet
+      const risk = proj.trust_profile?.hard_risk === true
+      const reasons: string[] = []
+      if (!claimed) reasons.push("not claimed")
+      if (risk) reasons.push("risk-flagged")
+      if (!/^0x[0-9a-f]{40}$/.test(addr)) {
+        return NextResponse.json({ success: true, eligible: false, claimed, risk, ageDays: null, distinctCallers: 0, reasons: [...reasons, "no contract on record"] })
+      }
+      let ageDays: number | null = null
+      try {
+        const a: any = await (await fetch(`${ARCSCAN}/addresses/${addr}`, { headers: { Accept: "application/json" } })).json()
+        const ctx = a?.creation_transaction_hash || a?.creation_tx_hash
+        if (ctx) {
+          const t: any = await (await fetch(`${ARCSCAN}/transactions/${ctx}`, { headers: { Accept: "application/json" } })).json()
+          if (t?.timestamp) ageDays = Math.floor((Date.now() - new Date(t.timestamp).getTime()) / 86_400_000)
+        }
+      } catch {}
+      const callers = new Set<string>()
+      try {
+        let url = `${ARCSCAN}/addresses/${addr}/transactions?filter=to`
+        for (let page = 0; page < 6 && callers.size < 60; page++) {
+          const r: any = await (await fetch(url, { headers: { Accept: "application/json" } })).json()
+          for (const it of (r?.items || [])) {
+            const f = String(it?.from?.hash || "").toLowerCase()
+            if (f && f !== addr && f !== owner) callers.add(f)
+          }
+          if (!r?.next_page_params) break
+          url = `${ARCSCAN}/addresses/${addr}/transactions?filter=to&` + new URLSearchParams(r.next_page_params).toString()
+        }
+      } catch {}
+      const distinctCallers = callers.size
+      if (ageDays === null || ageDays < 60) reasons.push(ageDays === null ? "deploy age unknown" : `deployed ${ageDays}d ago (need 60)`)
+      if (distinctCallers < 50) reasons.push(`${distinctCallers} distinct callers (need 50)`)
+      const eligible = claimed && !risk && ageDays !== null && ageDays >= 60 && distinctCallers >= 50
+      return NextResponse.json({ success: true, eligible, claimed, risk, ageDays, distinctCallers, contract: addr, reasons })
+    }
+    // Grant / revoke Established (admin, only meaningful for an eligible project).
+    if (action === "set-established") {
+      await pool.query(`UPDATE projects SET established = $1, trust_updated_at = NOW() WHERE id::text = $2 OR slug = $2`, [!!data?.established, String(id)])
+      return NextResponse.json({ success: true, established: !!data?.established })
     }
     if (action === "geocode" && data?.city) {
       const q = encodeURIComponent(`${data.city.trim()}${data.country ? ", " + data.country.trim() : ""}`)
