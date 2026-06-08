@@ -49,3 +49,27 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Server error" }, { status: 500 })
   }
 }
+
+// Resolve knowledge gaps once they're covered (a fact added, or just junk).
+// body: { question }  → resolves every open gap with that exact question.
+//       { all: true } → resolves all open gaps (clear the board).
+export async function PATCH(req: NextRequest) {
+  if (!checkAuth(resolvePw(req))) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  try {
+    const body = await req.json().catch(() => ({}))
+    if (body?.all === true) {
+      const r = await pool.query(`UPDATE ai_knowledge_gaps SET resolved_at = NOW() WHERE resolved_at IS NULL`)
+      return NextResponse.json({ ok: true, resolved: r.rowCount ?? 0 })
+    }
+    const q = typeof body?.question === "string" ? body.question : ""
+    if (!q.trim()) return NextResponse.json({ error: "question or all:true required" }, { status: 400 })
+    const r = await pool.query(
+      `UPDATE ai_knowledge_gaps SET resolved_at = NOW() WHERE resolved_at IS NULL AND question = $1`,
+      [q],
+    )
+    return NextResponse.json({ ok: true, resolved: r.rowCount ?? 0 })
+  } catch (e: any) {
+    console.error("[admin/ai-insights PATCH]", e?.message || e)
+    return NextResponse.json({ error: "Server error" }, { status: 500 })
+  }
+}

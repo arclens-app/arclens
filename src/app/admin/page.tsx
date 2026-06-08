@@ -317,6 +317,23 @@ export default function AdminPage() {
     } finally { setKbBusy(false) }
   }
 
+  // Resolve a knowledge gap (covered by a fact, or just junk). Pass nothing to
+  // clear them all.
+  async function resolveGap(question?: string) {
+    if (!pw) return
+    try {
+      const r = await fetch("/api/admin/ai-insights", {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${pw}`, "Content-Type": "application/json" },
+        body: JSON.stringify(question ? { question } : { all: true }),
+      })
+      const d = await r.json().catch(() => ({}))
+      if (!r.ok) { showToast(false, d.error || "Failed"); return }
+      showToast(true, question ? "Gap resolved" : `Cleared ${d.resolved} gap${d.resolved === 1 ? "" : "s"}`)
+      await loadAiInsights()
+    } catch { showToast(false, "Network error") }
+  }
+
   async function saveTrackedEdit(id: number, patch: Record<string, any>) {
     if (!pw) return
     try {
@@ -1891,7 +1908,15 @@ export default function AdminPage() {
                   )}
 
                   <div>
-                    <div style={{ fontSize:"11px", fontFamily:mono, color:t3, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:"10px" }}>Questions the AI couldn&apos;t answer</div>
+                    <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:"10px", marginBottom:"10px" }}>
+                      <div style={{ fontSize:"11px", fontFamily:mono, color:t3, textTransform:"uppercase", letterSpacing:"0.08em" }}>Questions the AI couldn&apos;t answer</div>
+                      {aiInsights && aiInsights.gaps.top.length > 0 && (
+                        <button onClick={() => resolveGap()}
+                          style={{ height:"24px", padding:"0 10px", background:"transparent", color:t3, fontSize:"10px", fontFamily:mono, border:"1px solid "+bdr, borderRadius:"5px", cursor:"pointer" }}>
+                          Clear all
+                        </button>
+                      )}
+                    </div>
                     {(!aiInsights || aiInsights.gaps.top.length === 0) ? (
                       <EmptyState icon="◌" title="Nothing logged yet" sub="When the AI can't answer a question, it lands here so you can add a fact or a tool to cover it." />
                     ) : (
@@ -1901,6 +1926,10 @@ export default function AdminPage() {
                             <span style={{ fontSize:"10px", fontFamily:mono, color:"#e08810", padding:"2px 7px", borderRadius:"4px", background:"rgba(224,136,16,0.1)", border:"1px solid rgba(224,136,16,0.25)", flexShrink:0 }}>{g.times}×</span>
                             <span style={{ flex:1, fontSize:"13px", color:t1, minWidth:0 }}>{g.question}</span>
                             <span style={{ fontSize:"10px", fontFamily:mono, color:t3, flexShrink:0 }}>{new Date(g.last_asked).toLocaleDateString()}</span>
+                            <button onClick={() => resolveGap(g.question)} title="Mark resolved"
+                              style={{ flexShrink:0, height:"24px", padding:"0 10px", background:"rgba(0,184,122,0.08)", color:"#00b87a", fontSize:"10px", fontFamily:mono, border:"1px solid rgba(0,184,122,0.25)", borderRadius:"5px", cursor:"pointer" }}>
+                              Resolve
+                            </button>
                           </div>
                         ))}
                       </div>
