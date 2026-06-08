@@ -98,7 +98,7 @@ export async function GET(req: NextRequest) {
         const subject = subjectFor({ provenContract: regs[0]?.address, slug: p.slug })
         if (subject) {
           if (hardRisk && !prevRisk) { await revokeOnChain(subject).catch(() => {}); summary.newlyFlagged++ }
-          else if (!hardRisk && prevRisk) { await attestOnChain(subject, p.trust_level, p.recognition, "arclenz.xyz/ecosystem/" + (p.slug || "")).catch(() => {}); summary.cleared++ }
+          else if (!hardRisk && prevRisk) { await attestOnChain(subject, p.trust_level, p.recognition, "arclenz.xyz/ecosystem/" + (p.slug || ""), !!p.established).catch(() => {}); summary.cleared++ }
         }
       } catch {
         summary.errors++

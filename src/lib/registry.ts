@@ -39,15 +39,22 @@ const GET_ABI = [
   { type: "function", name: "get", stateMutability: "view", inputs: [{ name: "subject", type: "address" }], outputs: [{ name: "tier", type: "uint8" }, { name: "issuedAt", type: "uint64" }, { name: "revoked", type: "bool" }, { name: "ref", type: "string" }] },
 ] as const
 
+// Established is orthogonal to the tier ladder (a project can be Claimed AND
+// Established), and the deployed contract only stores tier + ref. So we record
+// Established on-chain as a marker in the ref string — provable by anyone who
+// reads the attestation, without redeploying the contract.
+const EST_MARKER = "#established"
+
 /** Read the current attestation for a subject straight from the chain. */
-export async function readAttestation(subject: string): Promise<{ tier: number; tierLabel: string; issuedAt: number; revoked: boolean; ref: string; isVerified: boolean } | null> {
+export async function readAttestation(subject: string): Promise<{ tier: number; tierLabel: string; issuedAt: number; revoked: boolean; ref: string; established: boolean; isVerified: boolean } | null> {
   const address = process.env.ARCLENS_REGISTRY
   if (!address || !/^0x[a-fA-F0-9]{40}$/.test(subject)) return null
   try {
     const pub = createPublicClient({ chain: arc, transport: http(ARC_RPC_HTTP) })
     const r = await (pub as any).readContract({ address, abi: GET_ABI, functionName: "get", args: [subject] }) as readonly [number, bigint, boolean, string]
     const tier = Number(r[0])
-    return { tier, tierLabel: TIER_LABEL[tier] || "none", issuedAt: Number(r[1]), revoked: r[2], ref: r[3], isVerified: tier >= 4 && !r[2] && Number(r[1]) > 0 }
+    const ref = r[3] || ""
+    return { tier, tierLabel: TIER_LABEL[tier] || "none", issuedAt: Number(r[1]), revoked: r[2], ref, established: ref.includes(EST_MARKER), isVerified: tier >= 4 && !r[2] && Number(r[1]) > 0 }
   } catch { return null }
 }
 
@@ -77,14 +84,17 @@ export async function attestOnChain(
   trust_level: string | null | undefined,
   recognition: string | null | undefined,
   ref = "",
+  established = false,
 ): Promise<{ hash?: string; tier?: number; skipped?: boolean; error?: string }> {
   const c = config()
   if (!c) return { skipped: true }
   if (!/^0x[a-fA-F0-9]{40}$/.test(subject)) return { skipped: true }
   const key = recognition === "official" ? "arc_official" : recognition === "partner" ? "arc_partner" : (trust_level || "listed")
   const tier = TIER[key] ?? 1
+  // Established rides in the ref as a marker so it's recorded + readable on-chain.
+  const finalRef = established ? (ref ? `${ref}${EST_MARKER}` : EST_MARKER) : ref
   try {
-    const hash = await c.wallet.writeContract({ address: c.address, abi: ABI, functionName: "attest", args: [subject as `0x${string}`, tier, ref], chain: arc, account: c.wallet.account })
+    const hash = await c.wallet.writeContract({ address: c.address, abi: ABI, functionName: "attest", args: [subject as `0x${string}`, tier, finalRef], chain: arc, account: c.wallet.account })
     return { hash, tier }
   } catch (e: any) {
     return { error: e?.message || String(e) }

@@ -209,12 +209,12 @@ export async function PUT(req: NextRequest) {
     // attestation should reflect it — keeps the chain a complete, current record.
     try {
       const after = (await pool.query(
-        `SELECT trust_level, recognition, slug,
+        `SELECT trust_level, recognition, slug, established,
                 (SELECT address FROM project_contracts WHERE project_id = projects.id AND verified_at IS NOT NULL AND revoked_at IS NULL LIMIT 1) AS proven
            FROM projects WHERE id = $1`, [result.rows[0].id]
       )).rows[0]
       const subject = subjectFor({ provenContract: after?.proven, slug: after?.slug })
-      if (subject) attestOnChain(subject, after.trust_level, after.recognition, "arclenz.xyz/ecosystem/" + (after.slug || "")).catch(() => {})
+      if (subject) attestOnChain(subject, after.trust_level, after.recognition, "arclenz.xyz/ecosystem/" + (after.slug || ""), !!after.established).catch(() => {})
     } catch {}
 
     return NextResponse.json({ success: true })
