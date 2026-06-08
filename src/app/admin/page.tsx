@@ -869,8 +869,14 @@ export default function AdminPage() {
                             <div style={{ display:"flex", gap:"8px", flexWrap:"wrap" }}>
                               <span style={pill(t3, bdr)}>{s.category}</span>
                               <span style={pill(t3, bdr)}>{s.email || "No email"}</span>
+                              {s.website && <span style={pill(t3, bdr)}>{s.website.replace(/^https?:\/\//, "").replace(/\/$/, "")}</span>}
+                              {s.contract && <span style={pill(t3, bdr)}>{s.contract.slice(0,6)}…{s.contract.slice(-4)}</span>}
                               <span style={pill(t3, bdr)}>{new Date(s.created_at).toLocaleDateString()}</span>
                             </div>
+                            {s.founder_social
+                              ? <div style={{ fontSize:"11px", fontFamily:mono, color:"#8aaeff", marginTop:"6px" }}>Founder: {s.founder_social}</div>
+                              : <div style={{ fontSize:"11px", fontFamily:mono, color:t3, marginTop:"6px" }}>Founder: not provided</div>}
+                            {s.description && <div style={{ fontSize:"11.5px", color:t2, marginTop:"6px", lineHeight:1.5 }}>{s.description}</div>}
                           </div>
                           <div style={{ display:"flex", gap:"8px", flexShrink:0 }}>
                             <ActionBtn onClick={() => act(s.id, "approve")} disabled={acting} color="green">Approve</ActionBtn>
@@ -2110,6 +2116,7 @@ export default function AdminPage() {
               {k:"name",l:"Name",type:"text"},{k:"tagline",l:"Tagline",type:"text"},{k:"description",l:"Description",type:"textarea"},
               {k:"website",l:"Website",type:"text"},{k:"twitter",l:"Twitter",type:"text"},{k:"github",l:"GitHub",type:"text"},
               {k:"discord",l:"Discord",type:"text"},{k:"contract",l:"Primary Contract Address",type:"text"},{k:"email",l:"Email",type:"text"},
+              {k:"founder_social",l:"Founder (personal X / link)",type:"text"},
               {k:"logo_url",l:"Logo URL",type:"text"},{k:"city",l:"City",type:"text"},{k:"country",l:"Country",type:"text"},
               {k:"lat",l:"Latitude",type:"text"},{k:"lng",l:"Longitude",type:"text"},
             ].map((f:any) => (
