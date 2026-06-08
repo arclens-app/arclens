@@ -34,6 +34,33 @@ const METRIC_COL: Record<string, string> = {
   revenue: "revenue_cum_usd_e6",
 }
 
+// The trust columns every project tool now selects, so the AI can see + reason
+// about a project's standing (and never call a baseline-Claimed project
+// "trustworthy" by accident).
+const TRUST_COLS = `trust_level, recognition, established, COALESCE((trust_profile->>'hard_risk')::bool, false) AS hard_risk`
+
+// Turn the raw trust columns into a compact, honest signal the model reads back.
+// Mirrors the public badge ladder; Established is an additive marker, Risk
+// overrides everything. We never expose the internal mechanics behind a tier.
+function trustOf(row: any): { tier: string; established: boolean; risk: boolean; label: string } {
+  const risk = row.hard_risk === true
+  const tier =
+    row.recognition === "official" ? "Arc Official" :
+    row.recognition === "partner"  ? "Arc Partner"  :
+    row.trust_level === "verified" ? "Verified" :
+    row.trust_level === "claimed"  ? "Claimed"  : "Listed"
+  const established = !!row.established
+  // Established is the strong earned signal, so it leads for baseline tiers
+  // (Claimed/Listed) rather than reading "Claimed · Established". Higher tiers
+  // compose with it: "Verified · Established", "Arc Partner · Established".
+  const label =
+    risk ? "Risk flagged"
+    : established
+      ? (tier === "Claimed" || tier === "Listed" ? "Established" : `${tier} · Established`)
+      : tier
+  return { tier, established, risk, label }
+}
+
 export function buildTools() {
   return {
     list_top_projects: tool({
@@ -59,7 +86,8 @@ export function buildTools() {
         const r = await pool.query(
           `SELECT name, slug, category,
                   ${col}::text AS metric_e6,
-                  tvl_usd_e6::text AS tvl, volume_cum_usd_e6::text AS volume, revenue_cum_usd_e6::text AS revenue
+                  tvl_usd_e6::text AS tvl, volume_cum_usd_e6::text AS volume, revenue_cum_usd_e6::text AS revenue,
+                  ${TRUST_COLS}
            FROM projects
            WHERE ${where}
            ORDER BY ${col} DESC
@@ -74,6 +102,7 @@ export function buildTools() {
           projects: r.rows.map((p, i) => ({
             rank: i + 1, name: p.name, slug: p.slug, category: p.category,
             tvl: fmtUsd(p.tvl), volume: fmtUsd(p.volume), revenue: fmtUsd(p.revenue),
+            trust: trustOf(p).label,
           })),
         }
       },
@@ -99,7 +128,8 @@ export function buildTools() {
           const r = await pool.query(
             `SELECT name, slug, category, tagline,
                     tvl_usd_e6::text AS tvl, volume_cum_usd_e6::text AS volume,
-                    revenue_cum_usd_e6::text AS revenue, tvl_tracking_enabled
+                    revenue_cum_usd_e6::text AS revenue, tvl_tracking_enabled,
+                    ${TRUST_COLS}
              FROM projects
              WHERE approved AND live AND (slug ILIKE $1 OR name ILIKE $1)
              ORDER BY (slug = LOWER($2)) DESC
@@ -112,6 +142,7 @@ export function buildTools() {
               name: p.name, slug: p.slug, category: p.category, tagline: p.tagline,
               tvl: fmtUsd(p.tvl), volume: fmtUsd(p.volume), revenue: fmtUsd(p.revenue),
               tracking: p.tvl_tracking_enabled ? "enabled" : "off",
+              trust: trustOf(p).label,
             })
           } else {
             notFound.push(name)
@@ -145,7 +176,8 @@ export function buildTools() {
         params.push(lim)
         const r = await pool.query(
           `SELECT name, slug, category, tagline, featured,
-                  tvl_usd_e6::text AS tvl
+                  tvl_usd_e6::text AS tvl,
+                  ${TRUST_COLS}
            FROM projects
            WHERE ${clauses.join(" AND ")}
            ORDER BY featured DESC, view_count DESC NULLS LAST
@@ -158,6 +190,7 @@ export function buildTools() {
             name: p.name, slug: p.slug, category: p.category,
             tagline: p.tagline, featured: !!p.featured,
             tvl: p.tvl && Number(p.tvl) > 0 ? fmtUsd(p.tvl) : null,
+            trust: trustOf(p).label,
           })),
         }
       },
@@ -179,7 +212,8 @@ export function buildTools() {
           `SELECT name, slug, category, tagline, tvl_tracking_enabled,
                   tvl_usd_e6::text AS tvl, volume_cum_usd_e6::text AS volume,
                   revenue_cum_usd_e6::text AS revenue,
-                  tvl_ath_usd_e6::text AS tvl_ath, tvl_last_indexed_at
+                  tvl_ath_usd_e6::text AS tvl_ath, tvl_last_indexed_at,
+                  ${TRUST_COLS}
            FROM projects
            WHERE approved AND live AND (slug ILIKE $1 OR name ILIKE $1)
            ORDER BY (slug = LOWER($2)) DESC
@@ -196,6 +230,7 @@ export function buildTools() {
           tvl: fmtUsd(p.tvl), volume: fmtUsd(p.volume), revenue: fmtUsd(p.revenue),
           tvl_all_time_high: fmtUsd(p.tvl_ath),
           last_indexed: p.tvl_last_indexed_at,
+          trust: trustOf(p).label,
           note: tracking ? undefined : "This project hasn't enabled on-chain metric tracking, so figures may be zero.",
         }
       },
@@ -314,25 +349,31 @@ export function buildTools() {
     list_projects: tool({
       description:
         "List or filter Arc projects — use for 'which projects are claimed by a builder', 'projects with a verified builder', " +
-        "'newest projects', 'show me Gaming projects', 'what's featured'. Filter by category / claimed-by-a-builder / verified-builder; " +
-        "sort by tvl, volume, newest, or featured.",
-      inputSchema: jsonSchema<{ category?: string; claimed_only?: boolean; verified_builder_only?: boolean; sort?: "tvl" | "volume" | "newest" | "featured"; limit?: number }>({
+        "'newest projects', 'show me Gaming projects', 'what's featured', and for TRUST questions like 'a trustworthy DeFi project', " +
+        "'safe DEXs', 'which projects are Verified or Established'. Set trusted_only for trust questions. Every result includes its " +
+        "trust signal (Listed / Claimed / Verified / Arc Partner / Arc Official, plus Established, or Risk flagged). " +
+        "Filter by category / claimed-by-a-builder / verified-builder / trusted-only; sort by tvl, volume, newest, or featured.",
+      inputSchema: jsonSchema<{ category?: string; claimed_only?: boolean; verified_builder_only?: boolean; trusted_only?: boolean; sort?: "tvl" | "volume" | "newest" | "featured"; limit?: number }>({
         type: "object",
         properties: {
           category:              { type: "string", description: "Optional category filter, e.g. 'DeFi', 'Gaming'." },
           claimed_only:          { type: "boolean", description: "Only projects claimed by a builder." },
           verified_builder_only: { type: "boolean", description: "Only projects whose builder is verified." },
+          trusted_only:          { type: "boolean", description: "Only projects with a meaningful trust signal — Verified, Arc Partner, Arc Official, or Established — and never risk-flagged. Use for 'trustworthy'/'safe' questions." },
           sort:                  { type: "string", enum: ["tvl", "volume", "newest", "featured"], description: "Default featured." },
           limit:                 { type: "number", description: "Max results (1-20). Default 10." },
         },
       }),
-      execute: async ({ category, claimed_only, verified_builder_only, sort = "featured", limit = 10 }) => {
+      execute: async ({ category, claimed_only, verified_builder_only, trusted_only, sort = "featured", limit = 10 }) => {
         const lim = Math.min(Math.max(Number(limit) || 10, 1), 20)
         const where = ["p.approved", "p.live"]
         const params: any[] = []
         if (category) { params.push(category); where.push(`p.category ILIKE $${params.length}`) }
         if (claimed_only) where.push(`(p.claimed_at IS NOT NULL OR b.address IS NOT NULL)`)
         if (verified_builder_only) where.push(`b.verified = true`)
+        if (trusted_only) where.push(
+          `(p.recognition IN ('official','partner') OR p.trust_level = 'verified' OR p.established = true)
+            AND COALESCE((p.trust_profile->>'hard_risk')::bool, false) = false`)
         const order = sort === "tvl" ? "p.tvl_usd_e6 DESC NULLS LAST"
           : sort === "volume" ? "p.volume_cum_usd_e6 DESC NULLS LAST"
           : sort === "newest" ? "p.created_at DESC"
@@ -340,6 +381,8 @@ export function buildTools() {
         params.push(lim)
         const r = await pool.query(
           `SELECT p.name, p.slug, p.category, p.tagline, p.tvl_usd_e6::text AS tvl,
+                  p.trust_level, p.recognition, p.established,
+                  COALESCE((p.trust_profile->>'hard_risk')::bool, false) AS hard_risk,
                   b.display_name AS builder_name, b.verified AS builder_verified
            FROM projects p LEFT JOIN builder_profiles b ON b.address = LOWER(p.owner_wallet)
            WHERE ${where.join(" AND ")}
@@ -352,9 +395,12 @@ export function buildTools() {
           projects: r.rows.map(x => ({
             name: x.name, slug: x.slug, category: x.category, tagline: x.tagline,
             tvl: x.tvl && Number(x.tvl) > 0 ? fmtUsd(x.tvl) : null,
+            trust: trustOf(x).label,
             builder: x.builder_name || null, builder_verified: !!x.builder_verified,
           })),
-          note: r.rows.length === 0 ? "No projects match that filter yet." : undefined,
+          note: r.rows.length === 0
+            ? (trusted_only ? "No projects match that filter with a Verified/Established/recognized trust signal yet." : "No projects match that filter yet.")
+            : undefined,
         }
       },
     }),
