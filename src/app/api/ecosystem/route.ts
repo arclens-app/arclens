@@ -82,6 +82,10 @@ export async function POST(req: NextRequest) {
   const { name, tagline, description, category, website, twitter, github, discord, contract, contracts: extraContracts, logo_url, email, city, country, founder } = body
   const founderSocial = typeof founder === "string" ? founder.trim() || null : null
   const contractsArr = Array.isArray(extraContracts) ? extraContracts.map((c: string) => c.trim()).filter(Boolean) : []
+  // Cap tagline + description so cards/listings stay neat (the form enforces
+  // these too; this is the server-side safety net). Tagline 80, description 300.
+  const cleanTagline = typeof tagline === "string" ? tagline.trim().slice(0, 80) : ""
+  const cleanDesc = typeof description === "string" ? (description.trim().slice(0, 300) || null) : null
 
   if (!name?.trim())    return NextResponse.json({ error: "Project name required" }, { status: 400 })
   if (!tagline?.trim()) return NextResponse.json({ error: "Tagline required" }, { status: 400 })
@@ -110,7 +114,7 @@ export async function POST(req: NextRequest) {
                founder_social = COALESCE($11, founder_social),
                approved = false, live = false
              WHERE contract = $10`,
-            [name.trim(), tagline.trim(), description?.trim()||null, category||"DeFi",
+            [name.trim(), cleanTagline, cleanDesc, category||"DeFi",
              logo_url||null, website?.trim()||null, twitter?.trim()||null,
              github?.trim()||null, discord?.trim()||null, contract.trim().toLowerCase(), founderSocial]
           )
@@ -140,7 +144,7 @@ export async function POST(req: NextRequest) {
     await pool.query(
       `INSERT INTO projects (name, tagline, description, category, logo_url, website, twitter, github, discord, contract, contracts, email, city, country, founder_social, approved, live, slug)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,false,false,$16)`,
-      [name.trim(), tagline.trim(), description?.trim()||null, category||"DeFi",
+      [name.trim(), cleanTagline, cleanDesc, category||"DeFi",
        logo_url||null, website?.trim()||null, twitter?.trim()||null,
        github?.trim()||null, discord?.trim()||null,
        contract?.trim()?.toLowerCase()||null, contractsArr, email.trim(),
