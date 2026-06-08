@@ -507,7 +507,8 @@ export default function EcosystemPage() {
                     </div>
                     <div>
                       <label style={{ display: "block", fontSize: "9.5px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "5px" }}>Tagline *</label>
-                      <input style={inputStyle} value={form.tagline} onChange={e => setForm(p => ({ ...p, tagline: e.target.value }))} placeholder="One-line description" />
+                      <input maxLength={80} style={inputStyle} value={form.tagline} onChange={e => setForm(p => ({ ...p, tagline: e.target.value.slice(0, 80) }))} placeholder="One-line description" />
+                      <div style={{ textAlign: "right", marginTop: "4px", fontSize: "9.5px", fontFamily: mono, color: form.tagline.length >= 80 ? "#e0883b" : t3 }}>{form.tagline.length}/80</div>
                     </div>
                   </div>
                 </div>
@@ -568,7 +569,8 @@ export default function EcosystemPage() {
 
                 <div style={{ marginBottom: "14px" }}>
                   <label style={{ display: "block", fontSize: "9.5px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "5px" }}>Description</label>
-                  <textarea style={{ ...inputStyle, height: "70px", padding: "8px 12px", resize: "vertical", lineHeight: 1.65 } as React.CSSProperties} value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} placeholder="What does your project do?" />
+                  <textarea maxLength={300} style={{ ...inputStyle, height: "70px", padding: "8px 12px", resize: "vertical", lineHeight: 1.65 } as React.CSSProperties} value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value.slice(0, 300) }))} placeholder="What does your project do? Keep it short — a sentence or two." />
+                  <div style={{ textAlign: "right", marginTop: "4px", fontSize: "9.5px", fontFamily: mono, color: form.description.length >= 300 ? "#e0883b" : t3 }}>{form.description.length}/300</div>
                 </div>
 
                 {submitError && (
