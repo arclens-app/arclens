@@ -575,7 +575,8 @@ export async function POST(req: NextRequest) {
           discord=$9, contract=$10, contracts=$11, email=$12, badge=$13, featured=$14, live=$15, approved=true,
           city=$16, country=$17,
           lat=CASE WHEN $18::text ~ '^-?[0-9]+(\.[0-9]+)?$' THEN $18::numeric ELSE lat END,
-          lng=CASE WHEN $19::text ~ '^-?[0-9]+(\.[0-9]+)?$' THEN $19::numeric ELSE lng END
+          lng=CASE WHEN $19::text ~ '^-?[0-9]+(\.[0-9]+)?$' THEN $19::numeric ELSE lng END,
+          founder_social=$21
          WHERE id=$20`,
         [
           data.name || null, data.tagline || null, data.description || null,
@@ -588,7 +589,8 @@ export async function POST(req: NextRequest) {
           data.city?.trim() || null, data.country?.trim() || null,
           data.lat !== undefined && data.lat !== null && data.lat !== "" ? String(data.lat) : null,
           data.lng !== undefined && data.lng !== null && data.lng !== "" ? String(data.lng) : null,
-          id
+          id,
+          typeof data.founder_social === "string" ? (data.founder_social.trim() || null) : null,
         ]
       )
 
