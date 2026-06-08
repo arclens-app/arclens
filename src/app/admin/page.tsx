@@ -60,6 +60,9 @@ export default function AdminPage() {
   const [aiInsights, setAiInsights] = useState<{ gaps: { total: number; top: any[] }; ratings: { up: number; down: number; recent: any[] } } | null>(null)
   const [aiLoading, setAiLoading] = useState(false)
   const [aiError, setAiError] = useState("")
+  // Knowledge-base embedding status (filled by the AI tab on load).
+  const [kb, setKb] = useState<{ total: number; embedded: number; missing: number; configured?: boolean } | null>(null)
+  const [kbBusy, setKbBusy] = useState(false)
   const [trackedEdit, setTrackedEdit] = useState<{ id: number; field: string; value: string } | null>(null)
   const [submissions, setSubmissions] = useState<Project[]>([])
   const [projects, setProjects]       = useState<Project[]>([])
@@ -285,6 +288,33 @@ export default function AdminPage() {
     } catch (e: any) {
       setAiError(e?.message || "Network error")
     } finally { setAiLoading(false) }
+    loadKb(p).catch(() => {})
+  }
+
+  async function loadKb(p: string = pw) {
+    if (!p) return
+    try {
+      const r = await fetch("/api/admin/ai-reembed", { headers: { Authorization: `Bearer ${p}` }, cache: "no-store" })
+      const d = await r.json()
+      if (r.ok) setKb(d)
+    } catch {}
+  }
+
+  // Embed any knowledge rows missing an embedding (runs in prod where the Gemini
+  // key lives). Clicks resume where the last left off, so large batches just
+  // need another click until missing hits 0.
+  async function reembedKb() {
+    if (!pw) return
+    setKbBusy(true)
+    try {
+      const r = await fetch("/api/admin/ai-reembed", { method: "POST", headers: { Authorization: `Bearer ${pw}` } })
+      const d = await r.json()
+      if (!r.ok) { showToast(false, d.error || "Re-embed failed"); return }
+      setKb(d)
+      showToast(true, d.complete ? `Knowledge embedded — ${d.embedded}/${d.total} ready` : `Embedded ${d.embedded_now} · ${d.missing} left, click again`)
+    } catch (e: any) {
+      showToast(false, e?.message || "Network error")
+    } finally { setKbBusy(false) }
   }
 
   async function saveTrackedEdit(id: number, patch: Record<string, any>) {
@@ -1840,6 +1870,25 @@ export default function AdminPage() {
                     </button>
                   </div>
                   {aiError && <div style={{ padding:"10px 14px", background:"rgba(224,51,72,0.05)", border:"1px solid rgba(224,51,72,0.25)", borderRadius:"8px", fontSize:"12px", color:"#e03348", fontFamily:mono }}>{aiError}</div>}
+
+                  {kb && (
+                    <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:"12px", flexWrap:"wrap", padding:"12px 14px", background:surf, border:"1px solid "+bdr, borderRadius:"8px" }}>
+                      <div style={{ minWidth:0 }}>
+                        <div style={{ fontSize:"11px", fontFamily:mono, color:t3, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:"4px" }}>Knowledge base</div>
+                        <div style={{ fontSize:"13px", color:t1 }}>
+                          {kb.embedded}/{kb.total} facts embedded
+                          {kb.missing > 0
+                            ? <span style={{ color:"#e08810" }}>{"  ·  "}{kb.missing} need embedding</span>
+                            : <span style={{ color:"#00b87a" }}>{"  ·  "}all current</span>}
+                          {kb.configured === false && <span style={{ color:"#e03348" }}>{"  ·  "}no Gemini key in prod</span>}
+                        </div>
+                      </div>
+                      <button onClick={reembedKb} disabled={kbBusy || kb.missing === 0}
+                        style={{ height:"30px", padding:"0 12px", background: kb.missing>0 ? "rgba(0,184,122,0.1)" : "rgba(127,127,127,0.06)", color: kb.missing>0 ? "#00b87a" : t3, fontSize:"11px", fontFamily:mono, border:"1px solid "+(kb.missing>0?"rgba(0,184,122,0.3)":bdr), borderRadius:"6px", cursor: (kbBusy||kb.missing===0)?"not-allowed":"pointer", flexShrink:0 }}>
+                        {kbBusy ? "Embedding…" : kb.missing>0 ? "Re-embed missing" : "Up to date"}
+                      </button>
+                    </div>
+                  )}
 
                   <div>
                     <div style={{ fontSize:"11px", fontFamily:mono, color:t3, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:"10px" }}>Questions the AI couldn&apos;t answer</div>
