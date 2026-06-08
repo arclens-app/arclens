@@ -114,6 +114,9 @@ const FACTS = [
   // ─── Stablecoins ─────────────────────────────────────────────────────────
   { key: "stable-both",     topic: "stablecoins", fact: "ArcLens tracks both USDC and EURC on Arc. EURC is Circle's euro-pegged stablecoin, valued in USD at the live EUR→USD rate so TVL and volume read in dollars.", source_url: "/about" },
 
+  // ─── Categories (DEX vs CEX) ─────────────────────────────────────────────
+  { key: "cat-dex-cex", topic: "categories", fact: "On ArcLens the Exchange category is mostly CENTRALIZED exchanges (CEXs) — companies like Coinbase, Kraken, Bitso, Bybit, Robinhood. Decentralized exchanges (DEXs) and on-chain swaps live under the DeFi category (e.g. Curve, Lunex, and Arc swap protocols). For a DEX, look in DeFi, not Exchange.", source_url: "/ecosystem" },
+
   // ─── Metrics explained ───────────────────────────────────────────────────
   { key: "metrics-tvl-vol", topic: "metrics-explained", fact: "TVL and Volume are different. TVL (Total Value Locked) is the stablecoins currently held in a project's contracts — a balance/snapshot. Volume is the throughput of swaps over time — a flow. A project can have high TVL and low volume, or the reverse.", source_url: "/about" },
   { key: "metrics-cumvol",  topic: "metrics-explained", fact: "Cumulative volume is the running total of swap notional since a contract was registered. It is NOT the same as TVL and the two should never be added into a single 'total'.", source_url: "/about" },
