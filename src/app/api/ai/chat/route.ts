@@ -29,6 +29,19 @@ interface ChatBody {
   conversationId?: number | null
 }
 
+// Only an ungrounded question worth an admin's attention becomes a "gap".
+// Filters greetings, pleasantries, single-token noise, and gibberish so the
+// admin panel reflects real coverage holes, not "hi".
+const GAP_STOPWORDS = /^(hi|hey+|hello|yo|sup|gm|gn|wsg|wassup|hola|thanks|thank you|ty|ok|okay|kk|cool|nice|great|lol|test|testing|ping|pong|yes|no|nah|yeah|wagmi)\b/i
+function worthLoggingGap(qRaw: string): boolean {
+  const q = (qRaw || "").trim()
+  if (!/[a-z]/i.test(q)) return false                 // no letters at all
+  if (GAP_STOPWORDS.test(q)) return false              // greeting / pleasantry
+  const words = q.split(/\s+/).filter(Boolean)
+  if (words.length < 2 && q.length < 12) return false  // single short token
+  return true
+}
+
 export async function POST(req: NextRequest) {
   const blocked = await enforce(req, "ai-chat", { limit: 20, windowMs: 60_000 })
   if (blocked) return blocked
@@ -134,10 +147,11 @@ export async function POST(req: NextRequest) {
           controller.enqueue(encoder.encode(answerText))
         }
 
-        // Knowledge-gap log: any UNGROUNDED answer (no tool result + no KB hit),
-        // live or stub — surfaces real unanswered questions in the admin gaps panel
-        // so coverage is driven by what users actually ask, not guesswork.
-        if (cards.length === 0 && ctx.kbHits.length === 0) {
+        // Knowledge-gap log: an UNGROUNDED answer (no tool result + no KB hit)
+        // surfaces real unanswered questions in the admin gaps panel — but only
+        // if the question is SUBSTANTIVE. Greetings, single-word noise, and junk
+        // ("hi", "gm", "test", gibberish) are skipped so the panel stays signal.
+        if (cards.length === 0 && ctx.kbHits.length === 0 && worthLoggingGap(lastUser)) {
           await logKnowledgeGap({ question: lastUser, userAddr: session?.addr ?? null, route })
         }
 
