@@ -121,11 +121,13 @@ export function assessProject(args: {
   const { websiteVerdict, contracts } = args
   const hardRisk = websiteVerdict === "flagged" // scam-list hit (sanctions added later)
 
-  // CAUTION = soft, honest signals worth one calm line to users — NOT a red flag
-  // (legit projects can be upgradeable, etc.). Worst-case across all contracts.
+  // CAUTION = soft, admin-only signals worth a glance — NOT a red flag. We keep
+  // these RARE and meaningful, never flagging innocent teams. NOTE: "source not
+  // verified on the explorer" is deliberately NOT a caution — on a new chain
+  // almost no one verifies source yet, so it would flag nearly everyone (noise).
+  // It stays as a per-contract data point in the profile for reference only.
   const real = contracts.filter(c => c.isContract)
   const cautions: string[] = []
-  if (real.length > 0 && real.some(c => !c.sourceVerified)) cautions.push("its contract code isn't verified on the explorer")
   if (real.some(c => c.upgradeable && c.adminType === "eoa")) cautions.push("a contract is upgradeable by a single wallet")
   const caution = !hardRisk && cautions.length > 0
 
