@@ -35,7 +35,7 @@ const pub = createPublicClient({ chain, transport: http(RPC) })
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
 const rows = (await pool.query(
-  `SELECT id, slug, trust_level, recognition, trust_profile,
+  `SELECT id, slug, trust_level, recognition, trust_profile, established,
           (SELECT address FROM project_contracts WHERE project_id = projects.id AND verified_at IS NOT NULL AND revoked_at IS NULL LIMIT 1) AS proven
      FROM projects WHERE approved AND live ORDER BY id`
 )).rows
@@ -45,7 +45,8 @@ let ok = 0, skipped = 0, failed = 0
 for (const p of rows) {
   const subject = subjectFor(p.proven, p.slug)
   const tier = tierOf(p.recognition, p.trust_level)
-  const ref = "arclenz.xyz/ecosystem/" + (p.slug || "")
+  // Established rides in the ref as a marker (orthogonal to the tier ladder).
+  const ref = "arclenz.xyz/ecosystem/" + (p.slug || "") + (p.established ? "#established" : "")
   try {
     const hash = await wallet.writeContract({ address: REGISTRY, abi: ABI, functionName: "attest", args: [subject, tier, ref], chain, account })
     await pub.waitForTransactionReceipt({ hash })

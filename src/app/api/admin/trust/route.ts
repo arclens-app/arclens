@@ -170,13 +170,13 @@ export async function PATCH(req: NextRequest) {
       const before = (await pool.query(`SELECT trust_level FROM projects WHERE id = $1`, [Number(id)])).rows[0]
       await pool.query(`UPDATE projects SET trust_level = 'verified', audit_status = 'approved', trust_updated_at = NOW() WHERE id = $1`, [Number(id)])
       const p = (await pool.query(
-        `SELECT slug, recognition,
+        `SELECT slug, recognition, established,
                 (SELECT address FROM project_contracts WHERE project_id = projects.id AND verified_at IS NOT NULL AND revoked_at IS NULL LIMIT 1) AS proven
            FROM projects WHERE id = $1`, [Number(id)]
       )).rows[0]
       if (before?.trust_level !== "verified") {
         const subject = subjectFor({ provenContract: p?.proven, slug: p?.slug })
-        if (subject) attestOnChain(subject, "verified", p?.recognition, "arclenz.xyz/ecosystem/" + (p?.slug || "")).catch(() => {})
+        if (subject) attestOnChain(subject, "verified", p?.recognition, "arclenz.xyz/ecosystem/" + (p?.slug || ""), !!p?.established).catch(() => {})
       }
       return NextResponse.json({ success: true })
     }

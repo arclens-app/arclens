@@ -534,12 +534,12 @@ export async function POST(req: NextRequest) {
         // the registry, not just ones that later earn a tier change. Env-gated.
         try {
           const after = (await pool.query(
-            `SELECT trust_level, recognition, slug,
+            `SELECT trust_level, recognition, slug, established,
                     (SELECT address FROM project_contracts WHERE project_id = projects.id AND verified_at IS NOT NULL AND revoked_at IS NULL LIMIT 1) AS proven
                FROM projects WHERE id = $1`, [id]
           )).rows[0]
           const subject = subjectFor({ provenContract: after?.proven, slug: after?.slug })
-          if (subject) attestOnChain(subject, after.trust_level, after.recognition, "arclenz.xyz/ecosystem/" + (after.slug || "")).catch(() => {})
+          if (subject) attestOnChain(subject, after.trust_level, after.recognition, "arclenz.xyz/ecosystem/" + (after.slug || ""), !!after.established).catch(() => {})
         } catch {}
       }
       return NextResponse.json({ success: true })
@@ -559,7 +559,7 @@ export async function POST(req: NextRequest) {
     }
     if (action === "update" && data) {
       // Check previous approval + trust state before updating
-      const before = await pool.query(`SELECT approved, live, trust_level, recognition FROM projects WHERE id = $1`, [id])
+      const before = await pool.query(`SELECT approved, live, trust_level, recognition, established FROM projects WHERE id = $1`, [id])
       const wasApproved = before.rows[0]?.approved === true
       const wasLive     = before.rows[0]?.live === true
       const tierKey = (rec: any, lvl: any) => rec === "official" ? "arc_official" : rec === "partner" ? "arc_partner" : (lvl || "listed")
@@ -624,14 +624,15 @@ export async function POST(req: NextRequest) {
       // Mirror on-chain ONCE — only when the resulting badge tier actually changed,
       // so an unrelated edit never burns gas. Env-gated no-op until the registry is set.
       const after = (await pool.query(
-        `SELECT trust_level, recognition, slug,
+        `SELECT trust_level, recognition, slug, established,
                 (SELECT address FROM project_contracts WHERE project_id = projects.id AND verified_at IS NOT NULL AND revoked_at IS NULL LIMIT 1) AS proven
            FROM projects WHERE id = $1`, [id]
       )).rows[0]
       const subject = subjectFor({ provenContract: after?.proven, slug: after?.slug })
       const firstPublish = !wasApproved // newly approved/live via this update → publish even if tier is unchanged
-      if (subject && (firstPublish || tierKey(after?.recognition, after?.trust_level) !== beforeKey)) {
-        attestOnChain(subject, after.trust_level, after.recognition, "arclenz.xyz/ecosystem/" + (after.slug || "")).catch(() => {})
+      const estChanged = !!after?.established !== !!before.rows[0]?.established
+      if (subject && (firstPublish || estChanged || tierKey(after?.recognition, after?.trust_level) !== beforeKey)) {
+        attestOnChain(subject, after.trust_level, after.recognition, "arclenz.xyz/ecosystem/" + (after.slug || ""), !!after.established).catch(() => {})
       }
 
       return NextResponse.json({ success: true })
@@ -850,6 +851,16 @@ export async function POST(req: NextRequest) {
     // Grant / revoke Established (admin, only meaningful for an eligible project).
     if (action === "set-established") {
       await pool.query(`UPDATE projects SET established = $1, trust_updated_at = NOW() WHERE id::text = $2 OR slug = $2`, [!!data?.established, String(id)])
+      // Mirror on-chain so the Established marker matches the site immediately.
+      try {
+        const p = (await pool.query(
+          `SELECT trust_level, recognition, slug, established,
+                  (SELECT address FROM project_contracts WHERE project_id = projects.id AND verified_at IS NOT NULL AND revoked_at IS NULL LIMIT 1) AS proven
+             FROM projects WHERE id::text = $1 OR slug = $1 LIMIT 1`, [String(id)]
+        )).rows[0]
+        const subject = subjectFor({ provenContract: p?.proven, slug: p?.slug })
+        if (subject) attestOnChain(subject, p.trust_level, p.recognition, "arclenz.xyz/ecosystem/" + (p.slug || ""), !!p.established).catch(() => {})
+      } catch {}
       return NextResponse.json({ success: true, established: !!data?.established })
     }
     if (action === "geocode" && data?.city) {
