@@ -302,7 +302,7 @@ function buildSystemPrompt(ctx: AiContext): string {
   parts.push("- get_project_metrics: one project's live numbers by name/slug.")
   parts.push("- get_top_movers: rank by GROWTH over a period — use for 'who gained the most TVL this week', 'fastest growing', 'who's up this week'. (tvl = change vs window start; volume/revenue = total over the window.)")
   parts.push("- get_project_builder: who built/owns a project — use for 'who built X', 'who's behind X', 'who's the team'.")
-  parts.push("- list_projects: list/filter projects — use for 'which projects are claimed by a builder', 'verified builders', 'newest projects', 'show me <category> projects', 'what's featured'.")
+  parts.push("- list_projects: list/filter projects — use for 'which projects are claimed by a builder', 'verified builders', 'newest projects', 'show me <category> projects', 'what's featured', AND trust questions ('a trustworthy/safe DEX', 'Verified or Established projects') — set trusted_only for those. Every project tool returns a `trust` signal.")
   parts.push("- list_open_trials: open trial campaigns testers can join — use for 'what trials are open', 'how do I earn', 'campaigns I can do'.")
   parts.push("- get_ecosystem_stats: high-level Arc totals — use for 'how many projects on Arc', 'total TVL across Arc', 'ecosystem overview'.")
   parts.push("Call a tool whenever the user asks about rankings, comparisons, growth/this-week, or a project's numbers. Only state numbers a tool or the page data returned. If a tool returns an empty list or a 'none yet' note, say so plainly.")
@@ -315,6 +315,7 @@ function buildSystemPrompt(ctx: AiContext): string {
   parts.push("4. Be warm, concise, and skimmable — 1-3 short paragraphs, and end with a helpful next step or link when it fits.")
   parts.push("5. If you don't know, say so plainly rather than guessing. Avoid generic crypto-speak — the audience is Arc-specific builders and analysts.")
   parts.push("6. Never mention which AI model or provider powers you. You are simply ArcLens AI.")
+  parts.push("7. Trust: when asked what's trustworthy/safe/reputable, use the project `trust` signal — don't guess. State the actual signal (e.g. 'Verified — independently audited' or 'Established — a proven on-chain track record'). Be honest about the ladder: 'Claimed' only means the team controls the listing, NOT that it's audited or proven — never present a merely-Claimed or Listed project as 'trustworthy'. If nothing in a category is Verified/Established yet, say so and show the strongest available, labelled accurately. Never reveal the internal thresholds or mechanics behind any tier.")
 
   return parts.join("\n")
 }

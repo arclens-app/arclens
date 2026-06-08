@@ -182,6 +182,22 @@ function CardRow({ href, children, first }: { href: string; children: React.Reac
   )
 }
 
+// Small trust chip rendered on project cards from the tool's `trust` signal.
+function trustTone(t?: string): { fg: string; bg: string } | null {
+  if (!t) return null
+  if (/risk/i.test(t)) return { fg: "#ff5a6e", bg: "rgba(224,51,72,0.12)" }
+  if (/Verified|Arc Partner|Arc Official/.test(t)) return { fg: USDC, bg: "rgba(0,200,150,0.12)" }
+  if (/Established/.test(t)) return { fg: "#5b8cff", bg: "rgba(91,140,255,0.13)" }
+  return null // Claimed / Listed → no chip (keeps cards calm, matches the site)
+}
+function TrustChip({ t }: { t?: string }) {
+  const tone = trustTone(t)
+  if (!tone) return null
+  return (
+    <span style={{ fontFamily: MONO, fontSize: "8.5px", fontWeight: 700, padding: "1px 5px", borderRadius: "4px", color: tone.fg, background: tone.bg, textTransform: "uppercase", letterSpacing: "0.04em", whiteSpace: "nowrap", flexShrink: 0 }}>{t}</span>
+  )
+}
+
 function renderCards(cards: DataCard[]): React.ReactNode {
   return cards.map((c, i) => {
     const d = c.data || {}
@@ -315,7 +331,9 @@ function renderCards(cards: DataCard[]): React.ReactNode {
               <TokenAvatar name={p.name} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: "13px", fontWeight: 600, display: "flex", alignItems: "center", gap: "6px" }}>
-                  {p.name}{p.builder_verified && <span style={{ color: USDC, fontSize: "10px" }}>✓</span>}
+                  <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</span>
+                  {p.builder_verified && <span style={{ color: USDC, fontSize: "10px" }}>✓</span>}
+                  <TrustChip t={p.trust} />
                 </div>
                 <div style={{ fontSize: "10.5px", color: T3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.builder ? `by ${p.builder}` : (p.tagline || p.category || "")}</div>
               </div>
