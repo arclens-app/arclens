@@ -46,6 +46,7 @@ const cardStyles = `
   .spot-banner:hover .spot-arrow { transform: translateX(3px); }
   .spot-content { animation: spotSlide 520ms cubic-bezier(0.22,1,0.36,1); }
   .spot-img { animation: spotImg 700ms cubic-bezier(0.22,1,0.36,1); }
+  .spot-img-mobile { display: none; }
   .spot-glow { animation: spotGlow 9s ease-in-out infinite; }
   .spot-prog { animation: spotProg ${ROTATE_MS}ms linear forwards; }
   @keyframes spotIn    { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
@@ -56,7 +57,8 @@ const cardStyles = `
   @media (max-width: 640px) {
     .spot-banner { height: auto; min-height: 150px; }
     .spot-img { display: none; }
-    .spot-content { padding: 18px 18px 30px; gap: 14px; }
+    .spot-img-mobile { display: block; }
+    .spot-content { padding: 18px 18px 26px; gap: 14px; }
     .spot-title { font-size: 17px; }
     .spot-cta { width: 100%; }
   }
@@ -105,6 +107,13 @@ export function SpotlightCard({ item, static: isStatic, editable, onPosChange }:
           <img src={item.image_url} alt="" draggable={false} style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: item.image_pos || "right center" }} />
           <div style={{ position: "absolute", inset: 0, background: "linear-gradient(90deg, var(--surf,#080c1a) 0%, transparent 46%)", pointerEvents: "none" }} />
           {editable && <div style={{ position: "absolute", bottom: 6, right: 8, fontSize: 9, fontFamily: MONO, color: "rgba(255,255,255,0.7)", background: "rgba(0,0,0,0.4)", padding: "2px 6px", borderRadius: 4, pointerEvents: "none" }}>drag to reposition</div>}
+        </div>
+      )}
+
+      {/* Mobile-only: image becomes a header strip on top, content below. */}
+      {item.image_url && (
+        <div className="spot-img-mobile" style={{ width: "100%", height: "108px", overflow: "hidden" }}>
+          <img src={item.image_url} alt="" draggable={false} style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: item.image_pos || "center" }} />
         </div>
       )}
 
