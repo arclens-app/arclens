@@ -1,6 +1,7 @@
 ﻿"use client"
 import { useEffect, useState } from "react"
 import ArcLayout from "@/components/ArcLayout"
+import { SpotlightCard } from "@/components/Spotlight"
 
 const CATEGORIES = ["Infrastructure","DeFi","AI","Payments","NFT","Gaming","Social","Developer Tools","Bridge","Identity","Wallet","Exchange","Lending","Analytics","Other"]
 const BADGES = ["", "official", "verified", "claimed"]
@@ -47,7 +48,12 @@ export default function AdminPage() {
   const [password, setPassword]       = useState("")
   const [loading, setLoading]         = useState(false)
   const [loadedOnce, setLoadedOnce]   = useState(false)
-  const [tab, setTab]                 = useState<"pending"|"updates"|"campaign-updates"|"projects"|"contracts"|"events"|"locations"|"campaigns"|"stats"|"trust"|"tracked"|"ai">("pending")
+  const [tab, setTab]                 = useState<"pending"|"updates"|"campaign-updates"|"projects"|"contracts"|"events"|"locations"|"campaigns"|"stats"|"trust"|"tracked"|"ai"|"spotlight">("pending")
+  // Spotlight tab state: items + create form.
+  const [spotlight, setSpotlight]     = useState<{ items: any[]; counts: { pending: number; active: number } } | null>(null)
+  const [spotForm, setSpotForm]       = useState({ kind: "custom", title: "", subtitle: "", image_url: "", image_pos: "", link_url: "", cta_text: "", accent: "", project: "" })
+  const [spotBusy, setSpotBusy]       = useState(false)
+  const [spotUploading, setSpotUploading] = useState(false)
   // Trust tab state: alerts + disputes, fetched on demand.
   const [trust, setTrust]             = useState<{ alerts: any[]; disputes: any[]; audits: any[]; flagged: any[]; counts: { open_alerts: number; open_disputes: number; open_audits: number; open_flags: number } } | null>(null)
   const [trustLoading, setTrustLoading] = useState(false)
@@ -204,6 +210,7 @@ export default function AdminPage() {
       // Tracked Contracts — fetched alongside for sidebar count accuracy.
       loadTracked(p).catch(() => {})
       loadAiInsights(p).catch(() => {})
+      loadSpotlight(p).catch(() => {})
     } finally { setLoading(false); setLoadedOnce(true) }
   }
 
@@ -332,6 +339,33 @@ export default function AdminPage() {
       showToast(true, question ? "Gap resolved" : `Cleared ${d.resolved} gap${d.resolved === 1 ? "" : "s"}`)
       await loadAiInsights()
     } catch { showToast(false, "Network error") }
+  }
+
+  async function loadSpotlight(p: string = pw) {
+    if (!p) return
+    try {
+      const r = await fetch("/api/admin/spotlight", { headers: { Authorization: `Bearer ${p}` }, cache: "no-store" })
+      const d = await r.json()
+      if (r.ok) setSpotlight(d)
+    } catch {}
+  }
+  async function spotlightAction(method: "POST" | "PATCH" | "DELETE", body?: any, id?: number) {
+    if (!pw) return
+    try {
+      const url = method === "DELETE" ? `/api/admin/spotlight?id=${id}` : "/api/admin/spotlight"
+      const r = await fetch(url, { method, headers: { Authorization: `Bearer ${pw}`, "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined })
+      const d = await r.json().catch(() => ({}))
+      if (!r.ok) { showToast(false, d.error || "Failed"); return false }
+      await loadSpotlight()
+      return true
+    } catch { showToast(false, "Network error"); return false }
+  }
+  async function createSpotlight() {
+    if (!spotForm.title.trim()) { showToast(false, "Title required"); return }
+    setSpotBusy(true)
+    const ok = await spotlightAction("POST", spotForm)
+    if (ok) { setSpotForm({ kind: "custom", title: "", subtitle: "", image_url: "", image_pos: "", link_url: "", cta_text: "", accent: "", project: "" }); showToast(true, "Spotlight item created & live") }
+    setSpotBusy(false)
   }
 
   async function saveTrackedEdit(id: number, patch: Record<string, any>) {
@@ -533,6 +567,7 @@ export default function AdminPage() {
     { id: "events"    as const, label: "Events",        count: pendingEvents,            urgent: pendingEvents > 0 },
     { id: "trust"     as const, label: "Trust",         count: (trust?.counts.open_alerts ?? 0) + (trust?.counts.open_disputes ?? 0) + (trust?.counts.open_audits ?? 0) + (trust?.counts.open_flags ?? 0), urgent: !!trust && ((trust.counts.open_alerts > 0) || (trust.counts.open_disputes > 0) || (trust.counts.open_audits > 0) || (trust.counts.open_flags > 0)) },
     { id: "tracked"   as const, label: "Tracked Contracts", count: tracked?.counts.total ?? 0, urgent: !!tracked && tracked.counts.errored > 0 },
+    { id: "spotlight" as const, label: "Spotlight",        count: spotlight?.counts.pending ?? 0, urgent: !!spotlight && (spotlight.counts.pending > 0) },
   ]
   const manageTabs = [
     { id: "ai"        as const, label: "ArcLens AI",      count: aiInsights?.gaps.total ?? 0, urgent: false },
@@ -645,6 +680,7 @@ export default function AdminPage() {
                : tab === "trust"            ? "Trust — Alerts & Disputes"
                : tab === "tracked"          ? "Tracked Contracts"
                : tab === "ai"               ? "ArcLens AI"
+               : tab === "spotlight"        ? "Ecosystem Spotlight"
                : "Location Mapping"}
             </div>
             <div style={{ fontSize:"11px", fontFamily:mono, color:t3, marginTop:"4px" }}>
@@ -659,6 +695,7 @@ export default function AdminPage() {
                : tab === "trust"     ? "Indexer alerts · reports & disputes · pending audits"
                : tab === "tracked"   ? `${tracked?.counts.working ?? 0} working · ${tracked?.counts.errored ?? 0} errored · ${tracked?.counts.quiet ?? 0} quiet · ${tracked?.counts.revoked ?? 0} revoked`
                : tab === "ai"        ? `${aiInsights?.gaps.total ?? 0} unanswered · ${aiInsights?.ratings.up ?? 0} 👍 / ${aiInsights?.ratings.down ?? 0} 👎`
+               : tab === "spotlight" ? `${spotlight?.counts.active ?? 0} live · ${spotlight?.counts.pending ?? 0} pending applications`
                : `${missingLoc} missing coordinates`}
             </div>
           </div>
@@ -1962,6 +1999,96 @@ export default function AdminPage() {
                   </div>
                 </div>
               )}
+
+              {tab === "spotlight" && (() => {
+                const si = { width:"100%", height:"36px", background:surf2, border:"1px solid "+bdr, borderRadius:"7px", padding:"0 12px", fontSize:"12px", fontFamily:mono, color:t1, outline:"none", boxSizing:"border-box" as const }
+                const lbl = { display:"block", fontSize:"9px", fontFamily:mono, color:t3, textTransform:"uppercase" as const, letterSpacing:"0.08em", marginBottom:"4px" }
+                return (
+                <div style={{ display:"flex", flexDirection:"column", gap:"16px" }}>
+                  <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:"10px", flexWrap:"wrap" }}>
+                    <div style={{ fontSize:"13px", color:t2 }}>
+                      {spotlight ? <><span style={{color:"#00b87a"}}>{spotlight.counts.active} live</span>{"  ·  "}<span style={{color:"#e08810"}}>{spotlight.counts.pending} pending</span></> : "—"}
+                    </div>
+                    <button onClick={() => loadSpotlight()} style={{ height:"30px", padding:"0 12px", background:"rgba(26,86,255,0.07)", color:"#8aaeff", fontSize:"11px", fontFamily:mono, border:"1px solid rgba(26,86,255,0.25)", borderRadius:"6px", cursor:"pointer" }}>Refresh</button>
+                  </div>
+
+                  {/* Create */}
+                  <div style={{ background:surf, border:"1px solid "+bdr, borderRadius:"12px", padding:"18px 20px" }}>
+                    <div style={{ fontSize:"12px", fontWeight:600, color:t1, marginBottom:"12px" }}>Add a spotlight item (goes live immediately)</div>
+                    <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(170px,1fr))", gap:"10px", marginBottom:"10px" }}>
+                      <div><label style={lbl}>Kind</label>
+                        <select value={spotForm.kind} onChange={e=>setSpotForm(p=>({...p,kind:e.target.value}))} style={si}>
+                          {["custom","campaign","event","project"].map(k=><option key={k} value={k}>{k}</option>)}
+                        </select>
+                      </div>
+                      <div><label style={lbl}>Project slug (optional)</label><input value={spotForm.project} onChange={e=>setSpotForm(p=>({...p,project:e.target.value}))} placeholder="ties + trust-gates" style={si} /></div>
+                      <div><label style={lbl}>Button text</label><input value={spotForm.cta_text} onChange={e=>setSpotForm(p=>({...p,cta_text:e.target.value}))} placeholder="Learn more" style={si} /></div>
+                      <div><label style={lbl}>Accent (hex)</label><input value={spotForm.accent} onChange={e=>setSpotForm(p=>({...p,accent:e.target.value}))} placeholder="#3b6bff" style={si} /></div>
+                    </div>
+                    <div style={{ marginBottom:"10px" }}><label style={lbl}>Headline *</label><input value={spotForm.title} onChange={e=>setSpotForm(p=>({...p,title:e.target.value}))} placeholder="What you're spotlighting" style={si} /></div>
+                    <div style={{ marginBottom:"10px" }}><label style={lbl}>Subtext</label><input value={spotForm.subtitle} onChange={e=>setSpotForm(p=>({...p,subtitle:e.target.value}))} placeholder="One short supporting line" style={si} /></div>
+                    <div style={{ marginBottom:"10px" }}><label style={lbl}>Link URL</label><input value={spotForm.link_url} onChange={e=>setSpotForm(p=>({...p,link_url:e.target.value}))} placeholder="/ecosystem/slug or https://…" style={si} spellCheck={false} /></div>
+                    <div style={{ marginBottom:"12px" }}>
+                      <label style={lbl}>Banner image (optional · 1200×400, key visual on the right)</label>
+                      <div style={{ display:"flex", gap:"8px" }}>
+                        <label style={{ flex:1, display:"flex", alignItems:"center", gap:"10px", height:"36px", padding:"0 12px", background:surf2, border:"1px dashed "+(spotForm.image_url ? "rgba(0,184,122,0.4)" : bdr), borderRadius:"7px", cursor:"pointer", fontFamily:mono, fontSize:"12px", color: spotForm.image_url ? "#00b87a" : t2 }}>
+                          {spotUploading ? "Uploading…" : spotForm.image_url ? "✓ Image added — click to change" : "Click to upload"}
+                          <input type="file" accept="image/png,image/jpeg,image/webp" style={{ display:"none" }} onChange={async e => {
+                            const file = e.target.files?.[0]; if (!file) return
+                            if (file.size > 5*1024*1024) { showToast(false, "Image must be under 5MB"); return }
+                            setSpotForm(p=>({...p, image_url: URL.createObjectURL(file) }))
+                            setSpotUploading(true)
+                            try { const fd = new FormData(); fd.append("image", file); const r = await fetch("/api/upload", { method:"POST", body: fd }); const { url } = await r.json(); if (url) setSpotForm(p=>({...p, image_url: url })) }
+                            catch { showToast(false, "Upload failed") } finally { setSpotUploading(false) }
+                          }} />
+                        </label>
+                        {spotForm.image_url && (
+                          <button type="button" onClick={()=>setSpotForm(p=>({...p, image_url:"", image_pos:"" }))} title="Remove image"
+                            style={{ width:"36px", height:"36px", flexShrink:0, background:"rgba(224,51,72,0.08)", color:"#e03348", border:"1px solid rgba(224,51,72,0.25)", borderRadius:"7px", cursor:"pointer", fontSize:"13px" }}>✕</button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Live preview — exactly how it appears */}
+                    <div style={{ marginBottom:"14px" }}>
+                      <div style={{ fontSize:"9px", fontFamily:mono, color:t3, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:"8px" }}>Live preview{spotForm.image_url ? " · drag the image to reposition" : ""}</div>
+                      <SpotlightCard static editable={!!spotForm.image_url} onPosChange={pos => setSpotForm(p => ({ ...p, image_pos: pos }))} item={{ kind: spotForm.kind as any, title: spotForm.title, subtitle: spotForm.subtitle, image_url: spotForm.image_url, image_pos: spotForm.image_pos, cta_text: spotForm.cta_text, accent: spotForm.accent || "#3b6bff" }} />
+                    </div>
+
+                    <button onClick={createSpotlight} disabled={spotBusy} style={{ height:"38px", padding:"0 18px", background:"#1a56ff", color:"#fff", fontSize:"12px", fontWeight:600, border:"none", borderRadius:"8px", cursor: spotBusy?"not-allowed":"pointer", fontFamily:mono, opacity: spotBusy?.6:1 }}>{spotBusy ? "Creating…" : "Create & publish"}</button>
+                  </div>
+
+                  {/* List */}
+                  {(!spotlight || spotlight.items.length === 0) ? (
+                    <EmptyState icon="✦" title="No spotlight items yet" sub="Create one above, or approve a founder application when it lands here." />
+                  ) : (
+                    <div style={{ display:"flex", flexDirection:"column", gap:"8px" }}>
+                      {spotlight.items.map((it:any) => {
+                        const tone = it.status==="active" ? "#00b87a" : it.status==="pending" ? "#e08810" : t3
+                        return (
+                        <div key={it.id} style={{ background:surf, border:"1px solid "+bdr, borderRadius:"10px", padding:"13px 16px", display:"flex", alignItems:"center", gap:"12px", flexWrap:"wrap" }}>
+                          <span style={pill(tone, tone+"33")}>{it.status}</span>
+                          <span style={{ fontSize:"9px", fontFamily:mono, color:t3, textTransform:"uppercase" }}>{it.kind}</span>
+                          <div style={{ flex:1, minWidth:"180px" }}>
+                            <div style={{ fontSize:"13px", fontWeight:600, color:t1 }}>{it.title}</div>
+                            {it.subtitle && <div style={{ fontSize:"11px", color:t2 }}>{it.subtitle}</div>}
+                            <div style={{ fontSize:"10px", fontFamily:mono, color:t3, marginTop:"3px" }}>
+                              {it.project_name ? `${it.project_name} · ` : ""}{it.created_by === "admin" ? "by admin" : (it.created_by === "token" ? "founder (link)" : "founder")} · {it.link_url || "no link"}
+                            </div>
+                          </div>
+                          <div style={{ display:"flex", gap:"6px", flexShrink:0 }}>
+                            {it.status === "pending" && <ActionBtn onClick={() => spotlightAction("PATCH", { id: it.id, action: "approve" })} color="green">Approve</ActionBtn>}
+                            {it.status === "active"  && <ActionBtn onClick={() => spotlightAction("PATCH", { id: it.id, action: "deactivate" })} color="blue">Unpublish</ActionBtn>}
+                            {it.status === "pending" && <ActionBtn onClick={() => spotlightAction("PATCH", { id: it.id, action: "reject" })} color="red">Reject</ActionBtn>}
+                            <ActionBtn onClick={() => spotlightAction("DELETE", undefined, it.id)} color="red">Delete</ActionBtn>
+                          </div>
+                        </div>
+                      )})}
+                    </div>
+                  )}
+                </div>
+                )
+              })()}
 
               {tab === "tracked" && (
                 <div style={{ display:"flex", flexDirection:"column", gap:"14px" }}>

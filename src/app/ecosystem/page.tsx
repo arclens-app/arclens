@@ -3,6 +3,7 @@ import { useEffect, useState, useRef } from "react"
 import ArcLayout from "@/components/ArcLayout"
 import { TrustBadge } from "@/components/TrustBadge"
 import { trustBadge } from "@/lib/trustBadge"
+import Spotlight from "@/components/Spotlight"
 
 interface Project {
   id: number
@@ -463,6 +464,9 @@ export default function EcosystemPage() {
           </button>
         </div>
 
+        {/* SPOTLIGHT — single rotating promo slot (admin-curated + founder apps) */}
+        <Spotlight />
+
         {/* SUBMIT FORM */}
         {showForm && (
           <div style={{ background: surf, border: "1px solid rgba(26,86,255,0.2)", borderRadius: "14px", overflow: "hidden", marginBottom: "28px", position: "relative" }}>
@@ -627,7 +631,7 @@ export default function EcosystemPage() {
         {/* CATEGORY FILTERS — horizontal scroll on mobile */}
         <div style={{ marginBottom: "16px" }}>
           <div style={{ display: "flex", gap: "6px", overflowX: "auto", paddingBottom: "8px", WebkitOverflowScrolling: "touch" as any }}>
-            {CATEGORIES.map((cat: any) => (
+            {CATEGORIES.filter((cat: string) => cat === "All" || projects.some(p => (p.category || "").trim().toLowerCase() === cat.trim().toLowerCase())).map((cat: any) => (
               <button key={cat} onClick={() => setFilterAndReset(cat)}
                 style={{ height: "30px", padding: "0 14px", background: filter === cat ? "#1a56ff" : "transparent", color: filter === cat ? "#fff" : t2, fontSize: "11px", fontFamily: mono, border: "1px solid " + (filter === cat ? "#1a56ff" : border), borderRadius: "99px", cursor: "pointer", transition: "all .12s", whiteSpace: "nowrap", flexShrink: 0 }}>
                 {cat}
@@ -703,16 +707,12 @@ export default function EcosystemPage() {
         <div style={{ marginTop: "36px", background: "linear-gradient(135deg, rgba(26,86,255,0.08) 0%, rgba(0,184,122,0.06) 100%)", border: "1px solid rgba(26,86,255,0.18)", borderRadius: "14px", padding: "24px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "16px", flexWrap: "wrap" }}>
           <div>
             <div style={{ fontSize: "16px", fontWeight: 700, letterSpacing: "-0.03em", marginBottom: "6px", color: t1 }}>Building on Arc?</div>
-            <div style={{ fontSize: "13px", color: t2, fontWeight: 300, maxWidth: "400px", lineHeight: 1.65 }}>List your project and get discovered by every Arc user and builder. Free, takes 2 minutes.</div>
+            <div style={{ fontSize: "13px", color: t2, fontWeight: 300, maxWidth: "440px", lineHeight: 1.65 }}>List your project and get discovered by every Arc user and builder. Free, takes 2 minutes.</div>
           </div>
           <div style={{ display: "flex", gap: "10px", flexShrink: 0, flexWrap: "wrap" }}>
             <button onClick={() => { setShowForm(true); setSubmitted(false); setSubmitError(""); setNameWarn(""); setSimilarNames([]); setContractErr(""); window.scrollTo({ top: 0, behavior: "smooth" }) }}
               style={{ height: "40px", padding: "0 20px", background: "#1a56ff", color: "#fff", fontSize: "12.5px", fontWeight: 600, border: "none", borderRadius: "9px", cursor: "pointer", fontFamily: "'Geist', sans-serif", whiteSpace: "nowrap" }}>
               Submit Project
-            </button>
-            <button onClick={() => window.location.href = "/registry"}
-              style={{ height: "40px", padding: "0 20px", background: "transparent", color: "#8aaeff", fontSize: "12.5px", fontWeight: 600, border: "1px solid rgba(26,86,255,0.3)", borderRadius: "9px", cursor: "pointer", fontFamily: "'Geist', sans-serif", whiteSpace: "nowrap" }}>
-              Verify Contract
             </button>
           </div>
         </div>

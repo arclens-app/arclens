@@ -3,6 +3,7 @@ import { useEffect, useState } from "react"
 import { useParams, useSearchParams } from "next/navigation"
 import ArcLayout from "@/components/ArcLayout"
 import { WalletAvatar } from "@/components/WalletAvatar"
+import { SpotlightCard } from "@/components/Spotlight"
 import { useArcStore } from "@/store/arc"
 import TvlTrackingPanel from "./TvlTrackingPanel"
 
@@ -59,6 +60,18 @@ export default function DashboardPage() {
   const [auditForm, setAuditForm] = useState({ auditor: "", audit_url: "" })
   const [auditMsg, setAuditMsg]   = useState<{ ok: boolean; text: string } | null>(null)
   const [auditSubmitting, setAuditSubmitting] = useState(false)
+  const [spotForm, setSpotForm]   = useState({ title: "", subtitle: "", image_url: "", image_pos: "", cta_text: "" })
+  const [spotMsg, setSpotMsg]     = useState<{ ok: boolean; text: string } | null>(null)
+  const [spotSubmitting, setSpotSubmitting] = useState(false)
+  const [spotUploading, setSpotUploading] = useState(false)
+  // Spotlight draft — progress survives reload (mirrors the campaign drafts).
+  // Blob preview URLs are never persisted (they die on reload).
+  useEffect(() => {
+    try { const raw = localStorage.getItem("arclens-spotlight-draft"); if (raw) setSpotForm(JSON.parse(raw)) } catch {}
+  }, [])
+  useEffect(() => {
+    try { localStorage.setItem("arclens-spotlight-draft", JSON.stringify({ ...spotForm, image_url: spotForm.image_url.startsWith("blob:") ? "" : spotForm.image_url })) } catch {}
+  }, [spotForm])
   const [extraContracts, setExtraContracts] = useState<string[]>([])
   const [saving, setSaving]       = useState(false)
   const [saveSuccess, setSaveSuccess] = useState(false)
@@ -1178,6 +1191,91 @@ export default function DashboardPage() {
                   style={{ height: "40px", background: "rgba(0,184,122,0.1)", color: green, fontSize: "13px", fontWeight: 600, border: "1px solid rgba(0,184,122,0.3)", borderRadius: "8px", cursor: auditSubmitting ? "not-allowed" : "pointer", fontFamily: mono }}>
                   {auditSubmitting ? "Submitting…" : "Submit for review"}
                 </button>
+              </div>
+            </div>
+
+            {/* APPLY FOR SPOTLIGHT — request the rotating banner on the Ecosystem page */}
+            <div style={{ background: surf, border: "1px solid " + bdr, borderRadius: "12px", padding: "24px 26px", marginTop: "16px" }}>
+              <div style={{ fontSize: "14px", fontWeight: 600, color: t1, marginBottom: "4px" }}>Apply for the Ecosystem Spotlight</div>
+              <div style={{ fontSize: "11px", fontFamily: mono, color: t3, marginBottom: "18px", lineHeight: 1.6 }}>
+                Request a slot in the rotating banner at the top of the Ecosystem page. Submissions are reviewed before going live. (Risk-flagged projects aren&apos;t eligible.)
+              </div>
+
+              {/* LIVE PREVIEW — exactly how the banner will appear */}
+              <div style={{ marginBottom: "18px" }}>
+                <div style={{ fontSize: "9px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "8px" }}>Live preview — exactly how it appears{spotForm.image_url ? " · drag the image to reposition" : ""}</div>
+                <SpotlightCard static editable={!!spotForm.image_url} onPosChange={pos => setSpotForm(p => ({ ...p, image_pos: pos }))} item={{ kind: "project", title: spotForm.title, subtitle: spotForm.subtitle, image_url: spotForm.image_url, image_pos: spotForm.image_pos, cta_text: spotForm.cta_text, accent: "#3b6bff" }} />
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                <div>
+                  <label style={{ display: "block", fontSize: "9.5px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "5px" }}>Headline</label>
+                  <input maxLength={80} value={spotForm.title} onChange={e => setSpotForm(p => ({ ...p, title: e.target.value.slice(0, 80) }))} placeholder="e.g. Trade stablecoins on Arc — live now" style={inputStyle} />
+                </div>
+                <div>
+                  <label style={{ display: "block", fontSize: "9.5px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "5px" }}>Subtext <span style={{ color: t3, textTransform: "none", letterSpacing: 0 }}>— optional</span></label>
+                  <input maxLength={160} value={spotForm.subtitle} onChange={e => setSpotForm(p => ({ ...p, subtitle: e.target.value.slice(0, 160) }))} placeholder="One short line about what you're promoting" style={inputStyle} />
+                </div>
+                <div>
+                  <label style={{ display: "block", fontSize: "9.5px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "5px" }}>Banner image <span style={{ color: t3, textTransform: "none", letterSpacing: 0 }}>— optional</span></label>
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    <label style={{ flex: 1, display: "flex", alignItems: "center", gap: "10px", height: "40px", padding: "0 14px", background: surf2, border: "1px dashed " + (spotForm.image_url ? "rgba(0,184,122,0.4)" : bdr), borderRadius: "8px", cursor: "pointer", fontFamily: mono, fontSize: "12px", color: spotForm.image_url ? green : t2 }}>
+                      {spotUploading ? "Uploading…" : spotForm.image_url ? "✓ Image added — click to change" : "Click to upload a banner image"}
+                      <input type="file" accept="image/png,image/jpeg,image/webp" style={{ display: "none" }} onChange={async e => {
+                        const file = e.target.files?.[0]; if (!file) return
+                        if (file.size > 5 * 1024 * 1024) { setSpotMsg({ ok: false, text: "Image must be under 5MB" }); return }
+                        setSpotForm(p => ({ ...p, image_url: URL.createObjectURL(file) })) // instant preview
+                        setSpotUploading(true)
+                        try {
+                          const fd = new FormData(); fd.append("image", file)
+                          const r = await fetch("/api/upload", { method: "POST", body: fd })
+                          const { url } = await r.json()
+                          if (url) setSpotForm(p => ({ ...p, image_url: url }))
+                        } catch { setSpotMsg({ ok: false, text: "Upload failed — try again" }) }
+                        finally { setSpotUploading(false) }
+                      }} />
+                    </label>
+                    {spotForm.image_url && (
+                      <button type="button" onClick={() => setSpotForm(p => ({ ...p, image_url: "", image_pos: "" }))} title="Remove image"
+                        style={{ width: "40px", height: "40px", flexShrink: 0, background: "rgba(224,51,72,0.08)", color: "#e03348", border: "1px solid rgba(224,51,72,0.25)", borderRadius: "8px", cursor: "pointer", fontSize: "14px" }}>✕</button>
+                    )}
+                  </div>
+                  <div style={{ fontSize: "10px", fontFamily: mono, color: t3, marginTop: "6px", lineHeight: 1.6 }}>
+                    Recommended: <strong style={{ color: t2 }}>1200 × 400 px</strong> (3:1), PNG or JPG, under 1 MB. Keep your logo / key visual on the <strong style={{ color: t2 }}>right half</strong> — the left side fades into the banner. Dark or transparent background blends best. The preview above updates as you go.
+                  </div>
+                </div>
+                <div>
+                  <label style={{ display: "block", fontSize: "9.5px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "5px" }}>Button text <span style={{ color: t3, textTransform: "none", letterSpacing: 0 }}>— optional</span></label>
+                  <input maxLength={24} value={spotForm.cta_text} onChange={e => setSpotForm(p => ({ ...p, cta_text: e.target.value.slice(0, 24) }))} placeholder="e.g. Trade now, Learn more" style={inputStyle} />
+                </div>
+                {spotMsg && <div style={{ fontSize: "12px", fontFamily: mono, color: spotMsg.ok ? green : "#e03348" }}>{spotMsg.ok ? "✓ " : ""}{spotMsg.text}</div>}
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <button
+                    onClick={async () => {
+                      if (!spotForm.title.trim()) { setSpotMsg({ ok: false, text: "Add a headline" }); return }
+                      setSpotSubmitting(true); setSpotMsg(null)
+                      try {
+                        const res = await fetch("/api/spotlight", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token, slug, wallet: connectedWallet, ...spotForm }) })
+                        const d = await res.json().catch(() => ({}))
+                        if (res.ok) {
+                          setSpotMsg({ ok: true, text: d.message || "Submitted — we'll review it." })
+                          setSpotForm({ title: "", subtitle: "", image_url: "", image_pos: "", cta_text: "" })
+                          try { localStorage.removeItem("arclens-spotlight-draft") } catch {}
+                        } else setSpotMsg({ ok: false, text: d.error || "Could not submit" })
+                      } catch { setSpotMsg({ ok: false, text: "Network error — try again" }) }
+                      finally { setSpotSubmitting(false) }
+                    }}
+                    disabled={spotSubmitting}
+                    style={{ flex: 1, height: "40px", background: "rgba(26,86,255,0.1)", color: "#8aaeff", fontSize: "13px", fontWeight: 600, border: "1px solid rgba(26,86,255,0.3)", borderRadius: "8px", cursor: spotSubmitting ? "not-allowed" : "pointer", fontFamily: mono }}>
+                    {spotSubmitting ? "Submitting…" : "Apply for Spotlight"}
+                  </button>
+                  {(spotForm.title || spotForm.subtitle || spotForm.image_url || spotForm.cta_text) && (
+                    <button type="button" onClick={() => { setSpotForm({ title: "", subtitle: "", image_url: "", image_pos: "", cta_text: "" }); setSpotMsg(null); try { localStorage.removeItem("arclens-spotlight-draft") } catch {} }}
+                      style={{ height: "40px", padding: "0 16px", background: "transparent", color: t2, fontSize: "12px", border: "1px solid " + bdr, borderRadius: "8px", cursor: "pointer", fontFamily: mono }}>
+                      Clear
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           </>)}
