@@ -12,8 +12,8 @@ const geist = Geist({ subsets: ["latin"], variable: "--font-geist" })
 const geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-geist-mono" })
 
 export const metadata: Metadata = {
-  title: "ArcLens — The Arc Ecosystem Hub",
-  description: "Deployer-verified TVL, volume, and revenue tracking for stablecoin protocols on Arc — plus the ecosystem directory, trial campaigns, and network explorer.",
+  title: "ArcLens — The Ecosystem & Campaign Hub for Arc",
+  description: "Discover every project building on Arc, join campaigns to earn rewards, and see who you can trust — all in one place.",
   keywords: ["Arc", "ArcLens", "TVL", "stablecoin", "stablecoin DEX", "DeFi", "Circle", "USDC", "ecosystem", "arclenz"],
   icons: {
     icon: [
@@ -26,25 +26,25 @@ export const metadata: Metadata = {
     ],
   },
   openGraph: {
-    title: "ArcLens — The Arc Ecosystem Hub",
-    description: "Deployer-verified TVL, volume, and revenue tracking for stablecoin protocols on Arc — plus ecosystem directory, trial campaigns, and network explorer.",
+    title: "ArcLens — The Ecosystem & Campaign Hub for Arc",
+    description: "Discover every project building on Arc, join campaigns to earn rewards, and see who you can trust — all in one place.",
     url: "https://arclenz.xyz",
     siteName: "ArcLens",
     images: [
       {
-        url: "https://arclenz.xyz/og-image.png",
+        url: "https://arclenz.xyz/og-image-v2.png",
         width: 1200,
         height: 630,
-        alt: "ArcLens — The Arc Ecosystem Hub",
+        alt: "ArcLens — The home for the Arc ecosystem",
       },
     ],
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "ArcLens — The Arc Ecosystem Hub",
-    description: "Deployer-verified TVL, volume, and revenue tracking for stablecoin protocols on Arc — plus ecosystem directory, trial campaigns, and network explorer.",
-    images: ["https://arclenz.xyz/og-image.png"],
+    title: "ArcLens — The Ecosystem & Campaign Hub for Arc",
+    description: "Discover every project building on Arc, join campaigns to earn rewards, and see who you can trust — all in one place.",
+    images: ["https://arclenz.xyz/og-image-v2.png"],
     creator: "@arclens_app",
     site: "@arclens_app",
   },
