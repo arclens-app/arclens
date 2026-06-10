@@ -40,7 +40,7 @@ const MONO = "'DM Mono', ui-monospace, monospace"
 const KIND_LABEL: Record<string, string> = { campaign: "Campaign", event: "Event", project: "Featured", custom: "Spotlight" }
 
 const cardStyles = `
-  .spot-banner { animation: spotIn 460ms cubic-bezier(0.22,1,0.36,1); transition: border-color .2s; }
+  .spot-banner { height: 138px; animation: spotIn 460ms cubic-bezier(0.22,1,0.36,1); transition: border-color .2s; }
   .spot-banner:hover { border-color: var(--bdr, rgba(128,128,128,0.28)); }
   .spot-banner:hover .spot-cta { transform: translateY(-1px); }
   .spot-banner:hover .spot-arrow { transform: translateX(3px); }
@@ -54,6 +54,7 @@ const cardStyles = `
   @keyframes spotGlow  { 0%,100% { opacity: 0.7; transform: translateX(0); } 50% { opacity: 1; transform: translateX(-6%); } }
   @keyframes spotProg  { from { width: 0%; } to { width: 100%; } }
   @media (max-width: 640px) {
+    .spot-banner { height: auto; min-height: 150px; }
     .spot-img { display: none; }
     .spot-content { padding: 18px 18px 30px; gap: 14px; }
     .spot-title { font-size: 17px; }
@@ -93,7 +94,7 @@ export function SpotlightCard({ item, static: isStatic, editable, onPosChange }:
       position: "relative", overflow: "hidden", borderRadius: "16px",
       border: "1px solid var(--bdr, rgba(128,128,128,0.14))",
       background: `linear-gradient(105deg, var(--surf2,#0c1122) 0%, var(--surf,#080c1a) 60%)`,
-      minHeight: "118px", animation: isStatic ? "none" : undefined,
+      animation: isStatic ? "none" : undefined,
     }}>
       <div className="spot-glow" style={{ position: "absolute", inset: 0, background: `radial-gradient(60% 120% at 85% 0%, ${accent}26, transparent 60%)`, pointerEvents: "none", animation: isStatic ? "none" : undefined }} />
       <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "2px", background: `linear-gradient(90deg, ${accent}, ${accent}55 45%, transparent)` }} />
@@ -116,7 +117,7 @@ export function SpotlightCard({ item, static: isStatic, editable, onPosChange }:
             {item.title || "Your headline"}
           </div>
           {item.subtitle && (
-            <div style={{ fontSize: "13px", color: "var(--t2,#9aa8c7)", fontWeight: 300, lineHeight: 1.55, maxWidth: "560px" }}>
+            <div style={{ fontSize: "13px", color: "var(--t2,#9aa8c7)", fontWeight: 300, lineHeight: 1.5, maxWidth: "560px", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
               {item.subtitle}
             </div>
           )}
