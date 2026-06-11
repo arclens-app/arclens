@@ -96,11 +96,13 @@ export async function POST(req: NextRequest) {
     }
     if (!projectId) return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
 
+    // A founder can spotlight a campaign they run, or a freeform/project promo.
+    const kind = ["campaign", "event", "project", "custom"].includes(body?.kind) ? body.kind : "custom"
     // Replace any prior pending request for this project (no stacking).
     await pool.query(`DELETE FROM spotlight_items WHERE project_id = $1 AND status = 'pending'`, [projectId])
     await pool.query(
       `INSERT INTO spotlight_items (kind, title, subtitle, image_url, image_pos, link_url, cta_text, accent, project_id, status, created_by)
-       VALUES ('project', $1, $2, $3, $4, $5, $6, $7, $8, 'pending', $9)`,
+       VALUES ($10, $1, $2, $3, $4, $5, $6, $7, $8, 'pending', $9)`,
       [
         title,
         String(body?.subtitle || "").trim().slice(0, 160) || null,
@@ -111,6 +113,7 @@ export async function POST(req: NextRequest) {
         String(body?.accent || "").trim().slice(0, 9) || null,
         projectId,
         createdBy,
+        kind,
       ],
     )
     return NextResponse.json({ ok: true, message: "Submitted — we'll review your spotlight request." })
