@@ -61,6 +61,8 @@ export default function DashboardPage() {
   const [auditMsg, setAuditMsg]   = useState<{ ok: boolean; text: string } | null>(null)
   const [auditSubmitting, setAuditSubmitting] = useState(false)
   const [spotForm, setSpotForm]   = useState({ title: "", subtitle: "", image_url: "", image_pos: "", cta_text: "" })
+  const [spotMode, setSpotMode]   = useState<"campaign" | "custom">("campaign")
+  const [spotCampaign, setSpotCampaign] = useState("")
   const [spotMsg, setSpotMsg]     = useState<{ ok: boolean; text: string } | null>(null)
   const [spotSubmitting, setSpotSubmitting] = useState(false)
   const [spotUploading, setSpotUploading] = useState(false)
@@ -1201,10 +1203,36 @@ export default function DashboardPage() {
                 Request a slot in the rotating banner at the top of the Ecosystem page. Submissions are reviewed before going live. (Risk-flagged projects aren&apos;t eligible.)
               </div>
 
+              {/* Mode — spotlight a live campaign (recommended), or something custom */}
+              <div style={{ display: "flex", gap: "8px", marginBottom: "16px" }}>
+                {([["campaign", "A campaign"], ["custom", "Something custom"]] as const).map(([m, label]) => (
+                  <button key={m} type="button" onClick={() => setSpotMode(m)}
+                    style={{ flex: 1, height: "34px", fontSize: "12px", fontFamily: mono, borderRadius: "8px", cursor: "pointer", border: "1px solid " + (spotMode === m ? "rgba(26,86,255,0.4)" : bdr), background: spotMode === m ? "rgba(26,86,255,0.1)" : "transparent", color: spotMode === m ? "#8aaeff" : t2, fontWeight: spotMode === m ? 600 : 400 }}>{label}</button>
+                ))}
+              </div>
+
+              {spotMode === "campaign" && (
+                <div style={{ marginBottom: "16px" }}>
+                  <label style={{ display: "block", fontSize: "9.5px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "5px" }}>Which campaign?</label>
+                  {forgeCampaigns.filter((c: any) => c.status === "active").length === 0 ? (
+                    <div style={{ fontSize: "11px", fontFamily: mono, color: t3, lineHeight: 1.6 }}>No live campaigns yet — launch one from the Campaigns tab, or switch to <strong style={{ color: t2 }}>Something custom</strong>.</div>
+                  ) : (
+                    <select value={spotCampaign} onChange={e => {
+                      const id = e.target.value; setSpotCampaign(id)
+                      const c = forgeCampaigns.find((x: any) => String(x.slug || x.id) === id)
+                      if (c) setSpotForm(p => ({ ...p, title: String(c.title || "").slice(0, 80), subtitle: String(c.tagline || "").slice(0, 160), cta_text: p.cta_text || "Join the campaign" }))
+                    }} style={inputStyle}>
+                      <option value="">Select a campaign…</option>
+                      {forgeCampaigns.filter((c: any) => c.status === "active").map((c: any) => <option key={c.id} value={c.slug || c.id}>{c.title}</option>)}
+                    </select>
+                  )}
+                </div>
+              )}
+
               {/* LIVE PREVIEW — exactly how the banner will appear */}
               <div style={{ marginBottom: "18px" }}>
                 <div style={{ fontSize: "9px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "8px" }}>Live preview — exactly how it appears{spotForm.image_url ? " · drag the image to reposition" : ""}</div>
-                <SpotlightCard static editable={!!spotForm.image_url} onPosChange={pos => setSpotForm(p => ({ ...p, image_pos: pos }))} item={{ kind: "project", title: spotForm.title, subtitle: spotForm.subtitle, image_url: spotForm.image_url, image_pos: spotForm.image_pos, cta_text: spotForm.cta_text, accent: "#3b6bff" }} />
+                <SpotlightCard static editable={!!spotForm.image_url} onPosChange={pos => setSpotForm(p => ({ ...p, image_pos: pos }))} item={{ kind: spotMode === "campaign" ? "campaign" : "custom", title: spotForm.title, subtitle: spotForm.subtitle, image_url: spotForm.image_url, image_pos: spotForm.image_pos, cta_text: spotForm.cta_text, accent: "#3b6bff" }} />
               </div>
 
               <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
@@ -1252,14 +1280,17 @@ export default function DashboardPage() {
                 <div style={{ display: "flex", gap: "8px" }}>
                   <button
                     onClick={async () => {
+                      if (spotMode === "campaign" && !spotCampaign) { setSpotMsg({ ok: false, text: "Pick a campaign to spotlight" }); return }
                       if (!spotForm.title.trim()) { setSpotMsg({ ok: false, text: "Add a headline" }); return }
                       setSpotSubmitting(true); setSpotMsg(null)
                       try {
-                        const res = await fetch("/api/spotlight", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token, slug, wallet: connectedWallet, ...spotForm }) })
+                        const kind = spotMode === "campaign" ? "campaign" : "custom"
+                        const link_url = spotMode === "campaign" && spotCampaign ? `/trials/${spotCampaign}` : undefined
+                        const res = await fetch("/api/spotlight", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token, slug, wallet: connectedWallet, kind, link_url, ...spotForm }) })
                         const d = await res.json().catch(() => ({}))
                         if (res.ok) {
                           setSpotMsg({ ok: true, text: d.message || "Submitted — we'll review it." })
-                          setSpotForm({ title: "", subtitle: "", image_url: "", image_pos: "", cta_text: "" })
+                          setSpotForm({ title: "", subtitle: "", image_url: "", image_pos: "", cta_text: "" }); setSpotCampaign("")
                           try { localStorage.removeItem("arclens-spotlight-draft") } catch {}
                         } else setSpotMsg({ ok: false, text: d.error || "Could not submit" })
                       } catch { setSpotMsg({ ok: false, text: "Network error — try again" }) }
