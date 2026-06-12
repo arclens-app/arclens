@@ -32,10 +32,10 @@ export const metadata: Metadata = {
     siteName: "ArcLens",
     images: [
       {
-        url: "https://arclenz.xyz/og-image-v2.png",
+        url: "https://arclenz.xyz/og-image-v3.png",
         width: 1200,
         height: 630,
-        alt: "ArcLens — The home for the Arc ecosystem",
+        alt: "ArcLens — The Ecosystem & Campaign Hub for Arc",
       },
     ],
     type: "website",
@@ -44,7 +44,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "ArcLens — The Ecosystem & Campaign Hub for Arc",
     description: "Discover every project building on Arc, join campaigns to earn rewards, and see who you can trust — all in one place.",
-    images: ["https://arclenz.xyz/og-image-v2.png"],
+    images: ["https://arclenz.xyz/og-image-v3.png"],
     creator: "@arclens_app",
     site: "@arclens_app",
   },

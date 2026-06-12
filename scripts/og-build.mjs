@@ -29,9 +29,10 @@ const svg = `<?xml version="1.0" encoding="UTF-8"?>
 
   <text x="${tx}" y="392" font-family="'Segoe UI','Segoe UI',Arial,sans-serif" font-size="22" fill="${mute}">Discover every project · Join campaigns · Earn rewards</text>
 
-  <line x1="${tx}" y1="424" x2="${tx + 210}" y2="424" stroke="${blue}" stroke-opacity="0.35" stroke-width="2"/>
-  <circle cx="${tx + 6}" cy="456" r="5" fill="${green}"/>
-  <text x="${tx + 20}" y="462" font-family="Consolas,'DejaVu Sans Mono',monospace" font-size="19" letter-spacing="1.5" fill="${blue}">arclenz.xyz</text>
+  <rect x="${tx}" y="418" width="300" height="50" rx="11" fill="${blue}"/>
+  <text x="${tx + 150}" y="450" text-anchor="middle" font-family="'Segoe UI Semibold','Segoe UI',Arial,sans-serif" font-size="20" font-weight="700" fill="#ffffff">Explore the ecosystem  →</text>
+  <circle cx="${tx + 326}" cy="444" r="5" fill="${green}"/>
+  <text x="${tx + 340}" y="450" font-family="Consolas,'DejaVu Sans Mono',monospace" font-size="18" letter-spacing="1" fill="${mute}">arclenz.xyz</text>
 </svg>`
 
 // Crop the app-icon's light outer frame, then re-round so the logo reads as a
@@ -43,5 +44,5 @@ const logo = await sharp(inner).composite([{ input: mask, blend: "dest-in" }]).p
 await sharp(Buffer.from(svg))
   .composite([{ input: logo, left: lx, top: ly }])
   .png()
-  .toFile("public/og-image-v2.png")
-console.log("wrote public/og-image-v2.png")
+  .toFile("public/og-image-v3.png")
+console.log("wrote public/og-image-v3.png")
