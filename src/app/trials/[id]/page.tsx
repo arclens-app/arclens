@@ -638,7 +638,7 @@ export default function CampaignDetailPage() {
                   title="Copy link"
                   onClick={async () => {
                     try {
-                      await navigator.clipboard.writeText(typeof window !== "undefined" ? window.location.href : "")
+                      await navigator.clipboard.writeText(typeof window !== "undefined" ? window.location.origin + window.location.pathname + "?ref=share" : "")
                       setShareDone(true)
                       setTimeout(() => setShareDone(false), 1500)
                     } catch {}
@@ -657,7 +657,7 @@ export default function CampaignDetailPage() {
                         const ph = normalizeXHandle(campaign.project_twitter)
                         const by = ph ? ` by @${ph}` : ""
                         const text = `${campaign.title}${by} — an Arc Testnet campaign live on @arclens_app. Join in:`
-                        return `https://x.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(window.location.href)}`
+                        return `https://x.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(window.location.origin + window.location.pathname + "?ref=share")}`
                       })()
                     : "#"
                   }
