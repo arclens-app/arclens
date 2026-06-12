@@ -264,7 +264,7 @@ export default function ProjectPage() {
   }
 
   function share() {
-    const url = `https://arclenz.xyz/ecosystem/${id}`
+    const url = `https://arclenz.xyz/ecosystem/${id}?ref=share`
     // If the project has an X handle, lead with the @ (it's their brand on X).
     // Otherwise lead with the project name. Either way, mention Arc Testnet
     // (the chain they're listed on) and tag @arclens_app for the platform.
@@ -279,7 +279,7 @@ export default function ProjectPage() {
   }
 
   function copyLink() {
-    navigator.clipboard.writeText(`https://arclenz.xyz/ecosystem/${id}`)
+    navigator.clipboard.writeText(`https://arclenz.xyz/ecosystem/${id}?ref=share`)
     setCopied(true)
     setTimeout(() => setCopied(false), 1500)
   }
@@ -510,10 +510,10 @@ export default function ProjectPage() {
             </div>
           </div>
           <div style={{ background: surf2, borderRadius: "8px", padding: "12px 14px", fontFamily: mono, fontSize: "11px", color: t3, wordBreak: "break-all" }}>
-            {`<a href="https://arclenz.xyz/ecosystem/${id}" target="_blank" style="display:inline-flex;align-items:center;gap:8px;padding:8px 14px;background:#04060f;border:1px solid rgba(26,86,255,0.3);border-radius:8px;text-decoration:none;font-family:monospace"><span style="width:8px;height:8px;border-radius:50%;background:#00b87a;display:inline-block"></span><span style="color:#e8ecff;font-weight:600">${project.name}</span><span style="color:#6b7da8">on ArcLens</span></a>`}
+            {`<a href="https://arclenz.xyz/ecosystem/${id}?ref=badge" target="_blank" style="display:inline-flex;align-items:center;gap:8px;padding:8px 14px;background:#04060f;border:1px solid rgba(26,86,255,0.3);border-radius:8px;text-decoration:none;font-family:monospace"><span style="width:8px;height:8px;border-radius:50%;background:#00b87a;display:inline-block"></span><span style="color:#e8ecff;font-weight:600">${project.name}</span><span style="color:#6b7da8">on ArcLens</span></a>`}
           </div>
           <button
-            onClick={() => { navigator.clipboard.writeText(`<a href="https://arclenz.xyz/ecosystem/${id}">on ArcLens</a>`); setCopied(true); setTimeout(() => setCopied(false), 1500) }}
+            onClick={() => { navigator.clipboard.writeText(`<a href="https://arclenz.xyz/ecosystem/${id}?ref=badge">on ArcLens</a>`); setCopied(true); setTimeout(() => setCopied(false), 1500) }}
             style={{ marginTop: "10px", height: "30px", padding: "0 14px", background: "transparent", color: t2, fontSize: "11px", fontFamily: mono, border: "1px solid " + bdr, borderRadius: "6px", cursor: "pointer" }}>
             Copy embed code
           </button>
@@ -546,7 +546,7 @@ export default function ProjectPage() {
                 if (m) ph = m[1]
                 ph = ph.replace(/^@+/, "").trim()
                 const subject = ph ? `@${ph}` : project?.name
-                const text = `Just reviewed ${subject} on Arc Testnet via @arclens_app — arclenz.xyz/ecosystem/${id}`
+                const text = `Just reviewed ${subject} on Arc Testnet via @arclens_app — arclenz.xyz/ecosystem/${id}?ref=share`
                 window.open(`https://x.com/intent/tweet?text=${encodeURIComponent(text)}`, "_blank")
               }} style={{ height: "32px", padding: "0 14px", background: "#1a56ff", color: "#fff", fontSize: "12px", fontFamily: mono, border: "none", borderRadius: "6px", cursor: "pointer" }}>
                 Share on 𝕏
