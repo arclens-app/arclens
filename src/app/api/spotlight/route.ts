@@ -98,11 +98,16 @@ export async function POST(req: NextRequest) {
 
     // A founder can spotlight a campaign they run, or a freeform/project promo.
     const kind = ["campaign", "event", "project", "custom"].includes(body?.kind) ? body.kind : "custom"
+    // Requested run length → ends_at (computed server-side). Capped at 60 days,
+    // defaults to 7 days. Once it elapses the item auto-hides (GET filters on it).
+    const reqH = parseInt(body?.duration_hours, 10)
+    const durHours = Number.isFinite(reqH) && reqH > 0 ? Math.min(reqH, 60 * 24) : 7 * 24
+    const endsAt = new Date(Date.now() + durHours * 3600 * 1000)
     // Replace any prior pending request for this project (no stacking).
     await pool.query(`DELETE FROM spotlight_items WHERE project_id = $1 AND status = 'pending'`, [projectId])
     await pool.query(
-      `INSERT INTO spotlight_items (kind, title, subtitle, image_url, image_pos, link_url, cta_text, accent, project_id, status, created_by)
-       VALUES ($10, $1, $2, $3, $4, $5, $6, $7, $8, 'pending', $9)`,
+      `INSERT INTO spotlight_items (kind, title, subtitle, image_url, image_pos, link_url, cta_text, accent, project_id, status, created_by, ends_at)
+       VALUES ($10, $1, $2, $3, $4, $5, $6, $7, $8, 'pending', $9, $11)`,
       [
         title,
         String(body?.subtitle || "").trim().slice(0, 160) || null,
@@ -114,6 +119,7 @@ export async function POST(req: NextRequest) {
         projectId,
         createdBy,
         kind,
+        endsAt,
       ],
     )
     return NextResponse.json({ ok: true, message: "Submitted — we'll review your spotlight request." })

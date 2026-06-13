@@ -63,6 +63,8 @@ export default function DashboardPage() {
   const [spotForm, setSpotForm]   = useState({ title: "", subtitle: "", image_url: "", image_pos: "", cta_text: "" })
   const [spotMode, setSpotMode]   = useState<"campaign" | "custom">("campaign")
   const [spotCampaign, setSpotCampaign] = useState("")
+  const [spotDurN, setSpotDurN]   = useState(7)
+  const [spotDurUnit, setSpotDurUnit] = useState<"days" | "hours">("days")
   const [spotMsg, setSpotMsg]     = useState<{ ok: boolean; text: string } | null>(null)
   const [spotSubmitting, setSpotSubmitting] = useState(false)
   const [spotUploading, setSpotUploading] = useState(false)
@@ -1276,6 +1278,17 @@ export default function DashboardPage() {
                   <label style={{ display: "block", fontSize: "9.5px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "5px" }}>Button text <span style={{ color: t3, textTransform: "none", letterSpacing: 0 }}>— optional</span></label>
                   <input maxLength={24} value={spotForm.cta_text} onChange={e => setSpotForm(p => ({ ...p, cta_text: e.target.value.slice(0, 24) }))} placeholder="e.g. Trade now, Learn more" style={inputStyle} />
                 </div>
+                <div>
+                  <label style={{ display: "block", fontSize: "9.5px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "5px" }}>Run for</label>
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    <input type="number" min={1} value={spotDurN} onChange={e => setSpotDurN(Math.max(1, parseInt(e.target.value) || 1))} style={{ ...inputStyle, width: "110px" }} />
+                    <select value={spotDurUnit} onChange={e => setSpotDurUnit(e.target.value as "days" | "hours")} style={{ ...inputStyle, width: "130px" }}>
+                      <option value="hours">hours</option>
+                      <option value="days">days</option>
+                    </select>
+                  </div>
+                  <div style={{ fontSize: "10px", fontFamily: mono, color: t3, marginTop: "6px", lineHeight: 1.6 }}>How long your spot stays up — it ends automatically after that.</div>
+                </div>
                 {spotMsg && <div style={{ fontSize: "12px", fontFamily: mono, color: spotMsg.ok ? green : "#e03348" }}>{spotMsg.ok ? "✓ " : ""}{spotMsg.text}</div>}
                 <div style={{ display: "flex", gap: "8px" }}>
                   <button
@@ -1286,7 +1299,7 @@ export default function DashboardPage() {
                       try {
                         const kind = spotMode === "campaign" ? "campaign" : "custom"
                         const link_url = spotMode === "campaign" && spotCampaign ? `/trials/${spotCampaign}` : undefined
-                        const res = await fetch("/api/spotlight", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token, slug, wallet: connectedWallet, kind, link_url, ...spotForm }) })
+                        const res = await fetch("/api/spotlight", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token, slug, wallet: connectedWallet, kind, link_url, duration_hours: spotDurN * (spotDurUnit === "days" ? 24 : 1), ...spotForm }) })
                         const d = await res.json().catch(() => ({}))
                         if (res.ok) {
                           setSpotMsg({ ok: true, text: d.message || "Submitted — we'll review it." })

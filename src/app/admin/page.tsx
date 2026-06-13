@@ -54,6 +54,7 @@ export default function AdminPage() {
   const [spotForm, setSpotForm]       = useState({ kind: "custom", title: "", subtitle: "", image_url: "", image_pos: "", link_url: "", cta_text: "", accent: "", project: "" })
   const [spotBusy, setSpotBusy]       = useState(false)
   const [spotUploading, setSpotUploading] = useState(false)
+  const [spotDays, setSpotDays]       = useState("")
   // Trust tab state: alerts + disputes, fetched on demand.
   const [trust, setTrust]             = useState<{ alerts: any[]; disputes: any[]; audits: any[]; flagged: any[]; counts: { open_alerts: number; open_disputes: number; open_audits: number; open_flags: number } } | null>(null)
   const [trustLoading, setTrustLoading] = useState(false)
@@ -363,8 +364,9 @@ export default function AdminPage() {
   async function createSpotlight() {
     if (!spotForm.title.trim()) { showToast(false, "Title required"); return }
     setSpotBusy(true)
-    const ok = await spotlightAction("POST", spotForm)
-    if (ok) { setSpotForm({ kind: "custom", title: "", subtitle: "", image_url: "", image_pos: "", link_url: "", cta_text: "", accent: "", project: "" }); showToast(true, "Spotlight item created & live") }
+    const ends_at = spotDays && Number(spotDays) > 0 ? new Date(Date.now() + Number(spotDays) * 86400000).toISOString() : undefined
+    const ok = await spotlightAction("POST", { ...spotForm, ends_at })
+    if (ok) { setSpotForm({ kind: "custom", title: "", subtitle: "", image_url: "", image_pos: "", link_url: "", cta_text: "", accent: "", project: "" }); setSpotDays(""); showToast(true, "Spotlight item created & live") }
     setSpotBusy(false)
   }
 
@@ -2024,6 +2026,7 @@ export default function AdminPage() {
                       <div><label style={lbl}>Project slug (optional)</label><input value={spotForm.project} onChange={e=>setSpotForm(p=>({...p,project:e.target.value}))} placeholder="ties + trust-gates" style={si} /></div>
                       <div><label style={lbl}>Button text</label><input value={spotForm.cta_text} onChange={e=>setSpotForm(p=>({...p,cta_text:e.target.value}))} placeholder="Learn more" style={si} /></div>
                       <div><label style={lbl}>Accent (hex)</label><input value={spotForm.accent} onChange={e=>setSpotForm(p=>({...p,accent:e.target.value}))} placeholder="#3b6bff" style={si} /></div>
+                      <div><label style={lbl}>Run for (days · blank = always)</label><input type="number" min={1} value={spotDays} onChange={e=>setSpotDays(e.target.value)} placeholder="e.g. 14" style={si} /></div>
                     </div>
                     <div style={{ marginBottom:"10px" }}><label style={lbl}>Headline *</label><input value={spotForm.title} onChange={e=>setSpotForm(p=>({...p,title:e.target.value}))} placeholder="What you're spotlighting" style={si} /></div>
                     <div style={{ marginBottom:"10px" }}><label style={lbl}>Subtext</label><input value={spotForm.subtitle} onChange={e=>setSpotForm(p=>({...p,subtitle:e.target.value}))} placeholder="One short supporting line" style={si} /></div>
