@@ -35,7 +35,7 @@ const TAG_STYLE: Record<string, { bg: string; color: string; border: string }> =
 }
 
 
-export default function ArcLayout({ children, active }: { children: React.ReactNode; active?: string }) {
+export default function ArcLayout({ children, active, lockDark }: { children: React.ReactNode; active?: string; lockDark?: boolean }) {
   const [mounted, setMounted]         = useState(false)
   const [dark, setDark]               = useState(true)
   const [blockNum, setBlockNum]       = useState("")
@@ -548,14 +548,15 @@ export default function ArcLayout({ children, active }: { children: React.ReactN
 
   useEffect(() => {
     if (!mounted) return
-    document.documentElement.style.setProperty("--bg",    dark ? "#060812" : "#f0f2f8")
-    document.documentElement.style.setProperty("--surf",  dark ? "#0a0e1a" : "#ffffff")
-    document.documentElement.style.setProperty("--surf2", dark ? "#0e1224" : "#f5f7fc")
-    document.documentElement.style.setProperty("--t1",    dark ? "#e8ecff" : "#0a0e1a")
-    document.documentElement.style.setProperty("--t2",    dark ? "#6b7da8" : "#4a5578")
-    document.documentElement.style.setProperty("--t3",    dark ? "#2e3a5c" : "#8899bb")
-    document.documentElement.style.setProperty("--bdr",   dark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.08)")
-  }, [dark, mounted])
+    const d = lockDark || dark   // homepage locks dark regardless of the toggle
+    document.documentElement.style.setProperty("--bg",    d ? "#060812" : "#f0f2f8")
+    document.documentElement.style.setProperty("--surf",  d ? "#0a0e1a" : "#ffffff")
+    document.documentElement.style.setProperty("--surf2", d ? "#0e1224" : "#f5f7fc")
+    document.documentElement.style.setProperty("--t1",    d ? "#e8ecff" : "#0a0e1a")
+    document.documentElement.style.setProperty("--t2",    d ? "#6b7da8" : "#4a5578")
+    document.documentElement.style.setProperty("--t3",    d ? "#2e3a5c" : "#8899bb")
+    document.documentElement.style.setProperty("--bdr",   d ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.08)")
+  }, [dark, mounted, lockDark])
 
   // Close sidebar when clicking outside
   useEffect(() => {
@@ -900,11 +901,13 @@ export default function ArcLayout({ children, active }: { children: React.ReactN
             </button>
           )}
 
-          {/* THEME */}
-          <button onClick={() => { const next = !dark; setDark(next); localStorage.setItem("arclens-theme", next ? "dark" : "light") }}
-            style={{ width: "30px", height: "30px", background: "transparent", border: "1px solid " + bdr, borderRadius: "6px", cursor: "pointer", color: t2, fontSize: "14px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-            {dark ? "☀" : "☾"}
-          </button>
+          {/* THEME — hidden on lock-dark pages (e.g. the homepage) */}
+          {!lockDark && (
+            <button onClick={() => { const next = !dark; setDark(next); localStorage.setItem("arclens-theme", next ? "dark" : "light") }}
+              style={{ width: "30px", height: "30px", background: "transparent", border: "1px solid " + bdr, borderRadius: "6px", cursor: "pointer", color: t2, fontSize: "14px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              {dark ? "☀" : "☾"}
+            </button>
+          )}
         </header>
 
         {/* PAGE CONTENT — always full width */}

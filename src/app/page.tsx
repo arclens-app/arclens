@@ -454,7 +454,7 @@ export default function HomePage() {
   ]
 
   return (
-    <ArcLayout active="home">
+    <ArcLayout active="home" lockDark>
       <div style={{ fontFamily: "'Geist',system-ui,sans-serif", background: "#060812", color: "#e8ecff", minHeight: "100vh" }}>
 
         {/* ── HERO ─────────────────────────────────────── */}

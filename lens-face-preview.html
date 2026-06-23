@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Lens AI — character preview</title>
+<style>
+  :root{
+    --bg:#05070e; --surf:#0b0e16; --surf2:#0e121d; --bdr:rgba(255,255,255,.09);
+    --t1:#eef1f8; --t2:#8b93a7; --t3:#565e72;
+    --arc:#3b6bff; --arc2:#4a78ff; --usdc:#00c896;
+    --sans:'Geist',ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    --mono:'DM Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;min-height:100vh;background:
+      radial-gradient(120% 70% at 50% -10%, rgba(59,107,255,.16), transparent 60%),
+      radial-gradient(80% 50% at 50% 110%, rgba(0,200,150,.07), transparent 60%),
+      var(--bg);
+    color:var(--t1);font-family:var(--sans);
+    display:flex;flex-direction:column;align-items:center;
+    padding:42px 20px 70px;letter-spacing:-.01em;
+  }
+  .wm{font-weight:800;letter-spacing:-.03em;font-size:15px;margin-bottom:4px}
+  .wm .a{color:var(--t1)} .wm .l{color:var(--arc)} .wm .ai{color:var(--t2);font-weight:600;margin-left:6px;font-size:13px}
+  .sub{color:var(--t3);font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;margin-bottom:30px}
+
+  .stage{
+    width:340px;height:340px;border-radius:28px;
+    background:radial-gradient(120% 90% at 50% 0%, rgba(59,107,255,.10), transparent 62%), var(--surf);
+    border:1px solid var(--bdr);
+    display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;
+    box-shadow:0 40px 90px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.05);
+  }
+  .stage::after{content:"";position:absolute;left:50%;bottom:34px;transform:translateX(-50%);
+    width:150px;height:22px;border-radius:50%;background:rgba(0,0,0,.45);filter:blur(12px);
+    animation:shadow 4s ease-in-out infinite;}
+
+  /* ── the coin ─────────────────────────────────────────────── */
+  .coin{width:200px;height:200px;animation:float 4s ease-in-out infinite;transform-origin:center;will-change:transform}
+  .coin svg{display:block;overflow:visible}
+
+  .pupil{transition:transform .35s cubic-bezier(.3,1,.4,1)}
+  .iris{transition:stroke .3s ease, filter .3s ease}
+  .lid{transform-origin:center;transform:scaleY(0)}            /* eyelids hidden by default */
+  .eyeG{transform-origin:center}
+  .mouth{display:none}
+  .glow{opacity:0;transition:opacity .4s ease}
+  .ring{opacity:0;transform-origin:center}
+  .spark{opacity:0}
+
+  /* idle blink */
+  .state-idle .eyeG{animation:blink 5.2s infinite}
+  .state-idle .m-smile{display:block}
+
+  /* thinking: look up, apertures spin, pulse ring */
+  .state-thinking .pupil{transform:translateY(-4px)}
+  .state-thinking .iris{animation:spin 3s linear infinite}
+  .state-thinking .ring{opacity:1;animation:pulse 1.8s ease-out infinite}
+  .state-thinking .m-concentrate{display:block}
+
+  /* paying: green eyes, wink, sparks fly, big smile, green glow */
+  .state-paying .iris{stroke:var(--usdc);filter:drop-shadow(0 0 5px rgba(0,200,150,.8))}
+  .state-paying .pupil{fill:#caffe9}
+  .state-paying .eye-r .eyeG{animation:wink 1.6s ease-in-out infinite}
+  .state-paying .glow.green{opacity:1;animation:breathe 1.6s ease-in-out infinite}
+  .state-paying .m-grin{display:block}
+  .state-paying .spark{animation:fly 1.6s ease-out infinite}
+  .state-paying .spark.s2{animation-delay:.5s}
+  .state-paying .spark.s3{animation-delay:1s}
+
+  /* confident / staking: steady, narrowed, steady glow */
+  .state-confident .lid{transform:scaleY(.42)}
+  .state-confident .iris{stroke:#7aa0ff}
+  .state-confident .glow.blue{opacity:.9}
+  .state-confident .m-flatsmile{display:block}
+
+  /* dont-know: eyes glance away+up, flat mouth, calm */
+  .state-dontknow .pupil{transform:translate(4px,-3px)}
+  .state-dontknow .iris{stroke:#6b7488}
+  .state-dontknow .m-flat{display:block}
+
+  @keyframes float{0%,100%{transform:translateY(0) rotate(-1deg)}50%{transform:translateY(-12px) rotate(1deg)}}
+  @keyframes shadow{0%,100%{transform:translateX(-50%) scale(1);opacity:.45}50%{transform:translateX(-50%) scale(.82);opacity:.3}}
+  @keyframes blink{0%,92%,100%{transform:scaleY(1)}95%{transform:scaleY(.08)}}
+  @keyframes wink{0%,40%,100%{transform:scaleY(1)}50%,60%{transform:scaleY(.08)}}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  @keyframes pulse{0%{transform:scale(.7);opacity:.55}100%{transform:scale(1.35);opacity:0}}
+  @keyframes breathe{0%,100%{opacity:.55}50%{opacity:1}}
+  @keyframes fly{0%{opacity:0;transform:translate(0,0) scale(.5)}15%{opacity:1}100%{opacity:0;transform:translate(54px,-46px) scale(1)}}
+
+  /* ── controls ─────────────────────────────────────────────── */
+  .label{margin-top:26px;font-size:19px;font-weight:700}
+  .desc{margin-top:6px;color:var(--t2);font-size:13px;max-width:330px;text-align:center;line-height:1.55;min-height:38px}
+  .btns{display:flex;gap:9px;flex-wrap:wrap;justify-content:center;margin-top:24px;max-width:430px}
+  .btns button{
+    background:var(--surf2);border:1px solid var(--bdr);color:var(--t1);
+    font-family:var(--sans);font-size:13px;font-weight:600;padding:9px 15px;border-radius:10px;cursor:pointer;
+    transition:border-color .14s,transform .14s,background .14s}
+  .btns button:hover{border-color:rgba(59,107,255,.5);transform:translateY(-1px)}
+  .btns button.on{background:rgba(59,107,255,.16);border-color:rgba(59,107,255,.55)}
+
+  /* lineup */
+  .lineup{display:flex;gap:18px;margin-top:46px;flex-wrap:wrap;justify-content:center}
+  .mini{display:flex;flex-direction:column;align-items:center;gap:8px}
+  .mini .coin{width:72px;height:72px;animation:none}
+  .mini .cap{font-family:var(--mono);font-size:9.5px;color:var(--t3);text-transform:uppercase;letter-spacing:.08em}
+</style>
+</head>
+<body>
+  <div class="wm"><span class="a">Arc</span><span class="l">Lens</span><span class="ai">Lens AI</span></div>
+  <div class="sub">the lepton that thinks — and pays</div>
+
+  <div class="stage"><div id="hero" class="coin state-idle"></div></div>
+
+  <div id="label" class="label">Idle</div>
+  <div id="desc" class="desc">Calm, curious, alive. A struck Arc-blue coin with lens-aperture eyes and an arc for a mouth.</div>
+
+  <div class="btns">
+    <button data-s="idle" class="on">Idle</button>
+    <button data-s="thinking">Thinking</button>
+    <button data-s="paying">Paying a builder</button>
+    <button data-s="confident">Confident / staking</button>
+    <button data-s="dontknow">“I don’t know”</button>
+    <button id="cycle">Auto-cycle ▶</button>
+  </div>
+
+  <div class="lineup" id="lineup"></div>
+
+<script>
+// The coin SVG. One source, reused for the hero + the lineup.
+function coinSVG(){return `
+<svg viewBox="0 0 200 200" width="100%" height="100%">
+  <defs>
+    <radialGradient id="rim" cx="38%" cy="30%" r="80%">
+      <stop offset="0%" stop-color="#6f97ff"/><stop offset="42%" stop-color="#3b6bff"/>
+      <stop offset="100%" stop-color="#1b2da8"/>
+    </radialGradient>
+    <radialGradient id="face" cx="50%" cy="38%" r="70%">
+      <stop offset="0%" stop-color="#141a28"/>
+      <stop offset="100%" stop-color="#080b13"/>
+    </radialGradient>
+    <radialGradient id="spec" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="rgba(255,255,255,.85)"/><stop offset="100%" stop-color="rgba(255,255,255,0)"/>
+    </radialGradient>
+    <filter id="soft"><feGaussianBlur stdDeviation="2.2"/></filter>
+  </defs>
+
+  <!-- rim -->
+  <circle cx="100" cy="100" r="92" fill="url(#rim)"/>
+  <!-- milled edge -->
+  <circle cx="100" cy="100" r="92" fill="none" stroke="rgba(255,255,255,.16)" stroke-width="2" stroke-dasharray="2 4"/>
+  <circle cx="100" cy="100" r="84" fill="none" stroke="rgba(0,0,0,.28)" stroke-width="2"/>
+  <!-- inset face -->
+  <circle cx="100" cy="100" r="79" fill="url(#face)"/>
+  <circle cx="100" cy="100" r="79" fill="none" stroke="rgba(255,255,255,.06)" stroke-width="1"/>
+  <!-- specular highlight on rim -->
+  <ellipse cx="68" cy="52" rx="34" ry="20" fill="url(#spec)" opacity=".55" filter="url(#soft)"/>
+
+  <!-- glows -->
+  <circle class="glow green" cx="100" cy="100" r="92" fill="none" stroke="#00c896" stroke-width="3" filter="url(#soft)"/>
+  <circle class="glow blue"  cx="100" cy="100" r="92" fill="none" stroke="#5b8cff" stroke-width="3" filter="url(#soft)"/>
+  <!-- thinking pulse ring -->
+  <circle class="ring" cx="100" cy="100" r="92" fill="none" stroke="#3b6bff" stroke-width="2.5"/>
+
+  <!-- EYES (aperture lenses) -->
+  ${eye(72)}
+  ${eye(128,'eye-r')}
+
+  <!-- MOUTHS (one shows per state) -->
+  <path class="mouth m-smile"     d="M82 132 Q100 146 118 132" fill="none" stroke="#cfe0ff" stroke-width="4.5" stroke-linecap="round"/>
+  <path class="mouth m-grin"      d="M78 130 Q100 154 122 130" fill="none" stroke="#aaffe2" stroke-width="5"   stroke-linecap="round"/>
+  <path class="mouth m-flatsmile" d="M84 134 Q100 142 116 134" fill="none" stroke="#cfe0ff" stroke-width="4.5" stroke-linecap="round"/>
+  <path class="mouth m-concentrate" d="M86 136 L114 136" fill="none" stroke="#cfe0ff" stroke-width="4.5" stroke-linecap="round"/>
+  <path class="mouth m-flat"      d="M85 135 Q100 131 115 135" fill="none" stroke="#9aa6bf" stroke-width="4.5" stroke-linecap="round"/>
+
+  <!-- pay sparks -->
+  <circle class="spark s1" cx="120" cy="100" r="5" fill="#00c896"/>
+  <circle class="spark s2" cx="120" cy="100" r="3.5" fill="#7affd2"/>
+  <circle class="spark s3" cx="120" cy="100" r="4" fill="#00c896"/>
+</svg>`}
+
+function eye(cx, cls=''){return `
+  <g class="eyeWrap ${cls}">
+    <g class="eyeG">
+      <!-- lens aperture iris -->
+      <circle class="iris" cx="${cx}" cy="92" r="15" fill="#0a0e18" stroke="#3b6bff" stroke-width="3"/>
+      <polygon class="iris" points="${aperture(cx,92,12)}" fill="none" stroke="#3b6bff" stroke-width="1.4" opacity=".55"/>
+      <circle class="pupil" cx="${cx}" cy="92" r="5.5" fill="#eaf1ff"/>
+      <circle cx="${cx-2}" cy="89" r="1.6" fill="#fff"/>
+    </g>
+    <!-- eyelid for narrowing -->
+    <rect class="lid" x="${cx-17}" y="75" width="34" height="34" rx="5" fill="#141a28"/>
+  </g>`}
+
+function aperture(cx,cy,r){let p=[];for(let i=0;i<6;i++){const a=Math.PI/2+i*Math.PI/3;p.push((cx+r*Math.cos(a)).toFixed(1)+','+(cy+r*Math.sin(a)).toFixed(1))}return p.join(' ')}
+
+const hero=document.getElementById('hero');
+hero.innerHTML=coinSVG();
+
+const COPY={
+  idle:["Idle","Calm, curious, alive. A struck Arc-blue coin with lens-aperture eyes and an arc for a mouth."],
+  thinking:["Thinking","Eyes scan up, the apertures spin, a pulse ripples out — it's querying live Arc data through its tools."],
+  paying:["Paying a builder","Eyes flick USDC-green, a wink, coins spark outward — it's sending a nanopayment to a verified builder it learned from."],
+  confident:["Confident / staking","Steady, narrowed eyes and a held glow — it's backing a claim with its own money."],
+  dontknow:["“I don’t know”","Eyes glance away, an honest flat arc. It would rather say this than guess — the brand in one expression."],
+};
+function setState(s){
+  hero.className='coin state-'+s;
+  document.getElementById('label').textContent=COPY[s][0];
+  document.getElementById('desc').textContent=COPY[s][1];
+  document.querySelectorAll('.btns button[data-s]').forEach(b=>b.classList.toggle('on',b.dataset.s===s));
+}
+document.querySelectorAll('.btns button[data-s]').forEach(b=>b.onclick=()=>{stopCycle();setState(b.dataset.s)});
+
+let cyc=null;const order=['idle','thinking','paying','confident','dontknow'];
+function stopCycle(){if(cyc){clearInterval(cyc);cyc=null;document.getElementById('cycle').textContent='Auto-cycle ▶'}}
+document.getElementById('cycle').onclick=function(){
+  if(cyc){stopCycle();return}
+  this.textContent='Stop ⏸';let i=0;setState(order[0]);
+  cyc=setInterval(()=>{i=(i+1)%order.length;setState(order[i])},2600);
+};
+
+// lineup — all expressions at once
+const lineup=document.getElementById('lineup');
+order.forEach(s=>{
+  const wrap=document.createElement('div');wrap.className='mini';
+  wrap.innerHTML=`<div class="coin state-${s}">${coinSVG()}</div><div class="cap">${COPY[s][0]}</div>`;
+  lineup.appendChild(wrap);
+});
+</script>
+</body>
+</html>

@@ -572,7 +572,7 @@ export default function AdminPage() {
     { id: "spotlight" as const, label: "Spotlight",        count: spotlight?.counts.pending ?? 0, urgent: !!spotlight && (spotlight.counts.pending > 0) },
   ]
   const manageTabs = [
-    { id: "ai"        as const, label: "ArcLens AI",      count: aiInsights?.gaps.total ?? 0, urgent: false },
+    { id: "ai"        as const, label: "Lens AI",         count: aiInsights?.gaps.total ?? 0, urgent: false },
     { id: "stats"     as const, label: "Stats Dashboard", count: 0,                urgent: false },
     { id: "projects"  as const, label: "All Projects",    count: projects.length,  urgent: false },
     { id: "locations" as const, label: "Locations",       count: missingLoc,       urgent: missingLoc > 0 },
@@ -681,7 +681,7 @@ export default function AdminPage() {
                : tab === "stats"            ? "Stats Dashboard"
                : tab === "trust"            ? "Trust — Alerts & Disputes"
                : tab === "tracked"          ? "Tracked Contracts"
-               : tab === "ai"               ? "ArcLens AI"
+               : tab === "ai"               ? "Lens AI"
                : tab === "spotlight"        ? "Ecosystem Spotlight"
                : "Location Mapping"}
             </div>

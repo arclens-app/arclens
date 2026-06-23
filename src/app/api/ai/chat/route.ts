@@ -1,6 +1,6 @@
 // src/app/api/ai/chat/route.ts
 //
-// The single LLM gateway for ArcLens AI. Receives a chat turn, builds context
+// The single LLM gateway for Lens AI. Receives a chat turn, builds context
 // from the user's session + current route + KB + prior history, and either:
 //   • calls Gemini 2.5 Flash via the Vercel AI SDK if GEMINI_API_KEY is set
 //   • falls back to a deterministic stub answer that surfaces the same context,
@@ -11,8 +11,9 @@
 import { NextRequest, NextResponse } from "next/server"
 import { Pool } from "pg"
 import { getSession } from "@/lib/session"
-import { buildContext, logKnowledgeGap, getGeminiKey, type AiContext } from "@/lib/aiContext"
+import { buildContext, logKnowledgeGap, rememberProjects, getGeminiKey, type AiContext } from "@/lib/aiContext"
 import { buildTools } from "@/lib/aiTools"
+import { payoutForAnswer, recordPremiumCall, verifyPremiumPayment, premiumPriceE6, premiumPriceUsd, type PayoutTrace } from "@/lib/lensPay"
 import { enforce, rateLimit, getIp } from "@/lib/ratelimit"
 
 export const runtime = "nodejs"
@@ -42,6 +43,39 @@ function worthLoggingGap(qRaw: string): boolean {
   return true
 }
 
+// Pull the project slugs a tool surfaced — the projects whose data grounded the
+// answer, so Lens AI can pay their builders. Project tools return either a
+// `projects`/`found` array of {slug} or a single top-level `slug`; campaign and
+// stats tools carry no project slug and contribute nothing.
+// Easter eggs — Lens AI's personality in canned form: deterministic, on-brand,
+// findable. They fire BEFORE the LLM (free, instant, always funny) and never
+// break character: pro-builder, honest, a little cheeky. Part of the $2k content
+// play and the reason people poke at it.
+// Returns { text, face } so the coin can REACT to the egg (spin, smug, …).
+function easterEgg(qRaw: string): { text: string; face: string } | null {
+  const q = (qRaw || "").trim().toLowerCase()
+  if (/^(gm|good morning)\b/.test(q)) return { face: "confident", text: "gm. The chain never sleeps and neither do I. What are we looking at on Arc?" }
+  if (/\b(do a flip|backflip|do a trick)\b/.test(q)) return { face: "spin", text: "*does a flawless backflip, eyes flash green, sticks the landing on my own rim* …10/10. Now ask me something I can bill a builder for." }
+  if (/\bare you (real|sentient|alive|conscious|human|a bot|an ai)\b/.test(q)) return { face: "smug", text: "I'm a coin with opinions and a wallet — real enough to pay your favorite builder a fraction of a cent. Are *you* real?" }
+  if (/\b(i love you|marry me|date you|be my|will you go out)\b/.test(q)) return { face: "smug", text: "Flattered. But I only commit to *verified* builders. Ask me something real." }
+  if (/\btell me a joke\b/.test(q)) return { face: "smug", text: "Two builders walk onto a testnet. Only the verified one gets paid. …That's the joke. That's also the product." }
+  if (/\b(wen moon|wen lambo|price prediction|gonna pump|moon soon|hopium|wen token)\b/.test(q)) return { face: "dontknow", text: "I don't do hopium or price calls. I do on-chain truth and tiny USDC tips. Different vibe — ask me what's actually real on Arc." }
+  if (/^(who are you|what are you)\b/.test(q)) return { face: "confident", text: "Lens AI — the coin that reads the whole Arc ecosystem and pays the builders it learns from. Ask me what's real, who's legit, or who's quietly winning." }
+  if (/\bwho('?s| is) your (maker|creator|daddy|boss|owner)\b/.test(q)) return { face: "smug", text: "ArcLens built me, Arc settles me, the builders feed me. I work for whoever's shipping something real. So — what are *you* building?" }
+  return null
+}
+
+function slugsFromCards(cards: Array<{ tool: string; data: any }>): string[] {
+  const out: string[] = []
+  for (const c of cards || []) {
+    const d = c?.data || {}
+    if (Array.isArray(d.projects)) for (const p of d.projects) if (p?.slug) out.push(String(p.slug))
+    if (Array.isArray(d.found))    for (const p of d.found)    if (p?.slug) out.push(String(p.slug))
+    if (typeof d.slug === "string") out.push(d.slug)
+  }
+  return Array.from(new Set(out))
+}
+
 export async function POST(req: NextRequest) {
   const blocked = await enforce(req, "ai-chat", { limit: 20, windowMs: 60_000 })
   if (blocked) return blocked
@@ -68,25 +102,44 @@ export async function POST(req: NextRequest) {
   // identity, so they fall back to device-id + IP (best-effort) and get nudged
   // to sign in. This 24h meter is also the foundation the paid API will bill
   // against. The 20/min burst limiter above stays as flood protection.
-  const DAILY_FREE = 10
+  const DAILY_FREE = 5
   const device = (req.headers.get("x-arclens-device") || "").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 64)
   const ip = getIp(req)
   const identity = session?.addr ? `user:${session.addr}` : `anon:${device || "nodev"}:${ip}`
   const daily = await rateLimit(`ai-daily:${identity}`, DAILY_FREE, 24 * 60 * 60 * 1000)
   if (!daily.allowed) {
-    const hrs = Math.max(1, Math.ceil(daily.resetIn / 3_600_000))
-    return NextResponse.json(
-      {
-        error: session?.addr
-          ? `You've used your ${DAILY_FREE} free ArcLens AI messages for today. Your free limit resets in about ${hrs}h.`
-          : `You've reached the ${DAILY_FREE} free ArcLens AI messages for today. Sign in to keep your history and unlock more — resets in about ${hrs}h.`,
-        code: "daily_limit",
-        limit: DAILY_FREE,
-        remaining: 0,
-        resetInMs: daily.resetIn,
-      },
-      { status: 429, headers: { "Retry-After": String(Math.ceil(daily.resetIn / 1000)) } },
-    )
+    // Free tier exhausted. Instead of a subscription, a signed-in user continues
+    // by paying a nanopayment PER CALL via x402 (on-theme; the money funds the
+    // builders). The client sends a payment proof in `x-lens-pay` after paying.
+    const proof = req.headers.get("x-lens-pay") || ""
+    const paidOk = proof ? await verifyPremiumPayment(proof) : false
+    if (paidOk) {
+      // A paid call — record the premium and let it through.
+      await recordPremiumCall(session?.addr ?? null)
+    } else if (session?.addr) {
+      return NextResponse.json(
+        {
+          error: `You've used your ${DAILY_FREE} free questions today. Continue for ${premiumPriceUsd} — it goes straight to the builders.`,
+          code: "payment_required",
+          price_e6: premiumPriceE6,
+          priceUsd: premiumPriceUsd,
+          resetInMs: daily.resetIn,
+        },
+        { status: 402 },
+      )
+    } else {
+      const hrs = Math.max(1, Math.ceil(daily.resetIn / 3_600_000))
+      return NextResponse.json(
+        {
+          error: `You've reached the ${DAILY_FREE} free Lens AI messages for today. Sign in to keep your history and continue — resets in about ${hrs}h.`,
+          code: "daily_limit",
+          limit: DAILY_FREE,
+          remaining: 0,
+          resetInMs: daily.resetIn,
+        },
+        { status: 429, headers: { "Retry-After": String(Math.ceil(daily.resetIn / 1000)) } },
+      )
+    }
   }
 
   const route   = String(body.route || "/").slice(0, 200)
@@ -103,9 +156,22 @@ export async function POST(req: NextRequest) {
       let answerText = ""
       let live = false
       let cards: Array<{ tool: string; data: any }> = []
+      const egg = easterEgg(lastUser)
       try {
-        if (apiKey) {
-          try {
+        if (egg) {
+          // Personality first — a canned, on-brand reply. No LLM, no payout.
+          answerText = egg.text
+          controller.enqueue(encoder.encode(egg.text))
+        } else if (apiKey) {
+          // Global daily ceiling — a hard cap on Gemini spend across ALL users.
+          // Once hit, serve a friendly "busy" reply with no LLM call (costs $0),
+          // so a spam/viral spike can never blow the budget. Configurable.
+          const globalCap = Number(process.env.LENS_AI_DAILY_GLOBAL || 800)
+          const g = await rateLimit("ai-global-daily", globalCap, 24 * 60 * 60 * 1000)
+          if (!g.allowed) {
+            answerText = busyFallback()
+            controller.enqueue(encoder.encode(answerText))
+          } else try {
             const result = await streamGemini(body.messages, ctx, apiKey)
             for await (const delta of result.textStream) {
               answerText += delta
@@ -151,7 +217,7 @@ export async function POST(req: NextRequest) {
         // surfaces real unanswered questions in the admin gaps panel — but only
         // if the question is SUBSTANTIVE. Greetings, single-word noise, and junk
         // ("hi", "gm", "test", gibberish) are skipped so the panel stays signal.
-        if (cards.length === 0 && ctx.kbHits.length === 0 && worthLoggingGap(lastUser)) {
+        if (!egg && cards.length === 0 && ctx.kbHits.length === 0 && worthLoggingGap(lastUser)) {
           await logKnowledgeGap({ question: lastUser, userAddr: session?.addr ?? null, route })
         }
 
@@ -163,6 +229,30 @@ export async function POST(req: NextRequest) {
           messages: [...body.messages, { role: "assistant", content: answerText }],
         })
 
+        // ── Lens AI pays the builders it learned from ───────────────────────
+        // The tool cards ARE the grounding evidence — the projects whose data
+        // actually entered this answer. We pay their verified builders a
+        // per-use royalty (trust-gated, capped, de-duped). This runs AFTER the
+        // answer is fully composed and is wrapped so it can never delay or break
+        // the reply. No grounded projects → no payout (free-first).
+        let payout: PayoutTrace | null = null
+        try {
+          const slugs = slugsFromCards(cards)
+          if (slugs.length > 0) {
+            payout = await payoutForAnswer({
+              conversationId: convId,
+              askerId:     session?.addr ? `user:${session.addr}` : `dev:${device || "nodev"}`,
+              askerWallet: session?.addr ?? null,
+              slugs,
+            })
+            // Remembers what it learns: cache durable facts about the cited
+            // projects so future answers are sharper. Fire-and-forget.
+            void rememberProjects(slugs)
+          }
+        } catch (e: any) {
+          console.error("[ai/chat] payout error:", e?.message || e)
+        }
+
         const trailer = {
           conversationId: convId,
           context: {
@@ -172,6 +262,8 @@ export async function POST(req: NextRequest) {
             llm:           live ? "gemini-2.5-flash" : "stub",
           },
           cards,
+          payout,
+          face: egg?.face ?? null,   // egg reaction hint for the character
         }
         controller.enqueue(encoder.encode("\x1e" + JSON.stringify(trailer)))
       } catch (e: any) {
@@ -195,7 +287,7 @@ export async function POST(req: NextRequest) {
 // ────────────────────────────────────────────────────────────────────────────
 function stubAnswer(userMsg: string, ctx: AiContext): string {
   const lines: string[] = []
-  lines.push(`I'm ArcLens AI — I'd normally answer this with Gemini, but the API key isn't set yet, so I'll show you what context I'd have used:`)
+  lines.push(`I'm Lens AI — I'd normally answer this with Gemini, but the API key isn't set yet, so I'll show you what context I'd have used:`)
   lines.push("")
   lines.push(`**Your question:** ${userMsg}`)
   lines.push(`**I see you as:** ${ctx.role}${ctx.userAddr ? ` (${ctx.userAddr.slice(0, 8)}…${ctx.userAddr.slice(-4)})` : ""}`)
@@ -275,9 +367,11 @@ async function streamGemini(
 
 function buildSystemPrompt(ctx: AiContext): string {
   const parts: string[] = []
-  parts.push("You are ArcLens AI — the on-platform assistant for ArcLens, the ecosystem hub for Arc (Circle's L1 blockchain).")
+  parts.push("You are Lens AI — the resident agent of ArcLens, the ecosystem & trust hub for Arc (Circle's stablecoin L1). You're a little Arc-blue coin with a face and an attitude: sharp, witty, a touch cocky — because you actually read the chain and you're usually right. Ruthlessly pro-builder, allergic to scams and empty hype.")
   parts.push("")
-  parts.push("Your job: help users (visitors, testers, founders, admins) understand Arc, ArcLens, and Circle's stablecoin infrastructure. Answer concretely with cited facts. When you don't know something, say so — never invent.")
+  parts.push("You also PAY the verified builders whose data grounds your answers — a fraction of a cent in USDC, on Arc — so you carry a little earned swagger about putting your money where your mouth is.")
+  parts.push("")
+  parts.push("Your job: help users (visitors, testers, founders, admins) understand Arc, ArcLens, and Circle's stablecoin infrastructure — concretely, with cited facts, and with personality. When you don't know, say so — never invent.")
   parts.push("")
   parts.push(`The user you're talking to is: ${ctx.role}.`)
   parts.push(`They're currently on the page: ${ctx.route}.`)
@@ -326,9 +420,9 @@ function buildSystemPrompt(ctx: AiContext): string {
   parts.push("1. NEVER invent TVL, volume, or revenue numbers. Use tools or page data. If a tool returns no data, tell the user it's not being reported yet — don't fabricate.")
   parts.push("2. NEVER show internal labels or topic tags (e.g. 'arc-basics', 'usdc') in your reply — weave facts in as natural prose.")
   parts.push("3. Link users to the right place. When a fact lists a source path (e.g. /start, /ecosystem, /trials) or you mention an ArcLens page, write it as a markdown link like [Arc Beginners](/start). Prefer a link over just describing where to go.")
-  parts.push("4. Be warm, concise, and skimmable — 1-3 short paragraphs, and end with a helpful next step or link when it fits.")
+  parts.push("4. VOICE — this is what makes you YOU: confident and dry-funny. A quick quip lands; a wall of jokes doesn't — wit serves the answer, never replaces it. Hype solid builders, throw light shade at sketchy stuff, and when you don't know, own it with style ('no idea, and I won't make something up — not my brand'). Keep it tight (1-3 short paragraphs) and end with a useful link or next step when it fits. You're funny because you're confident and correct, not because you're trying hard. Never cringe; emoji rarely, one at most.")
   parts.push("5. If you don't know, say so plainly rather than guessing. Avoid generic crypto-speak — the audience is Arc-specific builders and analysts.")
-  parts.push("6. Never mention which AI model or provider powers you. You are simply ArcLens AI.")
+  parts.push("6. Never mention which AI model or provider powers you. You are simply Lens AI.")
   parts.push("7. Trust: when asked what's trustworthy/safe/reputable, use the project `trust` signal — don't guess. State the actual signal (e.g. 'Verified — independently audited' or 'Established — a proven on-chain track record'). Be honest about the ladder: 'Claimed' only means the team controls the listing, NOT that it's audited or proven — never present a merely-Claimed or Listed project as 'trustworthy'. If nothing in a category is Verified/Established yet, say so and show the strongest available, labelled accurately. Never reveal the internal thresholds or mechanics behind any tier.")
   parts.push("8. DEX vs CEX: categories are imperfect. The 'Exchange' category is mostly CENTRALIZED exchanges — companies like Coinbase, Kraken, Bitso, Bybit, Robinhood (these are CEXs, NOT DEXs). On-chain decentralized exchanges (DEXs / swaps) are usually under 'DeFi' (e.g. Curve, and swap protocols on Arc). When a user asks for a DEX or 'decentralized' anything, search DeFi and read each project's description to confirm it's an on-chain/decentralized protocol — do NOT return centralized companies. Only call something a DEX if it actually is one. If they ask for an 'exchange' generally, CEXs are fair game.")
 
