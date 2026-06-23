@@ -35,14 +35,18 @@ const BASE_E6        = Number(process.env.LENS_PAY_BASE_E6        || 500)       
 const PER_ANSWER_CAP = Number(process.env.LENS_PAY_ANSWER_CAP_E6  || 10_000)    // $0.01 max per answer
 const PER_DAY_CAP    = Number(process.env.LENS_PAY_DAY_CAP_E6     || 1_000_000) // $1.00 max per day
 const DEDUP_HOURS    = Number(process.env.LENS_PAY_DEDUP_HOURS    || 24)        // re-pay window per (asker, builder)
+// Never pay these — not real builders (e.g. "arc" is the chain itself).
+const PAYOUT_EXCLUDE = new Set((process.env.LENS_PAYOUT_EXCLUDE || "arc").split(",").map(s => s.trim().toLowerCase()).filter(Boolean))
 
 // Trust tier → stake weight. Higher trust = more the agent will pay for that
 // source. Baseline (Listed / Claimed) earns nothing — trust-gated.
+// Earn rates by ARC-NATIVE builder signal. Infra partners / the chain are NOT
+// here — they don't earn. A team that claimed their Arc project earns the base;
+// ArcLens-verified / established earn more.
 const TIER_WEIGHT: Record<string, number> = {
-  official:   4,   // Arc Official
-  partner:    3,   // Arc Partner
-  verified:   2,   // Verified
-  established: 1.5, // Established (earned on-chain track record)
+  verified:    2,
+  established: 1.5,
+  claimed:     1,
 }
 
 // ── Circle App Kit payout config ────────────────────────────────────────────
@@ -52,13 +56,16 @@ const TIER_WEIGHT: Record<string, number> = {
 // goes live with no new setup. Set LENS_WALLET_ADDRESS to use a dedicated wallet.
 const CIRCLE_API_KEY = process.env.CIRCLE_API_KEY || ""
 const CIRCLE_ENTITY  = process.env.CIRCLE_ENTITY_SECRET || ""
+const LENS_WALLET_ID = process.env.LENS_WALLET_ID || ""              // Lens AI's own dev-controlled wallet id
 const PAYOUT_ADDR    = process.env.LENS_WALLET_ADDRESS || process.env.PAYOUT_WALLET_ADDRESS || ""
 const PAYOUT_PRIVKEY = process.env.PAYOUT_WALLET_PRIVATE_KEY || ""
+const USDC_TOKEN_ID  = process.env.CIRCLE_USDC_TOKEN_ID || ""        // Circle USDC token id on Arc
+const USDC_ADDRESS   = process.env.USDC_ARC_ADDRESS || ""            // …or the USDC contract address on Arc
 
-// Live when the Circle dev-controlled wallet creds are present (or a payout
-// private-key fallback). Otherwise we simulate.
+// Live when the Circle dev-controlled wallet creds are present (own wallet id or
+// a payout address), or a payout private-key fallback. Otherwise we simulate.
 export function payoutsLive(): boolean {
-  return !!((CIRCLE_API_KEY && CIRCLE_ENTITY && PAYOUT_ADDR) || PAYOUT_PRIVKEY)
+  return !!((CIRCLE_API_KEY && CIRCLE_ENTITY && (LENS_WALLET_ID || PAYOUT_ADDR)) || PAYOUT_PRIVKEY)
 }
 
 // ── Premium: pay-per-call (NOT a subscription) ──────────────────────────────
@@ -99,7 +106,7 @@ export interface PaidBuilder {
   trust: string
   amount_e6: number
   amountUsd: string
-  status: "complete" | "pending" | "simulated"
+  status: "complete" | "pending" | "simulated" | "accrued"
   txHash: string | null
 }
 export interface SkippedBuilder { name: string; slug: string; reason: string }
@@ -107,6 +114,7 @@ export interface PayoutTrace {
   live: boolean
   considered: number
   paid: PaidBuilder[]
+  accrued: PaidBuilder[]   // trusted builders with no wallet yet — credited, pending claim
   skipped: SkippedBuilder[]
   total_e6: number
   totalUsd: string
@@ -218,18 +226,43 @@ export async function payoutForAnswer(args: {
   }
 
   const paid: PaidBuilder[] = []
+  const accrued: PaidBuilder[] = []
   const skipped: SkippedBuilder[] = []
   let dayRemaining = Math.max(0, PER_DAY_CAP - (await daySpentE6()))
   let answerSpent = 0
 
   for (const p of r.rows) {
-    const { key, label } = tierOf(p)
-    if (!p.wallet)             { skipped.push({ name: p.name, slug: p.slug, reason: "no payout wallet on file" }); continue }
-    if (p.wallet === asker)    { skipped.push({ name: p.name, slug: p.slug, reason: "asker's own project" }); continue }
-    if (!key)                  { skipped.push({ name: p.name, slug: p.slug, reason: p.hard_risk ? "risk-flagged" : `not trust-gated (${label})` }); continue }
-    if (recent.has(p.wallet))  { skipped.push({ name: p.name, slug: p.slug, reason: "already rewarded for you recently" }); continue }
+    if (PAYOUT_EXCLUDE.has(String(p.slug || "").toLowerCase())) { skipped.push({ name: p.name, slug: p.slug, reason: "excluded — the chain, not a builder" }); continue }
+    const { label } = tierOf(p)
+    // STANDARD: only ARC-NATIVE builders earn — a team that claimed their Arc
+    // project, or one ArcLens verified/established. Infra partners (admin-added,
+    // e.g. MetaMask) and the chain itself are NOT builders and earn nothing.
+    const earnKey =
+      p.hard_risk ? null :
+      p.trust_level === "verified" ? "verified" :
+      p.established ? "established" :
+      p.wallet ? "claimed" : null
+    if (!earnKey)                      { skipped.push({ name: p.name, slug: p.slug, reason: p.hard_risk ? "risk-flagged" : "not an Arc-native builder" }); continue }
+    if (p.wallet && p.wallet === asker){ skipped.push({ name: p.name, slug: p.slug, reason: "asker's own project" }); continue }
 
-    const amount = Math.round(BASE_E6 * (TIER_WEIGHT[key] || 1))
+    const amount = Math.round(BASE_E6 * (TIER_WEIGHT[earnKey] || 1))
+    const dedupKey = p.wallet || `unclaimed:${p.slug}`
+    if (recent.has(dedupKey))          { skipped.push({ name: p.name, slug: p.slug, reason: "already rewarded for you recently" }); continue }
+
+    // Trusted but NO wallet yet → ACCRUE (pending claim). No money moves, no
+    // budget consumed; the builder collects when they connect a wallet.
+    if (!p.wallet) {
+      await pool.query(
+        `INSERT INTO lens_payouts (conversation_id, asker_id, builder_wallet, project_slug, project_name, trust_label, amount_e6, status, reason)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,'accrued','accrued — pending claim')`,
+        [args.conversationId, askerId, dedupKey, p.slug, p.name, label, amount],
+      )
+      recent.add(dedupKey)
+      accrued.push({ name: p.name, slug: p.slug, trust: label, amount_e6: amount, amountUsd: fmtUsd(amount), status: "accrued", txHash: null })
+      continue
+    }
+
+    // Trusted WITH a wallet → real on-chain payout (USD caps apply).
     if (answerSpent + amount > PER_ANSWER_CAP) { skipped.push({ name: p.name, slug: p.slug, reason: "per-answer budget reached" }); continue }
     if (amount > dayRemaining)                 { skipped.push({ name: p.name, slug: p.slug, reason: "daily budget reached" }); continue }
 
@@ -260,7 +293,7 @@ export async function payoutForAnswer(args: {
 
     answerSpent += amount
     dayRemaining -= amount
-    recent.add(p.wallet)
+    recent.add(dedupKey)
     paid.push({ name: p.name, slug: p.slug, trust: label, amount_e6: amount, amountUsd: fmtUsd(amount), status, txHash })
   }
 
@@ -268,6 +301,7 @@ export async function payoutForAnswer(args: {
     live,
     considered: r.rows.length,
     paid,
+    accrued,
     skipped,
     total_e6: answerSpent,
     totalUsd: fmtUsd(answerSpent),
@@ -279,12 +313,37 @@ export async function payoutForAnswer(args: {
 // Dynamic import so the build never breaks if the SDK isn't installed yet, and
 // so simulation mode has zero dependency on Circle.
 async function sendUsdc(to: string, amountE6: number): Promise<{ txHash: string | null; txId: string; status: "complete" | "pending" }> {
-  // Reuses the exact rail that pays campaign rewards: Circle App Kit + the
-  // dev-controlled wallets adapter (viem private-key adapter as fallback),
-  // sending USDC on Arc. Amount is a human-decimal string ("0.001").
+  const amount = e6ToDecimal(amountE6)
+
+  // PRIMARY — the textbook Circle Developer-Controlled Wallets flow:
+  // initiate the client, then createTransaction FROM Lens AI's own wallet
+  // (walletId). This is the canonical, documented way Circle expects.
+  if (CIRCLE_API_KEY && CIRCLE_ENTITY && LENS_WALLET_ID) {
+    try {
+      const { initiateDeveloperControlledWalletsClient } = await import("@circle-fin/developer-controlled-wallets")
+      const client = initiateDeveloperControlledWalletsClient({ apiKey: CIRCLE_API_KEY, entitySecret: CIRCLE_ENTITY })
+      const tx: any = await client.createTransaction({
+        walletId: LENS_WALLET_ID,
+        ...(USDC_TOKEN_ID ? { tokenId: USDC_TOKEN_ID } : { tokenAddress: USDC_ADDRESS, blockchain: "ARC-TESTNET" }),
+        destinationAddress: to,
+        amounts: [amount],
+        fee: { type: "level", config: { feeLevel: "MEDIUM" } },
+        idempotencyKey: (globalThis.crypto as any).randomUUID(),
+      } as any)
+      const txId = tx?.data?.id || ""
+      let txHash: string | null = null
+      try { const g: any = await client.getTransaction({ id: txId }); txHash = g?.data?.transaction?.txHash || null } catch { /* hash via webhook */ }
+      return { txHash, txId, status: txHash ? "complete" : "pending" }
+    } catch (e: any) {
+      console.error("[lensPay] dev-controlled send failed, falling back to App Kit:", e?.message || e)
+      // fall through to the App Kit path below
+    }
+  }
+
+  // SAFETY NET — Circle App Kit + the dev-controlled wallets adapter (the proven
+  // campaign-rewards rail; resolves USDC by name). viem private-key as last resort.
   const { AppKit } = await import("@circle-fin/app-kit")
   const kit = new AppKit()
-  const amount = e6ToDecimal(amountE6)
   let result: any
   if (CIRCLE_API_KEY && CIRCLE_ENTITY && PAYOUT_ADDR) {
     const { createCircleWalletsAdapter } = await import("@circle-fin/adapter-circle-wallets")
@@ -301,29 +360,39 @@ async function sendUsdc(to: string, amountE6: number): Promise<{ txHash: string 
 
 // ── Public traction surface ─────────────────────────────────────────────────
 export async function getPayoutStats(): Promise<{
-  total_paid_e6: number
-  totalPaidUsd: string
-  payouts: number
-  builders_paid: number
-  recent: Array<{ project_name: string; project_slug: string; trust_label: string; amountUsd: string; tx_hash: string | null; created_at: string }>
+  total_paid_e6: number; totalPaidUsd: string; payouts: number; builders_paid: number
+  credited_e6: number; creditedUsd: string; builders_credited: number; builders_total: number
+  recent: Array<{ project_name: string; project_slug: string; amountUsd: string; kind: string; tx_hash: string | null; created_at: string }>
 }> {
   await tableReady
   const [agg, recent] = await Promise.all([
-    pool.query(`SELECT COALESCE(SUM(amount_e6),0)::bigint total, COUNT(*)::int n, COUNT(DISTINCT builder_wallet)::int b
-                  FROM lens_payouts WHERE status IN ('complete','pending','simulated')`),
-    pool.query(`SELECT project_name, project_slug, trust_label, amount_e6, tx_hash, created_at::text
-                  FROM lens_payouts WHERE status IN ('complete','pending','simulated')
-                 ORDER BY created_at DESC LIMIT 12`),
+    pool.query(`SELECT
+        COALESCE(SUM(amount_e6) FILTER (WHERE status IN ('complete','pending','simulated')),0)::bigint paid_total,
+        COUNT(*) FILTER (WHERE status IN ('complete','pending','simulated'))::int payouts,
+        COUNT(DISTINCT builder_wallet) FILTER (WHERE status IN ('complete','pending','simulated'))::int builders_paid,
+        COALESCE(SUM(amount_e6) FILTER (WHERE status='accrued'),0)::bigint credited_total,
+        COUNT(DISTINCT builder_wallet) FILTER (WHERE status='accrued')::int builders_credited,
+        COUNT(DISTINCT project_slug)::int builders_total
+      FROM lens_payouts WHERE status IN ('complete','pending','simulated','accrued')`),
+    pool.query(`SELECT project_name, project_slug, amount_e6, tx_hash, status, created_at::text
+                  FROM lens_payouts WHERE status IN ('complete','pending','simulated','accrued')
+                 ORDER BY created_at DESC LIMIT 14`),
   ])
-  const total = Number(agg.rows[0]?.total || 0)
+  const a = agg.rows[0] || {}
+  const paidTotal = Number(a.paid_total || 0), creditedTotal = Number(a.credited_total || 0)
   return {
-    total_paid_e6: total,
-    totalPaidUsd: fmtUsd(total),
-    payouts: Number(agg.rows[0]?.n || 0),
-    builders_paid: Number(agg.rows[0]?.b || 0),
+    total_paid_e6: paidTotal,
+    totalPaidUsd: fmtUsd(paidTotal),
+    payouts: Number(a.payouts || 0),
+    builders_paid: Number(a.builders_paid || 0),
+    credited_e6: creditedTotal,
+    creditedUsd: fmtUsd(creditedTotal),
+    builders_credited: Number(a.builders_credited || 0),
+    builders_total: Number(a.builders_total || 0),
     recent: recent.rows.map(x => ({
-      project_name: x.project_name, project_slug: x.project_slug, trust_label: x.trust_label,
-      amountUsd: fmtUsd(Number(x.amount_e6)), tx_hash: x.tx_hash, created_at: x.created_at,
+      project_name: x.project_name, project_slug: x.project_slug,
+      amountUsd: fmtUsd(Number(x.amount_e6)), kind: x.status === "accrued" ? "credited" : "paid",
+      tx_hash: x.tx_hash, created_at: x.created_at,
     })),
   }
 }
@@ -331,22 +400,24 @@ export async function getPayoutStats(): Promise<{
 // The public "most-cited builders" board — projects ranked by what Lens AI has
 // paid them, i.e. how much their data has genuinely informed the ecosystem.
 export async function getBuilderBoard(limit = 25): Promise<Array<{
-  rank: number; slug: string; name: string; trust: string; cites: number; earned_e6: number; earnedUsd: string
+  rank: number; slug: string; name: string; trust: string; logo: string | null; cites: number; earned_e6: number; earnedUsd: string; unclaimed: boolean
 }>> {
   await tableReady
   const r = await pool.query(
-    `SELECT project_slug, MAX(project_name) AS name, MAX(trust_label) AS trust,
-            COUNT(*)::int AS cites, COALESCE(SUM(amount_e6),0)::bigint AS earned
-       FROM lens_payouts
-      WHERE status IN ('complete','pending','simulated') AND project_slug IS NOT NULL
-      GROUP BY project_slug
+    `SELECT lp.project_slug, MAX(lp.project_name) AS name, MAX(lp.trust_label) AS trust,
+            MAX(p.logo_url) AS logo, COUNT(*)::int AS cites, COALESCE(SUM(lp.amount_e6),0)::bigint AS earned,
+            BOOL_AND(lp.status = 'accrued') AS unclaimed
+       FROM lens_payouts lp
+       LEFT JOIN projects p ON p.slug = lp.project_slug
+      WHERE lp.status IN ('complete','pending','simulated','accrued') AND lp.project_slug IS NOT NULL
+      GROUP BY lp.project_slug
       ORDER BY earned DESC, cites DESC
       LIMIT $1`,
     [Math.min(Math.max(limit, 1), 100)],
   )
   return r.rows.map((x, i) => ({
-    rank: i + 1, slug: x.project_slug, name: x.name, trust: x.trust,
-    cites: Number(x.cites), earned_e6: Number(x.earned), earnedUsd: fmtUsd(Number(x.earned)),
+    rank: i + 1, slug: x.project_slug, name: x.name, trust: x.trust, logo: x.logo || null,
+    cites: Number(x.cites), earned_e6: Number(x.earned), earnedUsd: fmtUsd(Number(x.earned)), unclaimed: !!x.unclaimed,
   }))
 }
 

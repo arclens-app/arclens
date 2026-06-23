@@ -22,8 +22,8 @@ interface Msg {
 interface DataCard { tool: string; data: any }
 
 // The agent's payout trace for an answer — who it paid, who it skipped, why.
-interface PaidBuilder { name: string; slug: string; trust: string; amount_e6: number; amountUsd: string; status: "complete" | "pending" | "simulated"; txHash: string | null }
-interface PayoutTrace { live: boolean; considered: number; paid: PaidBuilder[]; skipped: Array<{ name: string; slug: string; reason: string }>; total_e6: number; totalUsd: string; day_remaining_e6: number }
+interface PaidBuilder { name: string; slug: string; trust: string; amount_e6: number; amountUsd: string; status: "complete" | "pending" | "simulated" | "accrued"; txHash: string | null }
+interface PayoutTrace { live: boolean; considered: number; paid: PaidBuilder[]; accrued: PaidBuilder[]; skipped: Array<{ name: string; slug: string; reason: string }>; total_e6: number; totalUsd: string; day_remaining_e6: number }
 
 interface ChatResponse {
   message: Msg
@@ -377,34 +377,42 @@ function renderCards(cards: DataCard[]): React.ReactNode {
 // The payout receipt — Lens AI paying the builders whose data grounded this
 // answer. The visible-agency moment: real amounts, trust tiers, on-chain links.
 function renderPayout(p: PayoutTrace): React.ReactNode {
+  const rows = [...p.paid, ...p.accrued]
+  const paidN = p.paid.length, credN = p.accrued.length
+  const headline = paidN > 0
+    ? `Lens AI paid ${paidN} builder${paidN === 1 ? "" : "s"}${credN > 0 ? ` · credited ${credN} more` : ""}`
+    : `Lens AI credited ${credN} builder${credN === 1 ? "" : "s"} — pending claim`
   return (
     <div style={{ marginTop: "12px", background: SURF2, border: `1px solid ${BDR}`, borderRadius: "14px", overflow: "hidden" }}>
       <div style={{ display: "flex", alignItems: "center", gap: "9px", padding: "11px 14px", borderBottom: `1px solid ${BDR}` }}>
         <span style={{ width: 18, height: 18, borderRadius: "50%", background: `radial-gradient(circle at 35% 30%, #2fe6b0, ${USDC})`, boxShadow: `0 0 8px ${USDC}99`, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#04221a", fontSize: "10px", fontWeight: 800 }}>$</span>
-        <span style={{ fontSize: "12.5px", fontWeight: 600, color: T1 }}>Lens AI paid {p.paid.length} builder{p.paid.length === 1 ? "" : "s"} for this</span>
+        <span style={{ fontSize: "12.5px", fontWeight: 600, color: T1 }}>{headline}</span>
         <span style={{ flex: 1 }} />
-        <span style={{ fontFamily: MONO, fontSize: "13px", fontWeight: 700, color: USDC }}>{p.totalUsd}</span>
+        {paidN > 0 && <span style={{ fontFamily: MONO, fontSize: "13px", fontWeight: 700, color: USDC }}>{p.totalUsd}</span>}
       </div>
-      {p.paid.map((b, i) => (
-        <a key={i} href={b.txHash ? `/tx/${b.txHash}` : `/ecosystem/${b.slug}`}
-           style={{ display: "flex", alignItems: "center", gap: "11px", padding: "10px 14px", textDecoration: "none", color: T1, borderTop: i === 0 ? "none" : `1px solid ${BDR}` }}>
-          <TokenAvatar name={b.name} />
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: "12.5px", fontWeight: 600, display: "flex", alignItems: "center", gap: "6px" }}>
-              <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{b.name}</span>
-              <TrustChip t={b.trust} />
+      {rows.map((b, i) => {
+        const accruedRow = b.status === "accrued"
+        const c = accruedRow ? "#7aa0ff" : USDC
+        return (
+          <a key={i} href={b.txHash ? `/tx/${b.txHash}` : `/ecosystem/${b.slug}`}
+             style={{ display: "flex", alignItems: "center", gap: "11px", padding: "10px 14px", textDecoration: "none", color: T1, borderTop: i === 0 ? "none" : `1px solid ${BDR}` }}>
+            <TokenAvatar name={b.name} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: "12.5px", fontWeight: 600, display: "flex", alignItems: "center", gap: "6px" }}>
+                <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{b.name}</span>
+                <TrustChip t={b.trust} />
+              </div>
+              <div style={{ fontSize: "10px", color: T3 }}>
+                {accruedRow ? "credited · pending claim" : b.status === "simulated" ? "simulated" : b.status === "pending" ? "settling on Arc…" : "paid on Arc"}
+              </div>
             </div>
-            <div style={{ fontSize: "10px", color: T3 }}>
-              {b.status === "simulated" ? "simulated" : b.status === "pending" ? "settling on Arc…" : "paid on Arc"}
-            </div>
-          </div>
-          <span style={{ fontFamily: MONO, fontSize: "12.5px", fontWeight: 700, color: USDC, flexShrink: 0 }}>{b.amountUsd}</span>
-          {b.txHash && <span style={{ color: ARC, fontSize: "12px", flexShrink: 0 }}>↗</span>}
-        </a>
-      ))}
+            <span style={{ fontFamily: MONO, fontSize: "12.5px", fontWeight: 700, color: c, flexShrink: 0 }}>{b.amountUsd}</span>
+            {b.txHash && <span style={{ color: ARC, fontSize: "12px", flexShrink: 0 }}>↗</span>}
+          </a>
+        )
+      })}
       <div style={{ padding: "8px 14px", fontFamily: MONO, fontSize: "9px", color: T3, letterSpacing: "0.03em", borderTop: `1px solid ${BDR}` }}>
         {p.live ? "settled in USDC on Arc" : "simulation · goes live on-chain once the agent wallet is funded"}
-        {p.considered > p.paid.length ? ` · evaluated ${p.considered}, trust-gated to ${p.paid.length}` : ""}
       </div>
     </div>
   )
@@ -836,7 +844,7 @@ export default function ArcLensAI() {
                           <>
                             {renderAnswer(t.answer)}
                             {t.cards && t.cards.length > 0 && renderCards(t.cards)}
-                            {t.payout && t.payout.paid.length > 0 && renderPayout(t.payout)}
+                            {t.payout && (t.payout.paid.length > 0 || t.payout.accrued.length > 0) && renderPayout(t.payout)}
                             {t.pay && (
                               <div style={{ marginTop: "12px", display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
                                 <button onClick={() => send(t.query, { pay: true })}
