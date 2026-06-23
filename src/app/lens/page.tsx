@@ -16,9 +16,9 @@ const HAIR = "var(--bdr, rgba(255,255,255,0.08))"
 const SANS = "'Geist', ui-sans-serif, system-ui, -apple-system, sans-serif"
 const MONO = "'DM Mono', ui-monospace, SFMono-Regular, Menlo, monospace"
 
-interface BoardRow { rank: number; slug: string; name: string; trust: string; cites: number; earnedUsd: string }
-interface Recent { project_name: string; project_slug: string; created_at: string }
-interface Board { live: boolean; totalPaidUsd: string; payouts: number; builders_paid: number; recent: Recent[]; board: BoardRow[] }
+interface BoardRow { rank: number; slug: string; name: string; trust: string; logo: string | null; cites: number; earnedUsd: string; unclaimed: boolean }
+interface Recent { project_name: string; project_slug: string; amountUsd: string; kind: string; created_at: string }
+interface Board { live: boolean; totalPaidUsd: string; payouts: number; builders_paid: number; credited_e6: number; creditedUsd: string; builders_credited: number; builders_total: number; recent: Recent[]; board: BoardRow[] }
 
 const PAL = ["#3b6bff", "#00b87a", "#a855f7", "#e0883b", "#2775ca", "#e0506e", "#22b8cf", "#f08c00"]
 function chipTone(t?: string) {
@@ -36,7 +36,12 @@ function ago(ts: string) {
   const s = Math.max(0, Math.floor((Date.now() - new Date(ts).getTime()) / 1000))
   if (s < 60) return s + "s ago"; if (s < 3600) return Math.floor(s / 60) + "m ago"; if (s < 86400) return Math.floor(s / 3600) + "h ago"; return Math.floor(s / 86400) + "d ago"
 }
-function Avatar({ name, size = 36 }: { name: string; size?: number }) {
+function Avatar({ name, logo, size = 36 }: { name: string; logo?: string | null; size?: number }) {
+  const [err, setErr] = useState(false)
+  if (logo && !err) {
+    const src = /\.blob\.vercel-storage\.com\//i.test(logo) ? logo : `/api/image-proxy?url=${encodeURIComponent(logo)}`
+    return <img src={src} alt="" onError={() => setErr(true)} style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", flexShrink: 0, background: "#0e1224", border: `1px solid ${HAIR}` }} />
+  }
   const c = PAL[(name?.charCodeAt(0) || 0) % PAL.length]
   return <span style={{ width: size, height: size, borderRadius: "50%", flexShrink: 0, background: `linear-gradient(135deg, ${c}, ${c}aa)`, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 800, fontSize: size * 0.42 }}>{(name || "?")[0].toUpperCase()}</span>
 }
@@ -93,8 +98,9 @@ export default function LensShowcase() {
               {d?.totalPaidUsd ?? "$0.00"}
             </div>
             <div style={{ fontSize: 15, color: T2, marginTop: 14 }}>
-              paid to <b style={{ color: T1, fontWeight: 700 }}>{builders}</b> verified builder{builders === 1 ? "" : "s"} across{" "}
-              <b style={{ color: T1, fontWeight: 700 }}>{cites}</b> citation{cites === 1 ? "" : "s"} — in USDC, on Arc
+              paid to <b style={{ color: T1, fontWeight: 700 }}>{builders}</b> verified builder{builders === 1 ? "" : "s"}
+              {(d?.builders_credited ?? 0) > 0 && <>, <b style={{ color: T1, fontWeight: 700 }}>{d?.builders_credited}</b> more credited (pending claim)</>}
+              {" "}across <b style={{ color: T1, fontWeight: 700 }}>{cites}</b> citation{cites === 1 ? "" : "s"} — in USDC, on Arc
             </div>
           </div>
 
@@ -102,13 +108,16 @@ export default function LensShowcase() {
           {ticker.length > 0 && (
             <div style={{ overflow: "hidden", whiteSpace: "nowrap", padding: "26px 0 4px", maskImage: "linear-gradient(90deg, transparent, #000 9%, #000 91%, transparent)", WebkitMaskImage: "linear-gradient(90deg, transparent, #000 9%, #000 91%, transparent)" }}>
               <div style={{ display: "inline-flex", gap: 38, animation: "lensMarquee 36s linear infinite" }}>
-                {ticker.map((f, i) => (
-                  <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 9, fontSize: 13.5, color: T2 }}>
-                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: USDC, boxShadow: `0 0 6px ${USDC}` }} />
-                    Lens AI paid <b style={{ color: T1, fontWeight: 600 }}>{f.project_name}</b>
-                    <span style={{ fontFamily: MONO, color: T3, fontSize: 11 }}>{ago(f.created_at)}</span>
-                  </span>
-                ))}
+                {ticker.map((f, i) => {
+                  const c = f.kind === "credited" ? "#7aa0ff" : USDC
+                  return (
+                    <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 9, fontSize: 13.5, color: T2 }}>
+                      <span style={{ width: 6, height: 6, borderRadius: "50%", background: c, boxShadow: `0 0 6px ${c}` }} />
+                      Lens AI {f.kind} <b style={{ color: T1, fontWeight: 600 }}>{f.project_name}</b>
+                      <span style={{ fontFamily: MONO, color: T3, fontSize: 11 }}>{ago(f.created_at)}</span>
+                    </span>
+                  )
+                })}
               </div>
             </div>
           )}
@@ -132,14 +141,16 @@ export default function LensShowcase() {
                 <a key={b.slug} href={`/ecosystem/${b.slug}`} className="lensRow"
                   style={{ display: "flex", alignItems: "center", gap: 15, padding: "17px 8px", textDecoration: "none", color: T1, borderBottom: `1px solid ${HAIR}` }}>
                   <span style={{ fontFamily: MONO, fontSize: 19, fontWeight: 700, color: T3, width: 24, opacity: 0.6 }}>{b.rank}</span>
-                  <Avatar name={b.name} size={36} />
+                  <Avatar name={b.name} logo={b.logo} size={36} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 16, fontWeight: 600, display: "flex", alignItems: "center", gap: 9 }}>
                       <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{b.name}</span><Chip t={b.trust} />
                     </div>
-                    <div style={{ fontSize: 12, color: T3, marginTop: 3 }}>cited {b.cites} time{b.cites === 1 ? "" : "s"} as a trusted answer</div>
+                    <div style={{ fontSize: 12, color: T3, marginTop: 3 }}>cited {b.cites} time{b.cites === 1 ? "" : "s"}{b.unclaimed ? " · claim a wallet to collect" : " as a trusted answer"}</div>
                   </div>
-                  <span style={{ fontFamily: MONO, fontSize: 15, fontWeight: 700, color: USDC }}>{b.earnedUsd}</span>
+                  <span style={{ fontFamily: MONO, fontSize: 15, fontWeight: 700, color: b.unclaimed ? "#7aa0ff" : USDC, display: "flex", alignItems: "center", gap: 6 }}>
+                    {b.earnedUsd}{b.unclaimed && <span style={{ fontFamily: MONO, fontWeight: 500, fontSize: 9, color: T3, textTransform: "uppercase", letterSpacing: "0.06em" }}>pending</span>}
+                  </span>
                 </a>
               ))}
             </div>
