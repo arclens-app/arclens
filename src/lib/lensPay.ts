@@ -61,6 +61,7 @@ const PAYOUT_ADDR    = process.env.LENS_WALLET_ADDRESS || process.env.PAYOUT_WAL
 const PAYOUT_PRIVKEY = process.env.PAYOUT_WALLET_PRIVATE_KEY || ""
 const USDC_TOKEN_ID  = process.env.CIRCLE_USDC_TOKEN_ID || ""        // Circle USDC token id on Arc
 const USDC_ADDRESS   = process.env.USDC_ARC_ADDRESS || ""            // …or the USDC contract address on Arc
+let _usdcTokenId = USDC_TOKEN_ID                                     // resolved lazily from the wallet's balances
 
 // Live when the Circle dev-controlled wallet creds are present (own wallet id or
 // a payout address), or a payout private-key fallback. Otherwise we simulate.
@@ -322,17 +323,32 @@ async function sendUsdc(to: string, amountE6: number): Promise<{ txHash: string 
     try {
       const { initiateDeveloperControlledWalletsClient } = await import("@circle-fin/developer-controlled-wallets")
       const client = initiateDeveloperControlledWalletsClient({ apiKey: CIRCLE_API_KEY, entitySecret: CIRCLE_ENTITY })
+      // Circle needs the USDC token id; resolve it once from the wallet's
+      // balances if it wasn't configured ("No account exist" = unresolved token).
+      if (!_usdcTokenId && !USDC_ADDRESS) {
+        try {
+          const b: any = await client.getWalletTokenBalance({ id: LENS_WALLET_ID })
+          const u = (b?.data?.tokenBalances || []).find((t: any) => /^usdc$/i.test(t?.token?.symbol || ""))
+          _usdcTokenId = u?.token?.id || ""
+        } catch { /* leave empty → tokenAddress path */ }
+      }
       const tx: any = await client.createTransaction({
         walletId: LENS_WALLET_ID,
-        ...(USDC_TOKEN_ID ? { tokenId: USDC_TOKEN_ID } : { tokenAddress: USDC_ADDRESS, blockchain: "ARC-TESTNET" }),
+        ...(_usdcTokenId ? { tokenId: _usdcTokenId } : { tokenAddress: USDC_ADDRESS, blockchain: "ARC-TESTNET" }),
         destinationAddress: to,
         amounts: [amount],
         fee: { type: "level", config: { feeLevel: "MEDIUM" } },
         idempotencyKey: (globalThis.crypto as any).randomUUID(),
       } as any)
-      const txId = tx?.data?.id || ""
+      const txId = tx?.data?.id
+      if (!txId) throw new Error("createTransaction returned no id: " + JSON.stringify(tx?.data ?? tx))
+      // Poll briefly for the on-chain hash (Arc settles in ~2-4s). This runs
+      // AFTER the answer in chat, so the wait never delays a reply.
       let txHash: string | null = null
-      try { const g: any = await client.getTransaction({ id: txId }); txHash = g?.data?.transaction?.txHash || null } catch { /* hash via webhook */ }
+      for (let i = 0; i < 6 && !txHash; i++) {
+        try { const g: any = await client.getTransaction({ id: txId }); txHash = g?.data?.transaction?.txHash || null } catch { /* keep trying */ }
+        if (!txHash) await new Promise(r => setTimeout(r, 1000))
+      }
       return { txHash, txId, status: txHash ? "complete" : "pending" }
     } catch (e: any) {
       console.error("[lensPay] dev-controlled send failed, falling back to App Kit:", e?.message || e)
