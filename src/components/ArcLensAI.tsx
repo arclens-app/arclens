@@ -12,6 +12,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import { usePathname } from "next/navigation"
+import LensFace, { type LensState } from "@/components/LensFace"
 
 interface Msg {
   role: "user" | "assistant"
@@ -20,11 +21,17 @@ interface Msg {
 
 interface DataCard { tool: string; data: any }
 
+// The agent's payout trace for an answer — who it paid, who it skipped, why.
+interface PaidBuilder { name: string; slug: string; trust: string; amount_e6: number; amountUsd: string; status: "complete" | "pending" | "simulated"; txHash: string | null }
+interface PayoutTrace { live: boolean; considered: number; paid: PaidBuilder[]; skipped: Array<{ name: string; slug: string; reason: string }>; total_e6: number; totalUsd: string; day_remaining_e6: number }
+
 interface ChatResponse {
   message: Msg
   conversationId: number | string | null
   context?: { role: string; kb_hits: number; has_page_data: boolean; llm: string }
   cards?: DataCard[]
+  payout?: PayoutTrace | null
+  face?: string | null
 }
 
 interface Turn {
@@ -33,6 +40,9 @@ interface Turn {
   loading: boolean
   ctx?:    ChatResponse["context"]
   cards?:  DataCard[]
+  payout?: PayoutTrace | null
+  pay?:    { priceUsd: string }   // set when the free tier is spent — pay-per-call to continue
+  face?:   string | null          // egg reaction hint for the character
   ms?:     number
   rating?: "up" | "down"
 }
@@ -105,7 +115,6 @@ function LensMark({ size = 28 }: { size?: number }) {
 function Wordmark({ size = 13 }: { size?: number }) {
   return (
     <span style={{ fontFamily: SANS, fontWeight: 700, letterSpacing: "-0.03em", fontSize: size }}>
-      <span style={{ color: T1 }}>Arc</span>
       <span style={{ color: ARC }}>Lens</span>
       <span style={{ color: T2, fontWeight: 600, letterSpacing: "0", marginLeft: "6px", fontSize: size - 2 }}>AI</span>
     </span>
@@ -365,6 +374,42 @@ function renderCards(cards: DataCard[]): React.ReactNode {
   })
 }
 
+// The payout receipt — Lens AI paying the builders whose data grounded this
+// answer. The visible-agency moment: real amounts, trust tiers, on-chain links.
+function renderPayout(p: PayoutTrace): React.ReactNode {
+  return (
+    <div style={{ marginTop: "12px", background: SURF2, border: `1px solid ${BDR}`, borderRadius: "14px", overflow: "hidden" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "9px", padding: "11px 14px", borderBottom: `1px solid ${BDR}` }}>
+        <span style={{ width: 18, height: 18, borderRadius: "50%", background: `radial-gradient(circle at 35% 30%, #2fe6b0, ${USDC})`, boxShadow: `0 0 8px ${USDC}99`, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#04221a", fontSize: "10px", fontWeight: 800 }}>$</span>
+        <span style={{ fontSize: "12.5px", fontWeight: 600, color: T1 }}>Lens AI paid {p.paid.length} builder{p.paid.length === 1 ? "" : "s"} for this</span>
+        <span style={{ flex: 1 }} />
+        <span style={{ fontFamily: MONO, fontSize: "13px", fontWeight: 700, color: USDC }}>{p.totalUsd}</span>
+      </div>
+      {p.paid.map((b, i) => (
+        <a key={i} href={b.txHash ? `/tx/${b.txHash}` : `/ecosystem/${b.slug}`}
+           style={{ display: "flex", alignItems: "center", gap: "11px", padding: "10px 14px", textDecoration: "none", color: T1, borderTop: i === 0 ? "none" : `1px solid ${BDR}` }}>
+          <TokenAvatar name={b.name} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: "12.5px", fontWeight: 600, display: "flex", alignItems: "center", gap: "6px" }}>
+              <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{b.name}</span>
+              <TrustChip t={b.trust} />
+            </div>
+            <div style={{ fontSize: "10px", color: T3 }}>
+              {b.status === "simulated" ? "simulated" : b.status === "pending" ? "settling on Arc…" : "paid on Arc"}
+            </div>
+          </div>
+          <span style={{ fontFamily: MONO, fontSize: "12.5px", fontWeight: 700, color: USDC, flexShrink: 0 }}>{b.amountUsd}</span>
+          {b.txHash && <span style={{ color: ARC, fontSize: "12px", flexShrink: 0 }}>↗</span>}
+        </a>
+      ))}
+      <div style={{ padding: "8px 14px", fontFamily: MONO, fontSize: "9px", color: T3, letterSpacing: "0.03em", borderTop: `1px solid ${BDR}` }}>
+        {p.live ? "settled in USDC on Arc" : "simulation · goes live on-chain once the agent wallet is funded"}
+        {p.considered > p.paid.length ? ` · evaluated ${p.considered}, trust-gated to ${p.paid.length}` : ""}
+      </div>
+    </div>
+  )
+}
+
 // Thumbs icon (rotated 180° for "down") + button style for answer ratings.
 function ThumbIcon({ dir }: { dir: "up" | "down" }) {
   return (
@@ -425,8 +470,29 @@ export default function ArcLensAI() {
   const [turns, setTurns] = useState<Turn[]>([])
   const [input, setInput] = useState("")
   const [convId, setConvId] = useState<number | string | null>(null)
+  const [face, setFace] = useState<LensState>("idle")
   const inputRef  = useRef<HTMLTextAreaElement>(null)
   const streamRef = useRef<HTMLDivElement>(null)
+
+  // Drive the character off the live chat state: thinking while it works, a
+  // green-eyed "paying" beat when it pays a builder, then back to calm.
+  useEffect(() => {
+    const last = turns[turns.length - 1]
+    if (!last) { setFace("idle"); return }
+    if (last.loading) { setFace("thinking"); return }
+    if (last.face) {
+      // Easter-egg reaction (spin, smug, …) — play it, then settle back.
+      setFace(last.face as LensState)
+      const id = setTimeout(() => setFace("idle"), 3200)
+      return () => clearTimeout(id)
+    }
+    if (last.payout && last.payout.paid.length > 0) {
+      setFace("paying")
+      const id = setTimeout(() => setFace("idle"), 2800)
+      return () => clearTimeout(id)
+    }
+    setFace("idle")
+  }, [turns])
 
   // Persist the session so the conversation survives closing the panel,
   // navigating between pages, and full reloads — a real assistant remembers.
@@ -475,7 +541,7 @@ export default function ArcLensAI() {
     streamRef.current.scrollTop = streamRef.current.scrollHeight
   }, [turns])
 
-  const send = useCallback(async (text: string) => {
+  const send = useCallback(async (text: string, opts?: { pay?: boolean }) => {
     const trimmed = text.trim()
     if (!trimmed) return
     const t0 = Date.now()
@@ -490,16 +556,20 @@ export default function ArcLensAI() {
       thread.push({ role: "user", content: trimmed })
       const res = await fetch("/api/ai/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-arclens-device": deviceId() },
+        // After the free tier, a paid call carries an x402 payment proof. (Real
+        // proof when Gateway is wired; "sim" exercises the flow today.)
+        headers: { "Content-Type": "application/json", "x-arclens-device": deviceId(), ...(opts?.pay ? { "x-lens-pay": "sim" } : {}) },
         body: JSON.stringify({ messages: thread, route: pathname, conversationId: convId }),
       })
-      // Daily free limit (or any non-OK) → show the message, don't stream JSON.
+      // Non-OK → show the message. A 402 means "free tier spent" — surface a
+      // one-tap pay-per-call to continue rather than a dead end.
       if (!res.ok) {
         const d = await res.json().catch(() => ({} as any))
         const msg = d?.error || (res.status === 429
-          ? "You've reached today's free limit on ArcLens AI."
+          ? "You've reached today's free limit on Lens AI."
           : "Something went wrong — try again.")
-        setTurns(prev => prev.map((t, i) => i === prev.length - 1 ? { ...t, answer: msg, loading: false, ms: Date.now() - t0 } : t))
+        const pay = d?.code === "payment_required" ? { priceUsd: d.priceUsd || "$0.001" } : undefined
+        setTurns(prev => prev.map((t, i) => i === prev.length - 1 ? { ...t, answer: msg, loading: false, ms: Date.now() - t0, pay } : t))
         return
       }
       if (!res.body) throw new Error("no stream")
@@ -520,7 +590,7 @@ export default function ArcLensAI() {
       const answer = (sep >= 0 ? buf.slice(0, sep) : buf) || "Something went wrong — try again."
       let meta: ChatResponse | null = null
       if (sep >= 0) { try { meta = JSON.parse(buf.slice(sep + 1)) } catch {} }
-      setTurns(prev => prev.map((t, i) => i === prev.length - 1 ? { ...t, answer, loading: false, ctx: meta?.context, cards: meta?.cards, ms } : t))
+      setTurns(prev => prev.map((t, i) => i === prev.length - 1 ? { ...t, answer, loading: false, ctx: meta?.context, cards: meta?.cards, payout: meta?.payout, face: meta?.face, ms } : t))
       if (meta?.conversationId != null) setConvId(meta.conversationId)
     } catch {
       setTurns(prev => prev.map((t, i) => i === prev.length - 1 ? { ...t, answer: "Network error — try again.", loading: false, ms: Date.now() - t0 } : t))
@@ -557,8 +627,8 @@ export default function ArcLensAI() {
       {!open && (
         <button
           onClick={() => setOpen(true)}
-          aria-label="Open ArcLens AI"
-          title="Ask ArcLens AI (⌘K)"
+          aria-label="Open Lens AI"
+          title="Ask Lens AI (⌘K)"
           style={{
             position: "fixed",
             right: "20px", bottom: "20px",
@@ -593,7 +663,7 @@ export default function ArcLensAI() {
               background: "radial-gradient(circle, rgba(26,86,255,0.4) 0%, rgba(26,86,255,0) 70%)",
               animation: "alBreathe 3.4s ease-in-out infinite",
             }} />
-            <LensMark size={28} />
+            <LensFace state="idle" size={28} />
           </span>
           <span>Ask AI</span>
           <span style={{
@@ -641,7 +711,7 @@ export default function ArcLensAI() {
             borderBottom: `1px solid ${BDR}`,
             display: "flex", alignItems: "center", gap: "12px",
           }}>
-            <LensMark size={30} />
+            <LensFace state={face} size={34} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                 <Wordmark size={14} />
@@ -766,6 +836,16 @@ export default function ArcLensAI() {
                           <>
                             {renderAnswer(t.answer)}
                             {t.cards && t.cards.length > 0 && renderCards(t.cards)}
+                            {t.payout && t.payout.paid.length > 0 && renderPayout(t.payout)}
+                            {t.pay && (
+                              <div style={{ marginTop: "12px", display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+                                <button onClick={() => send(t.query, { pay: true })}
+                                  style={{ display: "inline-flex", alignItems: "center", gap: "7px", background: `linear-gradient(135deg, ${ARC}, #4a78ff)`, color: "#fff", border: "none", borderRadius: "999px", padding: "9px 16px", fontFamily: SANS, fontSize: "12.5px", fontWeight: 700, cursor: "pointer", boxShadow: "0 6px 18px rgba(26,86,255,0.4)" }}>
+                                  Continue — pay {t.pay.priceUsd}
+                                </button>
+                                <span style={{ fontFamily: MONO, fontSize: "9.5px", color: T3 }}>per question · funds the builders</span>
+                              </div>
+                            )}
                             <div style={{ marginTop: "10px", display: "flex", alignItems: "center", gap: "10px" }}>
                               {t.ctx?.llm && t.ctx.llm !== "stub" && (
                                 <span style={{ fontFamily: MONO, fontSize: "9.5px", color: T3, letterSpacing: "0.04em", display: "flex", alignItems: "center", gap: "6px" }}>

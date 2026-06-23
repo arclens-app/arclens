@@ -6,6 +6,7 @@ import { WalletAvatar } from "@/components/WalletAvatar"
 import { SpotlightCard } from "@/components/Spotlight"
 import { useArcStore } from "@/store/arc"
 import TvlTrackingPanel from "./TvlTrackingPanel"
+import LensEarningsPanel from "@/components/LensEarningsPanel"
 
 interface Project {
   id: number; name: string; slug: string; tagline: string; description: string
@@ -579,6 +580,7 @@ export default function DashboardPage() {
           {/* ── OVERVIEW ── */}
           {activeTab === "overview" && (
             <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+              <LensEarningsPanel slug={slug} />
               {reviews.length > 0 ? (
                 <div style={{ background: surf, border: "1px solid " + bdr, borderRadius: "12px", padding: "22px 24px" }}>
                   <div style={{ fontSize: "10px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "16px" }}>Feedback by category</div>

@@ -273,6 +273,76 @@ export async function buildContext(args: {
   return { route: args.route, role, userAddr, pageData, kbHits, recentChats }
 }
 
+/**
+ * Remembers what it learns. After an answer grounded in real projects, Lens AI
+ * writes a DURABLE fact about each cited project into its knowledge base
+ * (added_by='ai-self-fill') and embeds it — so next time it answers from learned
+ * knowledge instead of re-deriving, getting cumulatively wiser. We only store
+ * durable facts (what a project IS, who built it, its trust standing) — never
+ * volatile live metrics like TVL, which would go stale.
+ */
+function learnedTrustLabel(p: any): string {
+  if (p.hard_risk) return "flagged as risky — not trustworthy"
+  const base =
+    p.recognition === "official" ? "Arc Official" :
+    p.recognition === "partner"  ? "Arc Partner"  :
+    p.trust_level === "verified" ? "Verified" :
+    p.trust_level === "claimed"  ? "Claimed (the team controls the listing; not independently audited)" :
+    "Listed"
+  return p.established ? `${base}, Established (a proven on-chain track record)` : base
+}
+
+async function embedFact(id: number, topic: string, fact: string): Promise<void> {
+  const apiKey = getGeminiKey()
+  if (!apiKey) return // no key → leave NULL; embed-kb.mjs backfills it later
+  try {
+    const [{ embed }, { createGoogleGenerativeAI }] = await Promise.all([import("ai"), import("@ai-sdk/google")])
+    const google = createGoogleGenerativeAI({ apiKey })
+    const { embedding } = await embed({ model: google.textEmbeddingModel("gemini-embedding-001"), value: `[${topic}] ${fact}` })
+    await pool.query(`UPDATE ai_knowledge_base SET embedding = $2::jsonb WHERE id = $1`, [id, JSON.stringify(embedding)])
+  } catch { /* embedding is best-effort */ }
+}
+
+export async function rememberProjects(slugs: string[]): Promise<number> {
+  const list = Array.from(new Set((slugs || []).map(s => String(s || "").trim().toLowerCase()).filter(Boolean)))
+  if (!list.length) return 0
+  try {
+    const r = await pool.query(
+      `SELECT p.name, p.slug, p.category, p.tagline,
+              p.trust_level, p.recognition, p.established,
+              COALESCE((p.trust_profile->>'hard_risk')::bool, false) AS hard_risk,
+              b.display_name AS builder
+         FROM projects p LEFT JOIN builder_profiles b ON b.address = LOWER(p.owner_wallet)
+        WHERE p.approved AND p.live AND LOWER(p.slug) = ANY($1::text[])`,
+      [list],
+    )
+    let learned = 0
+    for (const p of r.rows) {
+      const trust = learnedTrustLabel(p)
+      const topic = `${p.name} — Arc project`
+      const cat = (p.category || "project").trim()
+      const fact = `${p.name} is a ${cat} on Arc${p.tagline ? ` — ${String(p.tagline).trim()}` : ""}. Trust standing on ArcLens: ${trust}.${p.builder ? ` Built by ${p.builder}.` : ""}`.slice(0, 500)
+      const src = `/ecosystem/${p.slug}`
+      // Refresh the single self-filled fact per project; never touch curated rows.
+      await pool.query(`DELETE FROM ai_knowledge_base WHERE source_url = $1 AND added_by = 'ai-self-fill'`, [src])
+      const ins = await pool.query<{ id: number }>(
+        `INSERT INTO ai_knowledge_base (topic, fact, source_url, added_by)
+         VALUES ($1, $2, $3, 'ai-self-fill')
+         ON CONFLICT (topic, fact) DO NOTHING
+         RETURNING id`,
+        [topic, fact, src],
+      )
+      learned++
+      const newId = ins.rows[0]?.id
+      if (newId) void embedFact(newId, topic, fact)
+    }
+    return learned
+  } catch (e: any) {
+    console.error("[rememberProjects]", e?.message || e)
+    return 0
+  }
+}
+
 /** Log a question the AI couldn't fully answer so an admin can fill the gap later. */
 export async function logKnowledgeGap(args: {
   question:  string
