@@ -11,8 +11,8 @@ const NAV = [
     { id: "overview",     label: "Overview",          icon: "◈", href: "/overview" },
     { id: "transactions", label: "Transactions",      icon: "⇄", href: "/transactions" },
   ]},
-  { section: "ANALYTICS", items: [
-    { id: "wallets",      label: "Wallet Activity",   icon: "◉", href: "/wallets" },
+  { section: "INTELLIGENCE", items: [
+    { id: "lens",         label: "Lens AI",           icon: "◐", href: "/lens", tag: "AI" },
   ]},
   { section: "TOOLS", items: [
     { id: "approvals",    label: "Approval Manager",  icon: "⚠", href: "/approvals", tag: "SAFETY" },
@@ -31,6 +31,7 @@ const NAV = [
 
 const TAG_STYLE: Record<string, { bg: string; color: string; border: string }> = {
   NEW:    { bg: "rgba(26,86,255,0.12)",  color: "#8aaeff", border: "rgba(26,86,255,0.2)" },
+  AI:     { bg: "rgba(0,184,122,0.12)",  color: "#00d990", border: "rgba(0,184,122,0.2)" },
   SAFETY: { bg: "rgba(224,51,72,0.1)",   color: "#e03348", border: "rgba(224,51,72,0.2)" },
 }
 
