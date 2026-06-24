@@ -1,0 +1,27 @@
+# Resources
+
+| Resource | Where |
+| --- | --- |
+| **App** | [arclenz.xyz](https://arclenz.xyz) |
+| **Lens AI** | [arclenz.xyz/lens](https://arclenz.xyz/lens) — talk to the agent and see the builder board |
+| **Live manifest** | [arclenz.xyz/api/agent](https://arclenz.xyz/api/agent) — the machine-readable service description |
+| **Explorer** | `arclenz.xyz/tx/<hash>` — verify any payout on Arc |
+| **Source** | [github.com/arclens-app/arclens](https://github.com/arclens-app/arclens) |
+| **X** | [@arclens_app](https://x.com/arclens_app) |
+| **Support** | [support@arclenz.xyz](mailto:support@arclenz.xyz) |
+
+## Quick start for agents
+
+```bash
+# 1. discover the service (free)
+curl https://arclenz.xyz/api/agent
+
+# 2. ask it — pay-per-call over x402
+curl -X POST https://arclenz.xyz/api/agent \
+  -H "content-type: application/json" \
+  -H "x-lens-pay: sim" \
+  -H "x-agent-id: my-agent" \
+  -d '{"action":"trust","target":"<project>"}'
+```
+
+See the full [Agent API reference](/agent-api).

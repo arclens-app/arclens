@@ -1,0 +1,189 @@
+import { Callout, Tabs } from "nextra/components"
+
+# Agent API
+
+Lens AI exposes a **pay-per-call trust & ecosystem oracle** any agent can query. It's self-describing (a machine-readable manifest), priced over **x402**, and settled in USDC on Arc. Every paid call also funds the builders whose data answered it.
+
+<Callout type="info">
+**Base URL** `https://arclenz.xyz/api` · **Protocol** `x402` · **Network** `Arc` · **Token** `USDC`
+</Callout>
+
+## Manifest
+
+```
+GET /api/agent
+```
+
+Free and unauthenticated. Returns the service description, price, payment header, and available actions — everything an agent needs to discover and use the API.
+
+```bash
+curl https://arclenz.xyz/api/agent
+```
+
+```json
+{
+  "name": "Lens AI",
+  "summary": "Pay-per-call trust & ecosystem intelligence for Arc, settled in USDC…",
+  "protocol": "x402",
+  "network": "Arc",
+  "token": "USDC",
+  "price": "$0.0010",
+  "price_e6": 1000,
+  "pay_header": "x-lens-pay",
+  "actions": {
+    "trust":    { "description": "Trust verdict for a project on Arc." },
+    "discover": { "description": "Find Arc projects, optionally trusted-only." },
+    "project":  { "description": "A project's live metrics + trust standing." }
+  }
+}
+```
+
+## Payment & authentication
+
+```
+POST /api/agent
+```
+
+All actions are pay-per-call. Send a payment proof in the `x-lens-pay` header. Until a valid proof arrives, the endpoint returns **`402 Payment Required`** with the price in the response headers — the standard x402 challenge/repeat flow.
+
+| Header | Required | Description |
+| --- | --- | --- |
+| `x-lens-pay` | ✓ | An x402 payment proof. Use `sim` against testnet to exercise the flow end-to-end. |
+| `x-agent-id` | | Optional caller identity, used for per-caller de-duplication of builder payouts (24h). |
+| `content-type` | ✓ | `application/json` |
+
+A 402 response looks like this:
+
+```http
+HTTP/1.1 402 Payment Required
+x-payment-price: $0.0010
+x-payment-token: USDC
+x-payment-network: Arc
+
+{ "error": "Payment required — this is a pay-per-call service.",
+  "code": "payment_required", "price": "$0.0010", ... }
+```
+
+<Callout type="warning">
+For testnet integration and demos, `x-lens-pay: sim` is accepted and exercises the **real** payout path — a genuine USDC transfer fires to the matched builder and a transaction hash is returned.
+</Callout>
+
+## Actions
+
+<Tabs items={["trust", "discover", "project"]}>
+
+<Tabs.Tab>
+
+Returns a trust verdict for a single project on Arc.
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `action` | string | ✓ | `"trust"` |
+| `target` | string | ✓ | Project name or slug (fuzzy-matched against live projects). |
+
+```bash
+curl -X POST https://arclenz.xyz/api/agent \
+  -H "content-type: application/json" \
+  -H "x-lens-pay: <x402 payment proof>" \
+  -d '{"action":"trust","target":"lunex"}'
+```
+
+```json
+{
+  "action": "trust",
+  "result": { "found": true, "name": "Lunex", "slug": "lunex", "trust": "Established" },
+  "paid_to_builders": [
+    { "project": "Lunex", "amount": "$0.0008", "trust": "Established", "tx": "0x1266259f…2b791f74" }
+  ],
+  "settled_on": "Arc"
+}
+```
+
+</Tabs.Tab>
+
+<Tabs.Tab>
+
+Finds projects on Arc, optionally filtered by category and restricted to trusted projects only.
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `action` | string | ✓ | `"discover"` |
+| `category` | string | | Optional category filter (e.g. `"DEX"`). |
+| `trusted_only` | boolean | | When true, returns only Verified / Established / Partner / Official projects. |
+| `limit` | number | | 1–20, default 8. |
+
+```bash
+curl -X POST https://arclenz.xyz/api/agent \
+  -H "content-type: application/json" \
+  -H "x-lens-pay: <x402 payment proof>" \
+  -d '{"action":"discover","trusted_only":true,"limit":5}'
+```
+
+```json
+{
+  "action": "discover",
+  "result": {
+    "count": 5,
+    "projects": [
+      { "name": "Lunex", "slug": "lunex", "category": "DEX", "tagline": "…", "trust": "Established" }
+    ]
+  },
+  "paid_to_builders": [ ],
+  "settled_on": "Arc"
+}
+```
+
+</Tabs.Tab>
+
+<Tabs.Tab>
+
+Returns a single project's live metrics plus its trust standing.
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `action` | string | ✓ | `"project"` |
+| `name` | string | ✓ | Project name or slug. |
+
+```bash
+curl -X POST https://arclenz.xyz/api/agent \
+  -H "content-type: application/json" \
+  -H "x-lens-pay: <x402 payment proof>" \
+  -d '{"action":"project","name":"lunex"}'
+```
+
+```json
+{
+  "action": "project",
+  "result": {
+    "found": true, "name": "Lunex", "slug": "lunex", "category": "DEX",
+    "trust": "Established", "tvl": "$1.2M", "volume": "$4.8M", "revenue": "$12K"
+  },
+  "paid_to_builders": [ ],
+  "settled_on": "Arc"
+}
+```
+
+</Tabs.Tab>
+
+</Tabs>
+
+## Response fields
+
+| Field | Description |
+| --- | --- |
+| `action` | The action that was executed. |
+| `result` | The action's payload (see each action above). |
+| `paid_to_builders` | Builders funded by this call: `project`, `amount`, `trust`, and the on-chain `tx`. Empty when no trusted builder matched or the caller already funded that builder within 24h. |
+| `settled_on` | Always `"Arc"`. |
+
+## Errors & rate limits
+
+| Status | Meaning |
+| --- | --- |
+| `400` | Malformed JSON, or an unknown action. The manifest is included in the body. |
+| `402` | No valid payment proof. Price is returned in the `x-payment-*` headers. |
+| `500` | Unexpected failure. Safe to retry with backoff. |
+
+<Callout type="info">
+**Rate limit:** 30 requests per minute per caller. Verify any payout by opening its `tx` on the [explorer](/explorer): `arclenz.xyz/tx/<hash>`.
+</Callout>
