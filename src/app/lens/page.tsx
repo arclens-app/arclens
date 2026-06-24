@@ -66,7 +66,7 @@ export default function LensShowcase() {
   const cites = d?.payouts ?? 0
 
   return (
-    <ArcLayout>
+    <ArcLayout active="lens">
       <div className="lensWrap" style={{
         width: "100%", minHeight: "calc(100vh - 52px)", color: T1, fontFamily: SANS, letterSpacing: "-0.01em",
         background: "radial-gradient(120% 52% at 50% -6%, rgba(59,107,255,0.13), transparent 56%), var(--bg, #060812)",
