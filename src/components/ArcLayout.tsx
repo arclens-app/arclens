@@ -922,7 +922,7 @@ export default function ArcLayout({ children, active, lockDark }: { children: Re
             <span style={{ fontSize: "11px", fontFamily: mono, color: t3 }}>© 2026 ArcLens</span>
             <div style={{ display: "flex", alignItems: "center", gap: "24px", flexWrap: "wrap" }}>
               {[
-                { label: "About",   href: "/about" },
+                { label: "Docs",    href: "https://docs.arclenz.xyz" },
                 { label: "Terms",   href: "/terms" },
                 { label: "Privacy", href: "/privacy" },
                 { label: "support@arclenz.xyz", href: "mailto:support@arclenz.xyz" },
