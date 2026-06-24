@@ -1,0 +1,33 @@
+import { Callout } from "nextra/components"
+
+# The trust layer
+
+Every project on ArcLens carries a single **trust standing** — derived from on-chain attestations (the ArcLens registry) plus verification signals. It's what humans see on a project page, and it's returned on every [Agent API](/agent-api) response. It's also the gate that decides what [Lens AI](/lens-ai) will and won't pay for.
+
+## Trust standings
+
+| Standing | Meaning |
+| --- | --- |
+| **Arc Official** | An official Arc surface or first-party project. |
+| **Arc Partner** | A recognized ecosystem partner. |
+| **Verified** | Identity and ownership verified through ArcLens. |
+| **Established** | A modifier for demonstrated, sustained on-chain activity. Combines with a tier (e.g. *Verified · Established*). |
+| **Claimed** | Ownership claimed by a wallet, not yet fully verified. |
+| **Listed** | Indexed and live, no ownership claim yet. |
+| **Risk flagged** | Flagged for risk. Excluded from any payout. |
+
+<Callout type="info">
+Verification is automatic where signals allow; naming and presentation are optional. The on-chain registry is the source of truth.
+</Callout>
+
+## Why it exists
+
+The trust layer is what makes the rest of the platform trustworthy and ungameable:
+
+- Lens AI only pays **Arc-native builders** at the Verified, Established, or Claimed tiers.
+- It never pays infrastructure partners, the chain itself, or risk-flagged projects.
+- Agents reading the API get the same honest signal a human would.
+
+<Callout type="warning">
+Trust is earned and on-chain — it can't be bought with a nicer logo. That's the point.
+</Callout>

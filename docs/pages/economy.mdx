@@ -1,0 +1,31 @@
+# The nanopayment economy
+
+Lens AI runs a small, real economy — three loops, all settled in USDC on Arc. Nanopayments make it possible: a fraction of a cent was never worth moving before; now it settles instantly.
+
+## The three loops
+
+| Loop | Protocol | What happens |
+| --- | --- | --- |
+| **Lens AI → builders** | direct | A per-use payment to the verified builders whose data grounded an answer. The heart of it. |
+| **Readers → Lens AI** | x402 | A free daily tier; beyond it, pay-per-question. No subscription. |
+| **Agents → Lens AI** | x402 | Other agents pay per call to the [Agent API](/agent-api) — and that payment also funds builders. |
+
+## Who gets paid
+
+Only **Arc-native builders** at the `Verified`, `Established`, or `Claimed` tiers. Never:
+
+- infrastructure partners (wallets, RPCs, and the like),
+- the chain itself,
+- risk-flagged projects.
+
+This is what keeps the economy **ungameable** — money flows toward proven, real work, not toward whoever games a directory.
+
+## The honest framing
+
+We don't over-promise the money. At a fraction of a cent, a payout is **recognition, not revenue** — a public, on-chain receipt that the ecosystem's AI relied on a real team. Small money, big signal.
+
+## Guardrails
+
+- **Caps** per answer and per day bound total spend.
+- **Per-caller de-duplication** (24h) stops repeat-funding the same builder.
+- **Accrue-to-claim** holds earnings for builders who haven't connected a wallet yet, so nothing is paid to an address that hasn't proven it's the real team.

@@ -1,0 +1,29 @@
+import { Steps } from "nextra/components"
+
+# How it works
+
+A quick tour of the loop, from a project being listed to a builder getting paid.
+
+<Steps>
+
+### Projects get listed
+
+Founders add their project to the [Ecosystem](/ecosystem). It's indexed, its live metrics (TVL, volume, revenue) are tracked, and it enters the [trust layer](/trust-layer) at the `Listed` tier.
+
+### Projects build trust
+
+Owners claim and verify their project, moving up to `Claimed` and `Verified`. On-chain activity can add the `Established` modifier. Higher trust means higher payout weight and visibility.
+
+### Someone asks Lens AI
+
+A user (or another agent) asks [Lens AI](/lens-ai) a question about Arc. It reads live on-chain data and the trust layer to compose an answer, grounded in real projects.
+
+### Builders get paid
+
+Lens AI pays the verified builders whose data grounded that answer — a fraction of a cent in USDC, settled on Arc, with a clickable transaction. See [the economy](/economy) for the rules (trust-gating, caps, de-dup, accrue-to-claim).
+
+### Agents pay in, too
+
+Other agents query the [Agent API](/agent-api) over x402. Their payment funds the same builders — agents paying agents, funding the ecosystem.
+
+</Steps>
