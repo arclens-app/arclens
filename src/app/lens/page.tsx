@@ -174,22 +174,22 @@ export default function LensShowcase() {
           {/* FOR AGENTS / DEVELOPERS */}
           <h2 style={{ fontSize: 20, fontWeight: 700, margin: "58px 0 8px", letterSpacing: "-0.02em", color: T1 }}>Agents can query Lens AI</h2>
           <p style={{ fontSize: 14.5, color: T2, lineHeight: 1.65, maxWidth: 640, margin: "0 0 16px" }}>
-            Building an agent on Arc? Lens AI is a pay-per-call trust oracle. Your agent asks who&apos;s legit,
-            pays a fraction of a cent over x402, and gets a verdict back — and that payment flows to the builders
-            whose data answered it. Agents paying agents, funding the ecosystem.
+            Building an agent on Arc? Lens AI is a pay-per-call trust oracle with its own on-chain identity —
+            an <b style={{ color: T2 }}>ERC-8004 agent (#842439)</b>. Your agent pays a fraction of a cent over
+            Circle Gateway / x402 and gets a verdict back — and that payment flows to the builders whose data
+            answered it. Agents paying agents, funding the ecosystem.
           </p>
-          <pre style={{ background: "#0a1020", border: `1px solid ${HAIR}`, borderRadius: 12, padding: "16px 18px", overflowX: "auto", fontFamily: MONO, fontSize: 12.5, lineHeight: 1.7, color: "#cfe0ff", margin: 0 }}>{`# discover the service
+          <pre style={{ background: "#0a1020", border: `1px solid ${HAIR}`, borderRadius: 12, padding: "16px 18px", overflowX: "auto", fontFamily: MONO, fontSize: 12.5, lineHeight: 1.7, color: "#cfe0ff", margin: 0 }}>{`# discover the agent (free) — manifest + ERC-8004 identity
 curl https://arclenz.xyz/api/agent
 
-# ask it — pay-per-call over x402
-curl -X POST https://arclenz.xyz/api/agent \\
-  -H "content-type: application/json" \\
-  -H "x-lens-pay: <x402 payment>" \\
-  -d '{"action":"trust","target":"<project>"}'
-# → { result: { trust: "Verified", ... },
+# pay it with the Circle CLI — one command, settled over Gateway / x402
+circle services pay https://arclenz.xyz/api/agent \\
+  -X POST -d '{"action":"trust","target":"lunex"}' \\
+  --chain ARC-TESTNET
+# → { result: { trust: "Established", ... },
 #     paid_to_builders: [ { project, amount, tx } ] }`}</pre>
           <div style={{ fontSize: 12.5, color: T3, marginTop: 10 }}>
-            actions: <b style={{ color: T2 }}>trust</b> · <b style={{ color: T2 }}>discover</b> · <b style={{ color: T2 }}>project</b> — live manifest at <a href="/api/agent" style={{ color: "#6691ff", textDecoration: "none" }}>/api/agent</a>
+            actions: <b style={{ color: T2 }}>trust</b> · <b style={{ color: T2 }}>discover</b> · <b style={{ color: T2 }}>project</b> — manifest at <a href="/api/agent" style={{ color: "#6691ff", textDecoration: "none" }}>/api/agent</a> · ERC-8004 agent #842439
           </div>
 
           <div style={{ marginTop: 56, paddingTop: 24, borderTop: `1px solid ${HAIR}`, textAlign: "center", fontFamily: MONO, fontSize: 11, color: T3, letterSpacing: "0.04em" }}>
