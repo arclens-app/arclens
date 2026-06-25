@@ -52,6 +52,7 @@ function askLens() {
 export default function LensShowcase() {
   const [d, setD] = useState<Board | null>(null)
   const [face, setFace] = useState<LensState>("idle")
+  const [showAllBuilders, setShowAllBuilders] = useState(false)
 
   useEffect(() => { fetch("/api/lens/board").then(r => r.json()).then(setD).catch(() => setD(null)) }, [])
   useEffect(() => {
@@ -137,7 +138,7 @@ export default function LensShowcase() {
             </div>
           ) : (
             <div>
-              {board.map((b) => (
+              {(showAllBuilders ? board : board.slice(0, 8)).map((b) => (
                 <a key={b.slug} href={`/ecosystem/${b.slug}`} className="lensRow"
                   style={{ display: "flex", alignItems: "center", gap: 15, padding: "17px 8px", textDecoration: "none", color: T1, borderBottom: `1px solid ${HAIR}` }}>
                   <span style={{ fontFamily: MONO, fontSize: 19, fontWeight: 700, color: T3, width: 24, opacity: 0.6 }}>{b.rank}</span>
@@ -153,6 +154,12 @@ export default function LensShowcase() {
                   </span>
                 </a>
               ))}
+              {board.length > 8 && (
+                <button onClick={() => setShowAllBuilders(v => !v)}
+                  style={{ display: "block", width: "100%", marginTop: 18, padding: "8px 0", background: "none", border: "none", cursor: "pointer", fontFamily: MONO, fontSize: 12.5, color: "#7aa0ff", letterSpacing: "0.02em", textAlign: "center" }}>
+                  {showAllBuilders ? "Show less ↑" : `Show all ${board.length} builders ↓`}
+                </button>
+              )}
             </div>
           )}
 
