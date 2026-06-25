@@ -210,7 +210,8 @@ export async function payoutForAnswer(args: {
   // Resolve grounded slugs → builder wallet + trust signal.
   const r = await pool.query(
     `SELECT slug, name, LOWER(owner_wallet) AS wallet,
-            trust_level, recognition, established, logo_url,
+            trust_level, recognition, established, logo_url, tagline,
+            tvl_usd_e6::text AS tvl_e6, volume_cum_usd_e6::text AS vol_e6, revenue_cum_usd_e6::text AS rev_e6,
             COALESCE((trust_profile->>'hard_risk')::bool, false) AS hard_risk
        FROM projects
       WHERE approved AND live AND LOWER(slug) = ANY($1::text[])`,
@@ -257,7 +258,16 @@ export async function payoutForAnswer(args: {
     if (!earnKey)                      { skipped.push({ name: p.name, slug: p.slug, reason: p.hard_risk ? "risk-flagged" : "hasn't claimed a wallet here yet" }); continue }
     if (p.wallet && p.wallet === asker){ skipped.push({ name: p.name, slug: p.slug, reason: "your own project" }); continue }
 
-    const amount = Math.round(BASE_E6 * (TIER_WEIGHT[earnKey] || 1))
+    // CONTRIBUTION — how much real substance this source brought to the answer:
+    // live financial data it exposes (TVL / volume / revenue) + descriptive depth.
+    // The agent stakes by BOTH trust (how proven) AND contribution (how much it
+    // actually grounded the answer), so a data-rich source out-earns a bare one.
+    let contribution = 1
+    if (Number(p.tvl_e6) > 0)                 contribution += 0.4
+    if (Number(p.vol_e6) > 0)                 contribution += 0.3
+    if (Number(p.rev_e6) > 0)                 contribution += 0.2
+    if ((p.tagline || "").trim().length > 20) contribution += 0.1
+    const amount = Math.round(BASE_E6 * (TIER_WEIGHT[earnKey] || 1) * contribution)
     const dedupKey = p.wallet || `unclaimed:${p.slug}`
     if (recent.has(dedupKey))          { skipped.push({ name: p.name, slug: p.slug, reason: "already rewarded for you recently" }); continue }
 
