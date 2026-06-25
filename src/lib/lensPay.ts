@@ -14,9 +14,12 @@
 //     but spamming one query can't farm or drain anything.
 //
 // Robustness guarantees (also the demo's "won't break" story):
-//   • Trust-gated  — only Verified / Established / Arc Partner / Arc Official
-//                    builders with a payout wallet ever earn. The trust graph
-//                    IS the payout filter.
+//   • Trust-gated  — earning is by ARC-NATIVE signal: Verified, Established, or a
+//                    team that claimed its Arc project with a wallet. Big protocols
+//                    listed as partners simply haven't claimed a wallet here yet —
+//                    they become eligible if/when they do; nothing moves until then.
+//                    Only the chain itself is hard-excluded. The trust graph IS
+//                    the payout filter.
 //   • Agency       — the amount scales with the on-chain trust tier; the agent
 //                    decides how much to stake on each source, every answer.
 //   • Hard caps    — per-answer AND per-day ceilings, read live from the ledger.
