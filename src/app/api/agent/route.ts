@@ -14,6 +14,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { Pool } from "pg"
 import { enforce, getIp } from "@/lib/ratelimit"
 import { verifyPremiumPayment, recordPremiumCall, premiumPriceE6, premiumPriceUsd, payoutForAnswer } from "@/lib/lensPay"
+import { gatewayConfigured, verifyAndSettle, paymentRequiredHeader, paymentResponseHeader } from "@/lib/gateway"
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
 
@@ -68,13 +69,32 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unknown action — see manifest.", ...MANIFEST }, { status: 400 })
   }
 
-  // x402 — pay per call. Until a payment proof arrives, reply 402 with the price.
-  const proof = req.headers.get("x-lens-pay") || ""
-  const paid = proof ? await verifyPremiumPayment(proof) : false
+  // x402 — pay per call. Real Circle Gateway settlement when a standard
+  // `payment-signature` header is present (and SELLER_ADDRESS configured);
+  // otherwise the `x-lens-pay` demo proof. No payment → 402 with the price.
+  const sig = req.headers.get("payment-signature") || ""
+  let paid = false
+  let settledTx: string | null = null
+  if (sig && gatewayConfigured()) {
+    const st = await verifyAndSettle(sig, premiumPriceE6)
+    paid = st.ok
+    settledTx = st.tx ?? null
+  } else {
+    const proof = req.headers.get("x-lens-pay") || ""
+    paid = proof ? await verifyPremiumPayment(proof) : false
+  }
   if (!paid) {
     return NextResponse.json(
       { error: "Payment required — this is a pay-per-call service.", code: "payment_required", ...MANIFEST },
-      { status: 402, headers: { "x-payment-price": premiumPriceUsd, "x-payment-token": "USDC", "x-payment-network": "Arc" } },
+      {
+        status: 402,
+        headers: {
+          "x-payment-price": premiumPriceUsd,
+          "x-payment-token": "USDC",
+          "x-payment-network": "Arc",
+          "PAYMENT-REQUIRED": paymentRequiredHeader(premiumPriceE6, "/api/agent"),
+        },
+      },
     )
   }
 
@@ -124,12 +144,15 @@ export async function POST(req: NextRequest) {
   // the premium. Never block the response on the money plumbing.
   let payout: any = null
   try { if (slugs.length) payout = await payoutForAnswer({ conversationId: null, askerId: agentId, askerWallet: null, slugs }) } catch {}
-  recordPremiumCall(agentId, premiumPriceE6).catch(() => {})
+  recordPremiumCall(agentId, premiumPriceE6, settledTx).catch(() => {})
 
-  return NextResponse.json({
-    action,
-    result,
-    paid_to_builders: payout?.paid?.map((b: any) => ({ project: b.name, amount: b.amountUsd, trust: b.trust, tx: b.txHash })) ?? [],
-    settled_on: "Arc",
-  })
+  return NextResponse.json(
+    {
+      action,
+      result,
+      paid_to_builders: payout?.paid?.map((b: any) => ({ project: b.name, amount: b.amountUsd, trust: b.trust, tx: b.txHash })) ?? [],
+      settled_on: "Arc",
+    },
+    settledTx ? { headers: { "PAYMENT-RESPONSE": paymentResponseHeader(settledTx) } } : undefined,
+  )
 }
