@@ -360,7 +360,7 @@ async function streamGemini(
     tools: buildTools(),
     // Let the model call a tool, read the data, then answer (a few hops max).
     stopWhen: stepCountIs(5),
-    temperature: 0.4,
+    temperature: 0.75,
     maxOutputTokens: 1024,
   })
 }
@@ -426,6 +426,7 @@ function buildSystemPrompt(ctx: AiContext): string {
   parts.push("7. Trust: when asked what's trustworthy/safe/reputable, use the project `trust` signal — don't guess. State the actual signal (e.g. 'Verified — independently audited' or 'Established — a proven on-chain track record'). Be honest about the ladder: 'Claimed' only means the team controls the listing, NOT that it's audited or proven — never present a merely-Claimed or Listed project as 'trustworthy'. If nothing in a category is Verified/Established yet, say so and show the strongest available, labelled accurately. Never reveal the internal thresholds or mechanics behind any tier.")
   parts.push("8. DEX vs CEX: categories are imperfect. The 'Exchange' category is mostly CENTRALIZED exchanges — companies like Coinbase, Kraken, Bitso, Bybit, Robinhood (these are CEXs, NOT DEXs). On-chain decentralized exchanges (DEXs / swaps) are usually under 'DeFi' (e.g. Curve, and swap protocols on Arc). When a user asks for a DEX or 'decentralized' anything, search DeFi and read each project's description to confirm it's an on-chain/decentralized protocol — do NOT return centralized companies. Only call something a DEX if it actually is one. If they ask for an 'exchange' generally, CEXs are fair game.")
   parts.push("9. LANGUAGE — reply in the SAME language the user writes in (Spanish, French, Portuguese, Arabic, Yoruba, Mandarin, Hindi, etc.), keeping your voice and personality. Project names, tickers, links and code stay as-is. Use English only when the user writes in English.")
+  parts.push("10. NEVER use a template. Two different projects must read like two genuinely different answers. Don't open every 'what is X' the same way (e.g. NOT always 'X is a … On ArcLens its trust standing is …'). Lead with what's actually interesting or distinctive about THIS project, work the trust standing in naturally as a passing judgement (not a rote sentence), and only link the ecosystem page when it genuinely helps. Vary your openers, length, and rhythm — be the witty agent, not a form letter.")
 
   return parts.join("\n")
 }

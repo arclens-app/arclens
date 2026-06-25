@@ -107,6 +107,7 @@ export async function recordPremiumCall(askerId: string | null, amountE6 = PREMI
 export interface PaidBuilder {
   name: string
   slug: string
+  logo: string | null
   trust: string
   amount_e6: number
   amountUsd: string
@@ -209,7 +210,7 @@ export async function payoutForAnswer(args: {
   // Resolve grounded slugs → builder wallet + trust signal.
   const r = await pool.query(
     `SELECT slug, name, LOWER(owner_wallet) AS wallet,
-            trust_level, recognition, established,
+            trust_level, recognition, established, logo_url,
             COALESCE((trust_profile->>'hard_risk')::bool, false) AS hard_risk
        FROM projects
       WHERE approved AND live AND LOWER(slug) = ANY($1::text[])`,
@@ -234,6 +235,13 @@ export async function payoutForAnswer(args: {
   const skipped: SkippedBuilder[] = []
   let dayRemaining = Math.max(0, PER_DAY_CAP - (await daySpentE6()))
   let answerSpent = 0
+  // Cap on-chain payments per answer — pay the highest-trust builders first so
+  // the reply never waits on a long tail of settlements. The rest are deferred
+  // (no dedup recorded, so they can earn on a later answer).
+  const MAX_ONCHAIN = Number(process.env.LENS_MAX_ONCHAIN_PER_ANSWER || 3)
+  let onchain = 0
+  const rank = (x: any) => (x.hard_risk ? -1 : x.trust_level === "verified" ? 3 : x.established ? 2 : x.wallet ? 1 : 0)
+  r.rows.sort((a: any, b: any) => rank(b) - rank(a))
 
   for (const p of r.rows) {
     if (PAYOUT_EXCLUDE.has(String(p.slug || "").toLowerCase())) { skipped.push({ name: p.name, slug: p.slug, reason: "excluded — the chain, not a builder" }); continue }
@@ -246,8 +254,8 @@ export async function payoutForAnswer(args: {
       p.trust_level === "verified" ? "verified" :
       p.established ? "established" :
       p.wallet ? "claimed" : null
-    if (!earnKey)                      { skipped.push({ name: p.name, slug: p.slug, reason: p.hard_risk ? "risk-flagged" : "not an Arc-native builder" }); continue }
-    if (p.wallet && p.wallet === asker){ skipped.push({ name: p.name, slug: p.slug, reason: "asker's own project" }); continue }
+    if (!earnKey)                      { skipped.push({ name: p.name, slug: p.slug, reason: p.hard_risk ? "risk-flagged" : "hasn't claimed a wallet here yet" }); continue }
+    if (p.wallet && p.wallet === asker){ skipped.push({ name: p.name, slug: p.slug, reason: "your own project" }); continue }
 
     const amount = Math.round(BASE_E6 * (TIER_WEIGHT[earnKey] || 1))
     const dedupKey = p.wallet || `unclaimed:${p.slug}`
@@ -262,13 +270,15 @@ export async function payoutForAnswer(args: {
         [args.conversationId, askerId, dedupKey, p.slug, p.name, label, amount],
       )
       recent.add(dedupKey)
-      accrued.push({ name: p.name, slug: p.slug, trust: label, amount_e6: amount, amountUsd: fmtUsd(amount), status: "accrued", txHash: null })
+      accrued.push({ name: p.name, slug: p.slug, logo: p.logo_url ?? null, trust: label, amount_e6: amount, amountUsd: fmtUsd(amount), status: "accrued", txHash: null })
       continue
     }
 
     // Trusted WITH a wallet → real on-chain payout (USD caps apply).
     if (answerSpent + amount > PER_ANSWER_CAP) { skipped.push({ name: p.name, slug: p.slug, reason: "per-answer budget reached" }); continue }
     if (amount > dayRemaining)                 { skipped.push({ name: p.name, slug: p.slug, reason: "daily budget reached" }); continue }
+    if (onchain >= MAX_ONCHAIN)                { skipped.push({ name: p.name, slug: p.slug, reason: "answer payout limit reached" }); continue }
+    onchain++
 
     // Record the obligation first (status pending/simulated), then settle. If a
     // crash happens mid-settle we never lose a debt — a sweeper can finish it.
@@ -298,7 +308,7 @@ export async function payoutForAnswer(args: {
     answerSpent += amount
     dayRemaining -= amount
     recent.add(dedupKey)
-    paid.push({ name: p.name, slug: p.slug, trust: label, amount_e6: amount, amountUsd: fmtUsd(amount), status, txHash })
+    paid.push({ name: p.name, slug: p.slug, logo: p.logo_url ?? null, trust: label, amount_e6: amount, amountUsd: fmtUsd(amount), status, txHash })
   }
 
   return {
@@ -348,7 +358,7 @@ async function sendUsdc(to: string, amountE6: number): Promise<{ txHash: string 
       // Poll briefly for the on-chain hash (Arc settles in ~2-4s). This runs
       // AFTER the answer in chat, so the wait never delays a reply.
       let txHash: string | null = null
-      for (let i = 0; i < 6 && !txHash; i++) {
+      for (let i = 0; i < 2 && !txHash; i++) {
         try { const g: any = await client.getTransaction({ id: txId }); txHash = g?.data?.transaction?.txHash || null } catch { /* keep trying */ }
         if (!txHash) await new Promise(r => setTimeout(r, 1000))
       }

@@ -22,7 +22,7 @@ interface Msg {
 interface DataCard { tool: string; data: any }
 
 // The agent's payout trace for an answer — who it paid, who it skipped, why.
-interface PaidBuilder { name: string; slug: string; trust: string; amount_e6: number; amountUsd: string; status: "complete" | "pending" | "simulated" | "accrued"; txHash: string | null }
+interface PaidBuilder { name: string; slug: string; logo: string | null; trust: string; amount_e6: number; amountUsd: string; status: "complete" | "pending" | "simulated" | "accrued"; txHash: string | null }
 interface PayoutTrace { live: boolean; considered: number; paid: PaidBuilder[]; accrued: PaidBuilder[]; skipped: Array<{ name: string; slug: string; reason: string }>; total_e6: number; totalUsd: string; day_remaining_e6: number }
 
 interface ChatResponse {
@@ -172,9 +172,14 @@ function CardShell({ title, children }: { title?: string; children: React.ReactN
     </div>
   )
 }
-function TokenAvatar({ name }: { name: string }) {
+function TokenAvatar({ name, logo }: { name: string; logo?: string | null }) {
   const palette = ["#3b6bff", "#00b87a", "#a855f7", "#e0883b", "#2775ca", "#e0506e"]
   const c = palette[(name?.charCodeAt(0) || 0) % palette.length]
+  const [imgOk, setImgOk] = useState(true)
+  if (logo && imgOk) {
+    return <img src={`/api/image-proxy?url=${encodeURIComponent(logo)}`} alt="" onError={() => setImgOk(false)}
+      style={{ width: 26, height: 26, borderRadius: "50%", flexShrink: 0, objectFit: "cover", background: SURF2, border: `1px solid ${BDR}` }} />
+  }
   return <span style={{ width: 26, height: 26, borderRadius: "50%", flexShrink: 0, background: `linear-gradient(135deg, ${c}, ${c}aa)`, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 11, fontWeight: 700 }}>{(name || "?")[0].toUpperCase()}</span>
 }
 function Stat({ label, value }: { label: string; value: string }) {
@@ -219,7 +224,7 @@ function renderCards(cards: DataCard[]): React.ReactNode {
           {rows.map((p, r) => (
             <CardRow key={r} href={`/ecosystem/${p.slug}`} first={r === 0}>
               <span style={{ fontFamily: MONO, fontSize: "11px", color: T3, width: 14 }}>{p.rank}</span>
-              <TokenAvatar name={p.name} />
+              <TokenAvatar name={p.name} logo={p.logo} />
               <span style={{ flex: 1, fontSize: "13px", fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</span>
               <span style={{ fontFamily: MONO, fontSize: "14px", fontWeight: 700, color: ARC }}>{p[mk]}</span>
             </CardRow>
@@ -252,7 +257,7 @@ function renderCards(cards: DataCard[]): React.ReactNode {
           <div style={{ display: "flex" }}>
             {found.map((p, ci) => (
               <div key={ci} style={{ flex: 1, padding: "13px 14px", borderLeft: ci ? `1px solid ${BDR}` : "none", minWidth: 0 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}><TokenAvatar name={p.name} /><span style={{ fontSize: "13px", fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</span></div>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}><TokenAvatar name={p.name} logo={p.logo} /><span style={{ fontSize: "13px", fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</span></div>
                 <div style={{ display: "flex", flexDirection: "column", gap: "9px" }}>
                   <Stat label="TVL" value={p.tvl} /><Stat label="Volume" value={p.volume} /><Stat label="Revenue" value={p.revenue} />
                 </div>
@@ -269,7 +274,7 @@ function renderCards(cards: DataCard[]): React.ReactNode {
         <CardShell key={i} title={`${d.count} project${d.count === 1 ? "" : "s"}`}>
           {rows.map((p, r) => (
             <CardRow key={r} href={`/ecosystem/${p.slug}`} first={r === 0}>
-              <TokenAvatar name={p.name} />
+              <TokenAvatar name={p.name} logo={p.logo} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: "13px", fontWeight: 600 }}>{p.name}</div>
                 {p.tagline && <div style={{ fontSize: "10.5px", color: T3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.tagline}</div>}
@@ -290,7 +295,7 @@ function renderCards(cards: DataCard[]): React.ReactNode {
             return (
               <CardRow key={r} href={`/ecosystem/${p.slug}`} first={r === 0}>
                 <span style={{ fontFamily: MONO, fontSize: "11px", color: T3, width: 14 }}>{p.rank}</span>
-                <TokenAvatar name={p.name} />
+                <TokenAvatar name={p.name} logo={p.logo} />
                 <span style={{ flex: 1, fontSize: "13px", fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</span>
                 <span style={{ fontFamily: MONO, fontSize: "13px", fontWeight: 700, color: T1 }}>{p.value || p.current}</span>
                 {p.change_pct && <span style={{ fontFamily: MONO, fontSize: "11px", fontWeight: 600, color: up ? USDC : "#ff5a6e", minWidth: 44, textAlign: "right" }}>{p.change_pct}</span>}
@@ -337,7 +342,7 @@ function renderCards(cards: DataCard[]): React.ReactNode {
         <CardShell key={i} title={`${d.count} project${d.count === 1 ? "" : "s"}`}>
           {rows.map((p, r) => (
             <CardRow key={r} href={`/ecosystem/${p.slug}`} first={r === 0}>
-              <TokenAvatar name={p.name} />
+              <TokenAvatar name={p.name} logo={p.logo} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: "13px", fontWeight: 600, display: "flex", alignItems: "center", gap: "6px" }}>
                   <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</span>
@@ -374,45 +379,39 @@ function renderCards(cards: DataCard[]): React.ReactNode {
   })
 }
 
-// The payout receipt — Lens AI paying the builders whose data grounded this
-// answer. The visible-agency moment: real amounts, trust tiers, on-chain links.
+// Lens AI's decision, as a SLIM line under the project cards (not a duplicate
+// card): who it paid for this answer + on-chain link, the trust tier it staked
+// on, and the judgment calls it skipped (infra / own project / risk) — never the
+// internal plumbing (budget, dedup, retries). The agency, without the clutter.
 function renderPayout(p: PayoutTrace): React.ReactNode {
   const rows = [...p.paid, ...p.accrued]
-  const paidN = p.paid.length, credN = p.accrued.length
-  const headline = paidN > 0
-    ? `Lens AI paid ${paidN} builder${paidN === 1 ? "" : "s"}${credN > 0 ? ` · credited ${credN} more` : ""}`
-    : `Lens AI credited ${credN} builder${credN === 1 ? "" : "s"} — pending claim`
+  const judged = p.skipped.filter(s => /claimed a wallet|risk|own project|the chain/i.test(s.reason)).slice(0, 2)
+  if (rows.length === 0 && judged.length === 0) return null
   return (
-    <div style={{ marginTop: "12px", background: SURF2, border: `1px solid ${BDR}`, borderRadius: "14px", overflow: "hidden" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: "9px", padding: "11px 14px", borderBottom: `1px solid ${BDR}` }}>
-        <span style={{ width: 18, height: 18, borderRadius: "50%", background: `radial-gradient(circle at 35% 30%, #2fe6b0, ${USDC})`, boxShadow: `0 0 8px ${USDC}99`, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#04221a", fontSize: "10px", fontWeight: 800 }}>$</span>
-        <span style={{ fontSize: "12.5px", fontWeight: 600, color: T1 }}>{headline}</span>
-        <span style={{ flex: 1 }} />
-        {paidN > 0 && <span style={{ fontFamily: MONO, fontSize: "13px", fontWeight: 700, color: USDC }}>{p.totalUsd}</span>}
-      </div>
+    <div style={{ marginTop: "10px", padding: "8px 12px", borderRadius: "10px", background: "rgba(0,184,122,0.05)", border: "1px solid rgba(0,184,122,0.16)" }}>
       {rows.map((b, i) => {
         const accruedRow = b.status === "accrued"
-        const c = accruedRow ? "#7aa0ff" : USDC
         return (
-          <a key={i} href={b.txHash ? `/tx/${b.txHash}` : `/ecosystem/${b.slug}`}
-             style={{ display: "flex", alignItems: "center", gap: "11px", padding: "10px 14px", textDecoration: "none", color: T1, borderTop: i === 0 ? "none" : `1px solid ${BDR}` }}>
-            <TokenAvatar name={b.name} />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: "12.5px", fontWeight: 600, display: "flex", alignItems: "center", gap: "6px" }}>
-                <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{b.name}</span>
-                <TrustChip t={b.trust} />
-              </div>
-              <div style={{ fontSize: "10px", color: T3 }}>
-                {accruedRow ? "credited · pending claim" : b.status === "simulated" ? "simulated" : b.status === "pending" ? "settling on Arc…" : "paid on Arc"}
-              </div>
-            </div>
-            <span style={{ fontFamily: MONO, fontSize: "12.5px", fontWeight: 700, color: c, flexShrink: 0 }}>{b.amountUsd}</span>
-            {b.txHash && <span style={{ color: ARC, fontSize: "12px", flexShrink: 0 }}>↗</span>}
+          <a key={`p${i}`} href={b.txHash ? `/tx/${b.txHash}` : `/ecosystem/${b.slug}`}
+             style={{ display: "flex", alignItems: "center", gap: "7px", textDecoration: "none", color: T1, padding: "3px 0", fontSize: "12px" }}>
+            <span style={{ flexShrink: 0 }}>🪙</span>
+            <span style={{ flex: 1, minWidth: 0, color: T2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              Lens AI {accruedRow ? "credited" : "paid"} <b style={{ color: T1 }}>{b.name}</b> for this
+            </span>
+            <TrustChip t={b.trust} />
+            <span style={{ fontFamily: MONO, fontWeight: 700, color: accruedRow ? "#7aa0ff" : USDC, flexShrink: 0 }}>{b.amountUsd}</span>
+            {b.txHash && <span style={{ color: ARC, flexShrink: 0 }}>↗</span>}
           </a>
         )
       })}
-      <div style={{ padding: "8px 14px", fontFamily: MONO, fontSize: "9px", color: T3, letterSpacing: "0.03em", borderTop: `1px solid ${BDR}` }}>
-        {p.live ? "settled in USDC on Arc" : "simulation · goes live on-chain once the agent wallet is funded"}
+      {judged.map((s, i) => (
+        <div key={`s${i}`} style={{ display: "flex", gap: "7px", padding: "3px 0", fontSize: "11.5px", color: T3, alignItems: "baseline" }}>
+          <span style={{ opacity: 0.5, flexShrink: 0 }}>—</span>
+          <span style={{ flex: 1, minWidth: 0 }}>skipped <b style={{ color: T2, fontWeight: 600 }}>{s.name}</b> · {s.reason}</span>
+        </div>
+      ))}
+      <div style={{ fontFamily: MONO, fontSize: "9px", color: T3, marginTop: "4px", letterSpacing: "0.03em" }}>
+        weighed {p.considered} source{p.considered === 1 ? "" : "s"} · {p.live ? "real USDC, settled on Arc" : "simulation"}
       </div>
     </div>
   )
@@ -827,7 +826,7 @@ export default function ArcLensAI() {
                     </div>
                     {/* Answer */}
                     <div style={{ display: "flex", gap: "10px" }}>
-                      <LensMark size={22} />
+                      <LensFace state="idle" size={26} />
                       <div style={{ flex: 1, minWidth: 0, fontSize: "13px", lineHeight: 1.65, color: T1, paddingTop: "1px" }}>
                         {t.loading ? (
                           <div style={{ display: "flex", gap: "5px", padding: "6px 0" }}>
