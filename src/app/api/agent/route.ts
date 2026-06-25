@@ -79,6 +79,7 @@ export async function POST(req: NextRequest) {
     const st = await verifyAndSettle(sig, premiumPriceE6)
     paid = st.ok
     settledTx = st.tx ?? null
+    if (!paid) console.error("[agent] gateway verify/settle failed:", st.reason)
   } else {
     const proof = req.headers.get("x-lens-pay") || ""
     paid = proof ? await verifyPremiumPayment(proof) : false

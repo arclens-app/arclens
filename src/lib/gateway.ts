@@ -39,7 +39,7 @@ function requirements(priceE6: number) {
     asset: ARC_TESTNET_USDC,
     amount: String(priceE6), // USDC atomic units (6 decimals)
     payTo: SELLER_ADDRESS,
-    maxTimeoutSeconds: 345600,
+    maxTimeoutSeconds: 604800,
     extra: {
       name: "GatewayWalletBatched",
       version: "1",
