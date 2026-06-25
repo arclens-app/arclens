@@ -6,22 +6,24 @@ import ArcLensAI from "@/components/ArcLensAI"
 import WalletPanel from "@/components/WalletPanel"
 
 const NAV = [
-  { section: "EXPLORER", items: [
+  { section: "", items: [
     { id: "home", label: "Home", icon: "⬡", href: "/" },
-    { id: "overview",     label: "Overview",          icon: "◈", href: "/overview" },
-    { id: "transactions", label: "Transactions",      icon: "⇄", href: "/transactions" },
   ]},
   { section: "INTELLIGENCE", items: [
     { id: "lens",         label: "Lens AI",           icon: "◐", href: "/lens", tag: "AI" },
-  ]},
-  { section: "TOOLS", items: [
-    { id: "approvals",    label: "Approval Manager",  icon: "⚠", href: "/approvals", tag: "SAFETY" },
   ]},
   { section: "DISCOVER", items: [
     { id: "ecosystem",    label: "Arc Ecosystem",     icon: "◎", href: "/ecosystem" },
     { id: "trials",       label: "Arc Trials",        icon: "✦", href: "/trials" },
     { id: "events",       label: "Events",            icon: "◆", href: "/events" },
     { id: "start",        label: "Arc Beginners",     icon: "◈", href: "/start" },
+  ]},
+  { section: "EXPLORER", items: [
+    { id: "overview",     label: "Overview",          icon: "◈", href: "/overview" },
+    { id: "transactions", label: "Transactions",      icon: "⇄", href: "/transactions" },
+  ]},
+  { section: "TOOLS", items: [
+    { id: "approvals",    label: "Approval Manager",  icon: "⚠", href: "/approvals", tag: "SAFETY" },
   ]},
   { section: "DEVELOPERS", items: [
     { id: "builders",     label: "Builder Profiles",  icon: "◎", href: "/builders" },
@@ -686,10 +688,12 @@ export default function ArcLayout({ children, active, lockDark }: { children: Re
         {/* NAV */}
         <nav style={{ flex: 1, overflowY: "auto", padding: "8px 0" }}>
           {NAV.map((group: any) => (
-            <div key={group.section} style={{ marginBottom: "4px" }}>
-              <div style={{ padding: "10px 16px 4px", fontSize: "9px", fontFamily: mono, color: t3, letterSpacing: "0.12em", textTransform: "uppercase" }}>
-                {group.section}
-              </div>
+            <div key={group.section || group.items[0]?.id} style={{ marginBottom: "4px" }}>
+              {group.section && (
+                <div style={{ padding: "10px 16px 4px", fontSize: "9px", fontFamily: mono, color: t3, letterSpacing: "0.12em", textTransform: "uppercase" }}>
+                  {group.section}
+                </div>
+              )}
               {group.items.map((item: any) => {
                 const isActive = active === item.id
                 return (
