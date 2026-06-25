@@ -175,7 +175,7 @@ export function buildTools() {
         if (category) { params.push(category); clauses.push(`category ILIKE $${params.length}`) }
         params.push(lim)
         const r = await pool.query(
-          `SELECT name, slug, category, tagline, featured,
+          `SELECT name, slug, category, tagline, featured, logo_url,
                   tvl_usd_e6::text AS tvl,
                   ${TRUST_COLS}
            FROM projects
@@ -187,7 +187,7 @@ export function buildTools() {
         return {
           count: r.rows.length,
           projects: r.rows.map(p => ({
-            name: p.name, slug: p.slug, category: p.category,
+            name: p.name, slug: p.slug, category: p.category, logo: p.logo_url ?? null,
             tagline: p.tagline, featured: !!p.featured,
             tvl: p.tvl && Number(p.tvl) > 0 ? fmtUsd(p.tvl) : null,
             trust: trustOf(p).label,
@@ -380,7 +380,7 @@ export function buildTools() {
           : "p.featured DESC, COALESCE(p.view_count, 0) DESC"
         params.push(lim)
         const r = await pool.query(
-          `SELECT p.name, p.slug, p.category, p.tagline, p.tvl_usd_e6::text AS tvl,
+          `SELECT p.name, p.slug, p.category, p.tagline, p.tvl_usd_e6::text AS tvl, p.logo_url,
                   p.trust_level, p.recognition, p.established,
                   COALESCE((p.trust_profile->>'hard_risk')::bool, false) AS hard_risk,
                   b.display_name AS builder_name, b.verified AS builder_verified
@@ -393,7 +393,7 @@ export function buildTools() {
         return {
           count: r.rows.length,
           projects: r.rows.map(x => ({
-            name: x.name, slug: x.slug, category: x.category, tagline: x.tagline,
+            name: x.name, slug: x.slug, category: x.category, tagline: x.tagline, logo: x.logo_url ?? null,
             tvl: x.tvl && Number(x.tvl) > 0 ? fmtUsd(x.tvl) : null,
             trust: trustOf(x).label,
             builder: x.builder_name || null, builder_verified: !!x.builder_verified,
