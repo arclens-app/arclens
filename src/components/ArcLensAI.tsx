@@ -71,6 +71,13 @@ const MONO  = "'DM Mono', ui-monospace, SFMono-Regular, Menlo, monospace"
 const AI_STORE_KEY = "arclens-ai-session-v1"
 const AI_SESSION_TTL_MS = 24 * 60 * 60 * 1000 // 24h of inactivity → fresh start
 
+// First-visit invitation: a one-time coach-mark above the trigger that tells a
+// newcomer what Lens AI actually is (the payout hook) — the single line that
+// converts curiosity into a first message. Shown once per device, re-armed after
+// a week, and never shown to someone who already has a live conversation.
+const AI_NUDGE_KEY = "arclens-ai-nudge-v1"
+const AI_NUDGE_REARM_MS = 7 * 24 * 60 * 60 * 1000
+
 // Stable per-device id so anonymous (signed-out) usage can be rate-limited
 // without an account. Signed-in users are limited by wallet server-side; this
 // is only the fallback identity for visitors who haven't authenticated.
@@ -474,6 +481,7 @@ function suggestions(pathname: string): string[] {
 export default function ArcLensAI() {
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
+  const [nudge, setNudge] = useState(false)
   const [turns, setTurns] = useState<Turn[]>([])
   const [input, setInput] = useState("")
   const [convId, setConvId] = useState<number | string | null>(null)
@@ -542,6 +550,27 @@ export default function ArcLensAI() {
   useEffect(() => {
     if (open) setTimeout(() => inputRef.current?.focus(), 80)
   }, [open])
+
+  // First-visit invitation — appears shortly after load, once per device.
+  useEffect(() => {
+    try {
+      if (localStorage.getItem(AI_STORE_KEY)) return // returning, active user → no nag
+      const seen = JSON.parse(localStorage.getItem(AI_NUDGE_KEY) || "null")
+      if (seen && Date.now() - (seen.at || 0) < AI_NUDGE_REARM_MS) return
+    } catch {}
+    const t = setTimeout(() => setNudge(true), 1600)
+    return () => clearTimeout(t)
+  }, [])
+
+  // Auto-retire the invitation if ignored, and remember we showed it.
+  useEffect(() => {
+    if (!nudge) return
+    const t = setTimeout(() => {
+      setNudge(false)
+      try { localStorage.setItem(AI_NUDGE_KEY, JSON.stringify({ at: Date.now() })) } catch {}
+    }, 15000)
+    return () => clearTimeout(t)
+  }, [nudge])
 
   useEffect(() => {
     if (!streamRef.current) return
@@ -617,6 +646,15 @@ export default function ArcLensAI() {
     try { localStorage.removeItem(AI_STORE_KEY) } catch {}
   }
 
+  function markNudgeSeen() {
+    try { localStorage.setItem(AI_NUDGE_KEY, JSON.stringify({ at: Date.now() })) } catch {}
+  }
+  function openPanel() {
+    setOpen(true)
+    setNudge(false)
+    markNudgeSeen()
+  }
+
   const rate = useCallback(async (idx: number, rating: "up" | "down", turn: Turn) => {
     setTurns(prev => prev.map((t, i) => i === idx ? { ...t, rating } : t))
     try {
@@ -633,15 +671,15 @@ export default function ArcLensAI() {
       {/* ── FLOATING TRIGGER — themed pill, bottom-right ───────────────── */}
       {!open && (
         <button
-          onClick={() => setOpen(true)}
+          onClick={openPanel}
           aria-label="Open Lens AI"
           title="Ask Lens AI (⌘K)"
           style={{
             position: "fixed",
             right: "20px", bottom: "20px",
             zIndex: 45,
-            height: "44px",
-            padding: "0 14px 0 8px",
+            height: "46px",
+            padding: "0 15px 0 8px",
             display: "flex", alignItems: "center", gap: "10px",
             background: SURF2,
             color: T1,
@@ -664,15 +702,15 @@ export default function ArcLensAI() {
             e.currentTarget.style.borderColor = BDR
             e.currentTarget.style.boxShadow = "0 10px 28px rgba(0,0,0,0.32), 0 0 24px rgba(26,86,255,0.18)"
           }}>
-          <span style={{ position: "relative", display: "flex" }}>
+          <span style={{ position: "relative", display: "flex", animation: "alAttn 9s 2.4s ease-in-out infinite" }}>
             <span style={{
               position: "absolute", inset: "-5px", borderRadius: "50%",
               background: "radial-gradient(circle, rgba(26,86,255,0.4) 0%, rgba(26,86,255,0) 70%)",
               animation: "alBreathe 3.4s ease-in-out infinite",
             }} />
-            <LensFace state="idle" size={28} />
+            <LensFace state="idle" size={30} />
           </span>
-          <span>Ask AI</span>
+          <span>Ask Lens AI</span>
           <span style={{
             display: "inline-flex", alignItems: "center", justifyContent: "center",
             minWidth: "22px", height: "18px", padding: "0 5px",
@@ -682,6 +720,50 @@ export default function ArcLensAI() {
             fontSize: "10px", color: T2, fontFamily: MONO,
           }}>⌘K</span>
         </button>
+      )}
+
+      {/* ── FIRST-VISIT INVITATION — coach-mark above the trigger ───────── */}
+      {nudge && !open && (
+        <div
+          onClick={openPanel}
+          style={{
+            position: "fixed", right: "20px", bottom: "78px", zIndex: 46,
+            width: "272px", padding: "13px 14px",
+            background: `radial-gradient(130% 100% at 100% 0%, rgba(59,107,255,0.18), transparent 62%), ${SURF2}`,
+            border: "1px solid rgba(26,86,255,0.38)",
+            borderRadius: "16px",
+            boxShadow: "0 20px 48px rgba(0,0,0,0.5), 0 0 34px rgba(26,86,255,0.24)",
+            cursor: "pointer", fontFamily: SANS,
+            animation: "alNudgeIn 460ms cubic-bezier(0.22, 1, 0.36, 1)",
+          }}>
+          <button
+            onClick={e => { e.stopPropagation(); setNudge(false); markNudgeSeen() }}
+            aria-label="Dismiss"
+            style={{
+              position: "absolute", top: "7px", right: "8px",
+              width: "18px", height: "18px",
+              background: "transparent", border: "none", color: T3,
+              fontSize: "12px", cursor: "pointer", lineHeight: 1,
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}>✕</button>
+          <div style={{ display: "flex", gap: "11px", alignItems: "flex-start" }}>
+            <span style={{ flexShrink: 0, marginTop: "1px" }}><LensFace state="idle" size={28} /></span>
+            <div style={{ flex: 1, minWidth: 0, paddingRight: "6px" }}>
+              <div style={{ fontSize: "13.5px", fontWeight: 700, color: T1, letterSpacing: "-0.01em" }}>Meet Lens AI</div>
+              <div style={{ fontSize: "12px", color: T2, lineHeight: 1.5, marginTop: "3px" }}>
+                Ask me anything about Arc — and I&apos;ll <span style={{ color: USDC, fontWeight: 600 }}>pay the builder</span> whose work answers you.
+              </div>
+              <div style={{ fontFamily: MONO, fontSize: "10px", color: ARC, fontWeight: 600, marginTop: "9px", letterSpacing: "0.02em" }}>Try it →</div>
+            </div>
+          </div>
+          <span style={{
+            position: "absolute", right: "30px", bottom: "-6px",
+            width: "12px", height: "12px", background: SURF2,
+            borderRight: "1px solid rgba(26,86,255,0.38)",
+            borderBottom: "1px solid rgba(26,86,255,0.38)",
+            transform: "rotate(45deg)",
+          }} />
+        </div>
       )}
 
       {/* ── BACKDROP ───────────────────────────────────────────────────── */}
@@ -948,6 +1030,11 @@ export default function ArcLensAI() {
         @keyframes alPromptIn{ 0% { opacity: 0; transform: translateX(6px); } 100% { opacity: 1; transform: translateX(0); } }
         @keyframes alTurnIn  { 0% { opacity: 0; transform: translateY(4px); } 100% { opacity: 1; transform: translateY(0); } }
         @keyframes alDot     { 0%, 80%, 100% { opacity: 0.25; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-2px); } }
+        @keyframes alNudgeIn { 0% { opacity: 0; transform: translateY(10px) scale(0.96); } 100% { opacity: 1; transform: translateY(0) scale(1); } }
+        @keyframes alAttn    { 0%, 86%, 100% { transform: translateY(0) rotate(0deg); } 90% { transform: translateY(-3px) rotate(-2deg); } 95% { transform: translateY(0) rotate(1.5deg); } }
+        @media (prefers-reduced-motion: reduce) {
+          [style*="alAttn"], [style*="alBreathe"] { animation: none !important; }
+        }
       `}</style>
     </>
   )
