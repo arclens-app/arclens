@@ -5,6 +5,7 @@ import ArcLayout from "@/components/ArcLayout"
 import TvlCards from "./TvlCards"
 import { TrustBadge } from "@/components/TrustBadge"
 import { trustBadge } from "@/lib/trustBadge"
+import AskLens from "@/components/AskLens"
 
 function imgSrc(url: string | null): string | null {
   if (!url) return null
@@ -438,6 +439,7 @@ export default function ProjectPage() {
             {project.discord  && <a href={project.discord}  target="_blank" rel="noopener noreferrer" style={{ height: "34px", padding: "0 16px", display: "flex", alignItems: "center", background: "transparent", color: t2, fontSize: "12px", fontFamily: mono, border: "1px solid " + bdr, borderRadius: "7px", textDecoration: "none", gap: "6px" }}>Discord</a>}
             {project.contract && <button onClick={() => window.location.href = "/address/" + project.contract} style={{ height: "34px", padding: "0 16px", display: "flex", alignItems: "center", background: "transparent", color: "#8aaeff", fontSize: "12px", fontFamily: mono, border: "1px solid rgba(26,86,255,0.2)", borderRadius: "7px", cursor: "pointer", gap: "6px" }}>✦ Contract ↗</button>}
             <div style={{ flex: 1 }} />
+            <AskLens prompt={`Tell me about ${project.name} on Arc: what it does, its real numbers, who built it, and whether it's trusted.`} />
             <button onClick={share} style={{ height: "34px", padding: "0 16px", background: "#1a56ff", color: "#fff", fontSize: "12px", fontFamily: mono, border: "none", borderRadius: "7px", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}>Share on 𝕏</button>
             <button onClick={copyLink} style={{ height: "34px", padding: "0 16px", background: "transparent", color: copied ? usdc : t2, fontSize: "12px", fontFamily: mono, border: "1px solid " + (copied ? "rgba(0,184,122,0.3)" : bdr), borderRadius: "7px", cursor: "pointer" }}>
               {copied ? "✓ Copied" : "Copy Link"}
