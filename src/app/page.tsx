@@ -496,7 +496,7 @@ export default function HomePage() {
             </h1>
 
             <p style={{ fontSize: "14px", color: t2, marginBottom: "12px", lineHeight: 1.75, fontWeight: 300, maxWidth: "400px" }}>
-              ArcLens is the financial intelligence layer for Arc — ecosystem directory, protocol metrics, trial campaigns, events hub, contract registry, wallet analytics, and network explorer.
+              ArcLens is the agent-driven intelligence layer for Arc. At its center is Lens AI, the first AI that pays the builders it learns from, on top of the whole ecosystem: live metrics, campaigns, and on-chain trust.
             </p>
 
             <div style={{ fontSize: "13px", color: t2, marginBottom: "36px", fontWeight: 300 }}>
@@ -504,8 +504,8 @@ export default function HomePage() {
             </div>
 
             <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
-              <a href="/overview" style={{ display: "inline-flex", alignItems: "center", height: "44px", padding: "0 26px", background: arc, color: "#fff", fontSize: "13px", fontWeight: 600, borderRadius: "10px", textDecoration: "none" }}>
-                Explore Arc →
+              <a href="/lens" style={{ display: "inline-flex", alignItems: "center", height: "44px", padding: "0 26px", background: arc, color: "#fff", fontSize: "13px", fontWeight: 600, borderRadius: "10px", textDecoration: "none" }}>
+                Ask Lens AI →
               </a>
               <a href="/ecosystem" style={{ display: "inline-flex", alignItems: "center", height: "44px", padding: "0 24px", background: "rgba(255,255,255,0.04)", color: "#e8ecff", fontSize: "13px", fontWeight: 500, borderRadius: "10px", textDecoration: "none", border: "1px solid rgba(255,255,255,0.08)" }}>
                 See Who's Building

@@ -633,6 +633,25 @@ export default function ArcLensAI() {
     }
   }, [turns, convId, pathname])
 
+  // Global hook — any surface on the site can open Lens AI with context:
+  //   window.dispatchEvent(new CustomEvent("arclens:ask", { detail: { prompt, send } }))
+  // This is what lets Lens AI power the whole product: every page can hand it a
+  // question. `send: true` asks immediately; otherwise it just pre-fills the box.
+  useEffect(() => {
+    const onAsk = (e: Event) => {
+      const detail = (e as CustomEvent).detail || {}
+      setOpen(true)
+      setNudge(false)
+      try { localStorage.setItem(AI_NUDGE_KEY, JSON.stringify({ at: Date.now() })) } catch {}
+      if (detail.prompt) {
+        if (detail.send) send(String(detail.prompt))
+        else { setInput(String(detail.prompt)); setTimeout(() => inputRef.current?.focus(), 120) }
+      }
+    }
+    window.addEventListener("arclens:ask", onAsk as EventListener)
+    return () => window.removeEventListener("arclens:ask", onAsk as EventListener)
+  }, [send])
+
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault()
