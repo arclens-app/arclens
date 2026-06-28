@@ -13,7 +13,10 @@ const NAV = [
     { id: "lens",         label: "Lens AI",           icon: "◐", href: "/lens", tag: "AI" },
   ]},
   { section: "DISCOVER", items: [
-    { id: "ecosystem",    label: "Arc Ecosystem",     icon: "◎", href: "/ecosystem" },
+    // TEMP — hidden from nav during the Safe Browsing review so visitors aren't sent
+    // into the warning. The page stays live for Google to re-crawl. Restore this line
+    // the moment the warning clears.
+    // { id: "ecosystem",    label: "Arc Ecosystem",     icon: "◎", href: "/ecosystem" },
     { id: "trials",       label: "Arc Trials",        icon: "✦", href: "/trials" },
     { id: "events",       label: "Events",            icon: "◆", href: "/events" },
     { id: "start",        label: "Arc Beginners",     icon: "◈", href: "/start" },

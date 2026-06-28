@@ -507,8 +507,8 @@ export default function HomePage() {
               <a href="/lens" style={{ display: "inline-flex", alignItems: "center", height: "44px", padding: "0 26px", background: arc, color: "#fff", fontSize: "13px", fontWeight: 600, borderRadius: "10px", textDecoration: "none" }}>
                 Ask Lens AI →
               </a>
-              <a href="/ecosystem" style={{ display: "inline-flex", alignItems: "center", height: "44px", padding: "0 24px", background: "rgba(255,255,255,0.04)", color: "#e8ecff", fontSize: "13px", fontWeight: 500, borderRadius: "10px", textDecoration: "none", border: "1px solid rgba(255,255,255,0.08)" }}>
-                See Who's Building
+              <a href="/builders" style={{ display: "inline-flex", alignItems: "center", height: "44px", padding: "0 24px", background: "rgba(255,255,255,0.04)", color: "#e8ecff", fontSize: "13px", fontWeight: 500, borderRadius: "10px", textDecoration: "none", border: "1px solid rgba(255,255,255,0.08)" }}>
+                See Who&apos;s Building
               </a>
             </div>
 
