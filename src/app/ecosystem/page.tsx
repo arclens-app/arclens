@@ -406,10 +406,10 @@ export default function EcosystemPage() {
         )}
 
         <div style={{ padding: "10px 12px", borderTop: "1px solid " + border, display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
-          {p.website  && <a href={p.website}  target="_blank" rel="noopener noreferrer" style={{ fontSize: "10px", fontFamily: mono, padding: "3px 9px", borderRadius: "5px", border: "1px solid " + border, color: t2, textDecoration: "none" }}>Website</a>}
-          {twitterUrl && <a href={twitterUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: "10px", fontFamily: mono, padding: "3px 9px", borderRadius: "5px", border: "1px solid " + border, color: t2, textDecoration: "none" }}>𝕏</a>}
-          {p.github   && <a href={p.github}   target="_blank" rel="noopener noreferrer" style={{ fontSize: "10px", fontFamily: mono, padding: "3px 9px", borderRadius: "5px", border: "1px solid " + border, color: t2, textDecoration: "none" }}>GitHub</a>}
-          {p.discord  && <a href={p.discord}  target="_blank" rel="noopener noreferrer" style={{ fontSize: "10px", fontFamily: mono, padding: "3px 9px", borderRadius: "5px", border: "1px solid " + border, color: t2, textDecoration: "none" }}>Discord</a>}
+          {p.website  && <a href={p.website}  target="_blank" rel="nofollow ugc noopener noreferrer" style={{ fontSize: "10px", fontFamily: mono, padding: "3px 9px", borderRadius: "5px", border: "1px solid " + border, color: t2, textDecoration: "none" }}>Website</a>}
+          {twitterUrl && <a href={twitterUrl} target="_blank" rel="nofollow ugc noopener noreferrer" style={{ fontSize: "10px", fontFamily: mono, padding: "3px 9px", borderRadius: "5px", border: "1px solid " + border, color: t2, textDecoration: "none" }}>𝕏</a>}
+          {p.github   && <a href={p.github}   target="_blank" rel="nofollow ugc noopener noreferrer" style={{ fontSize: "10px", fontFamily: mono, padding: "3px 9px", borderRadius: "5px", border: "1px solid " + border, color: t2, textDecoration: "none" }}>GitHub</a>}
+          {p.discord  && <a href={p.discord}  target="_blank" rel="nofollow ugc noopener noreferrer" style={{ fontSize: "10px", fontFamily: mono, padding: "3px 9px", borderRadius: "5px", border: "1px solid " + border, color: t2, textDecoration: "none" }}>Discord</a>}
           {p.contract && <span onClick={() => window.location.href = "/address/" + p.contract} style={{ fontSize: "10px", fontFamily: mono, padding: "3px 9px", borderRadius: "5px", border: "1px solid rgba(26,86,255,0.2)", color: "#8aaeff", cursor: "pointer" }}>Contract ↗</span>}
         </div>
       </div>
