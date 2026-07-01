@@ -448,6 +448,32 @@ function renderCards(cards: DataCard[]): React.ReactNode {
         </CardShell>
       )
     }
+    if (c.tool === "get_lens_activity") {
+      const rows: any[] = d.top_builders || []
+      return (
+        <CardShell key={i} title="Lens AI · paid to builders">
+          <div style={{ display: "flex", gap: "20px", padding: "16px 16px 8px" }}>
+            <Stat label="Total paid" value={d.total_paid || "$0"} />
+            <Stat label="Payouts" value={String(d.payouts ?? 0)} />
+            <Stat label="Builders" value={String(d.builders_paid ?? 0)} />
+          </div>
+          {rows.map((b, r) => (
+            <CardRow key={r} href={`/ecosystem/${b.slug}`}>
+              <span style={{ fontFamily: MONO, fontSize: "11px", color: T3, width: 14 }}>{b.rank}</span>
+              <TokenAvatar name={b.name} logo={b.logo} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: "13px", fontWeight: 600, display: "flex", alignItems: "center", gap: "6px" }}>
+                  <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{b.name}</span>
+                  <TrustChip t={b.trust} />
+                </div>
+                <div style={{ fontSize: "10.5px", color: T3 }}>{b.cites} citation{b.cites === 1 ? "" : "s"}</div>
+              </div>
+              <span style={{ fontFamily: MONO, fontSize: "13px", fontWeight: 700, color: USDC }}>{b.earned}</span>
+            </CardRow>
+          ))}
+        </CardShell>
+      )
+    }
     return null
   })
 }
