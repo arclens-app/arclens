@@ -327,18 +327,23 @@ function renderCards(cards: DataCard[]): React.ReactNode {
     if (c.tool === "list_open_trials") {
       const rows: any[] = d.trials || []
       if (!rows.length) return <CardShell key={i}><div style={{ padding: "13px 14px", fontSize: "12.5px", color: T2, lineHeight: 1.5 }}>{d.note || "No open trials right now."}</div></CardShell>
+      const openN: number = d.open_count ?? rows.filter((t: any) => t.state === "open").length
       return (
-        <CardShell key={i} title={`${d.count} open trial${d.count === 1 ? "" : "s"}`}>
-          {rows.map((t, r) => (
+        <CardShell key={i} title={openN > 0 ? `${openN} open trial${openN === 1 ? "" : "s"}` : "Recent trials"}>
+          {rows.map((t, r) => {
+            const ended = t.state === "ended"
+            return (
             <CardRow key={r} href={`/trials/${t.slug}`} first={r === 0}>
               <TokenAvatar name={t.project || t.title} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: "13px", fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t.title}</div>
                 <div style={{ fontSize: "10.5px", color: T3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t.reward ? `Reward: ${t.reward}` : (t.project || "")}</div>
               </div>
-              {t.slots && <span style={{ fontFamily: MONO, fontSize: "10.5px", color: T2, flexShrink: 0 }}>{t.slots}</span>}
+              {ended
+                ? <span style={{ fontFamily: MONO, fontSize: "8.5px", fontWeight: 700, padding: "1px 5px", borderRadius: "4px", color: T3, background: "rgba(127,127,127,0.12)", textTransform: "uppercase", flexShrink: 0 }}>ended</span>
+                : (t.slots && <span style={{ fontFamily: MONO, fontSize: "10.5px", color: T2, flexShrink: 0 }}>{t.slots}</span>)}
             </CardRow>
-          ))}
+          )})}
         </CardShell>
       )
     }
