@@ -13,7 +13,7 @@ import { Pool } from "pg"
 import { getSession } from "@/lib/session"
 import { buildContext, logKnowledgeGap, rememberProjects, getGeminiKey, type AiContext } from "@/lib/aiContext"
 import { buildTools } from "@/lib/aiTools"
-import { payoutForAnswer, recordPremiumCall, verifyPremiumPayment, premiumPriceE6, premiumPriceUsd, type PayoutTrace } from "@/lib/lensPay"
+import { payoutForAnswer, type PayoutTrace } from "@/lib/lensPay"
 import { enforce, rateLimit, getIp } from "@/lib/ratelimit"
 
 export const runtime = "nodejs"
@@ -102,44 +102,28 @@ export async function POST(req: NextRequest) {
   // identity, so they fall back to device-id + IP (best-effort) and get nudged
   // to sign in. This 24h meter is also the foundation the paid API will bill
   // against. The 20/min burst limiter above stays as flood protection.
-  const DAILY_FREE = 5
+  // Free tier: 5/day signed out, 10/day signed in — signing in is the unlock, no
+  // user payment. (Agents still pay per call via x402 on /api/agent; that's separate.)
+  // Counted per identity so it can't be dodged by switching IP/device.
+  const FREE_ANON = 5
+  const FREE_USER = 10
   const device = (req.headers.get("x-arclens-device") || "").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 64)
   const ip = getIp(req)
   const identity = session?.addr ? `user:${session.addr}` : `anon:${device || "nodev"}:${ip}`
-  const daily = await rateLimit(`ai-daily:${identity}`, DAILY_FREE, 24 * 60 * 60 * 1000)
+  const dailyLimit = session?.addr ? FREE_USER : FREE_ANON
+  const daily = await rateLimit(`ai-daily:${identity}`, dailyLimit, 24 * 60 * 60 * 1000)
   if (!daily.allowed) {
-    // Free tier exhausted. Instead of a subscription, a signed-in user continues
-    // by paying a nanopayment PER CALL via x402 (on-theme; the money funds the
-    // builders). The client sends a payment proof in `x-lens-pay` after paying.
-    const proof = req.headers.get("x-lens-pay") || ""
-    const paidOk = proof ? await verifyPremiumPayment(proof) : false
-    if (paidOk) {
-      // A paid call — record the premium and let it through.
-      await recordPremiumCall(session?.addr ?? null)
-    } else if (session?.addr) {
+    const hrs = Math.max(1, Math.ceil(daily.resetIn / 3_600_000))
+    if (session?.addr) {
       return NextResponse.json(
-        {
-          error: `You've used your ${DAILY_FREE} free questions today. Continue for ${premiumPriceUsd} — it goes straight to the builders.`,
-          code: "payment_required",
-          price_e6: premiumPriceE6,
-          priceUsd: premiumPriceUsd,
-          resetInMs: daily.resetIn,
-        },
-        { status: 402 },
-      )
-    } else {
-      const hrs = Math.max(1, Math.ceil(daily.resetIn / 3_600_000))
-      return NextResponse.json(
-        {
-          error: `You've reached the ${DAILY_FREE} free Lens AI messages for today. Sign in to keep your history and continue — resets in about ${hrs}h.`,
-          code: "daily_limit",
-          limit: DAILY_FREE,
-          remaining: 0,
-          resetInMs: daily.resetIn,
-        },
+        { error: `That's all ${FREE_USER} free questions for today. I reset in about ${hrs}h. Catch me then.`, code: "daily_limit", limit: FREE_USER, remaining: 0, resetInMs: daily.resetIn },
         { status: 429, headers: { "Retry-After": String(Math.ceil(daily.resetIn / 1000)) } },
       )
     }
+    return NextResponse.json(
+      { error: `That's your ${FREE_ANON} free questions for the day. Sign in and I'll unlock ${FREE_USER - FREE_ANON} more, free. Otherwise I reset in about ${hrs}h.`, code: "daily_limit_signin", limit: FREE_ANON, remaining: 0, resetInMs: daily.resetIn },
+      { status: 429, headers: { "Retry-After": String(Math.ceil(daily.resetIn / 1000)) } },
+    )
   }
 
   const route   = String(body.route || "/").slice(0, 200)
