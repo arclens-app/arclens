@@ -407,31 +407,39 @@ export function buildTools() {
 
     list_open_trials: tool({
       description:
-        "List open trial campaigns testers can join right now — use for 'what trials are open', 'campaigns I can do', " +
-        "'how do I earn on ArcLens'. Returns an empty list with a note when none are open.",
+        "APPROVED trial campaigns on ArcLens with their status. Each result has a `state`: 'open' (a tester can join right now — matches the Trials page) " +
+        "or 'ended' (a past campaign that has finished). Use for any campaign question, including previous/ended ones and 'which projects have a campaign'. " +
+        "It only ever returns approved campaigns (open or ended) — unapproved/pending submissions are internal and never appear. Only call a campaign joinable if its state is 'open'.",
       inputSchema: jsonSchema<{ limit?: number }>({
         type: "object",
         properties: { limit: { type: "number", description: "Max results (1-15). Default 8." } },
       }),
       execute: async ({ limit = 8 }) => {
         const lim = Math.min(Math.max(Number(limit) || 8, 1), 15)
+        // Only ever surface APPROVED campaigns: 'open' (active + joinable, exactly what
+        // the /trials page shows) or 'ended' (finished). Pending/draft/rejected are
+        // internal — status IN ('active','ended') guarantees they never leak.
+        const openExpr =
+          `status = 'active' AND ended_at IS NULL AND (expires_at IS NULL OR expires_at > NOW()) ` +
+          `AND (total_slots IS NULL OR filled_slots < total_slots)`
         const r = await pool.query(
-          `SELECT title, slug, tagline, project_name, total_slots, filled_slots, reward_type, reward_description
+          `SELECT title, slug, tagline, project_name, total_slots, filled_slots, reward_type, reward_description,
+                  CASE WHEN ${openExpr} THEN 'open' ELSE 'ended' END AS state
            FROM campaigns
-           WHERE ended_at IS NULL AND status NOT IN ('ended','cancelled','draft','rejected','pending')
-           ORDER BY created_at DESC NULLS LAST
+           WHERE status IN ('active','ended')
+           ORDER BY (CASE WHEN ${openExpr} THEN 0 ELSE 1 END), created_at DESC NULLS LAST
            LIMIT $1`,
           [lim],
         ).catch(() => ({ rows: [] as any[] }))
-        if (!r.rows.length) return { count: 0, trials: [], note: "No open trials right now — check the Trials page for what's coming." }
-        return {
-          count: r.rows.length,
-          trials: r.rows.map((c: any) => ({
-            title: c.title, slug: c.slug, project: c.project_name || null, tagline: c.tagline,
-            slots: c.total_slots ? `${c.filled_slots ?? 0}/${c.total_slots} filled` : null,
-            reward: c.reward_description || (c.reward_type ? String(c.reward_type).replace(/_/g, " ") : null),
-          })),
-        }
+        const trials = r.rows.map((c: any) => ({
+          title: c.title, slug: c.slug, project: c.project_name || null, tagline: c.tagline,
+          state: c.state, // 'open' = joinable now; 'ended' = finished (never say it's joinable)
+          slots: c.total_slots ? `${c.filled_slots ?? 0}/${c.total_slots} filled` : null,
+          reward: c.reward_description || (c.reward_type ? String(c.reward_type).replace(/_/g, " ") : null),
+        }))
+        const openCount = trials.filter((t: any) => t.state === "open").length
+        if (!trials.length) return { count: 0, open_count: 0, trials: [], note: "No campaigns are open right now — check the Trials page for what's next." }
+        return { count: trials.length, open_count: openCount, trials }
       },
     }),
 
