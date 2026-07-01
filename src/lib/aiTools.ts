@@ -11,6 +11,7 @@
 
 import { Pool } from "pg"
 import { tool, jsonSchema } from "ai"
+import { getPayoutStats, getBuilderBoard } from "@/lib/lensPay"
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -312,6 +313,32 @@ export function buildTools() {
             link: `/address/${a}`,
           }
         } catch { return { found: false, note: "Couldn't reach the Arc RPC just now." } }
+      },
+    }),
+
+    get_lens_activity: tool({
+      description:
+        "Lens AI's OWN on-chain payout activity: how much it has paid builders, how many payouts, how many builders, and the most-cited builders (ranked by what Lens AI paid them). " +
+        "Use for 'who have you paid', 'how much have you paid builders', 'show your payouts', 'most-cited builders', 'how much has Lens AI given out'. " +
+        "This is Lens AI paying the builders whose data grounds its answers, in test USDC on Arc.",
+      inputSchema: jsonSchema<{ limit?: number }>({
+        type: "object",
+        properties: { limit: { type: "number", description: "How many top builders to include (1-15). Default 6." } },
+      }),
+      execute: async ({ limit = 6 }) => {
+        try {
+          const [stats, board] = await Promise.all([
+            getPayoutStats(),
+            getBuilderBoard(Math.min(Math.max(Number(limit) || 6, 1), 15)),
+          ])
+          return {
+            total_paid: stats.totalPaidUsd,
+            payouts: stats.payouts,
+            builders_paid: stats.builders_paid,
+            top_builders: board.map(b => ({ rank: b.rank, name: b.name, slug: b.slug, trust: b.trust, logo: b.logo, cites: b.cites, earned: b.earnedUsd })),
+            note: "Lens AI pays the builders whose data grounds its answers, in test USDC on Arc.",
+          }
+        } catch { return { note: "Couldn't load payout activity right now." } }
       },
     }),
 
