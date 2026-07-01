@@ -342,6 +342,78 @@ export function buildTools() {
       },
     }),
 
+    list_events: tool({
+      description:
+        "Events on or around Arc — meetups, hackathons, AMAs, launches, online or in person. " +
+        "Use for 'what events are on Arc', 'any hackathons', 'upcoming events'. Returns upcoming events with when, where, and a link.",
+      inputSchema: jsonSchema<{ limit?: number }>({
+        type: "object",
+        properties: { limit: { type: "number", description: "Max events (1-12). Default 6." } },
+      }),
+      execute: async ({ limit = 6 }) => {
+        const lim = Math.min(Math.max(Number(limit) || 6, 1), 12)
+        const r = await pool.query(
+          `SELECT name, tagline, type, date, is_online, location, link, organizer
+             FROM events
+            WHERE approved = true AND (date IS NULL OR date >= NOW() - INTERVAL '1 day')
+            ORDER BY featured DESC, date ASC
+            LIMIT $1`,
+          [lim],
+        ).catch(() => ({ rows: [] as any[] }))
+        if (!r.rows.length) return { count: 0, events: [], note: "No upcoming events listed on Arc right now." }
+        return {
+          count: r.rows.length,
+          events: r.rows.map((e: any) => ({
+            title: e.name, tagline: e.tagline || null, type: e.type || null,
+            when: e.date ? new Date(e.date).toISOString().slice(0, 10) : null,
+            where: e.is_online ? "Online" : (e.location || null),
+            organizer: e.organizer || null, link: e.link || null,
+          })),
+        }
+      },
+    }),
+
+    list_builders: tool({
+      description:
+        "The builders on Arc — real people who claimed and shipped projects, ranked by track record (projects shipped + reach). " +
+        "Use for 'who's building on Arc', 'top builders', 'best builders', or to look up a builder by name. Returns name, projects shipped, verified status, and a profile link.",
+      inputSchema: jsonSchema<{ query?: string; limit?: number }>({
+        type: "object",
+        properties: {
+          query: { type: "string", description: "Optional name to look up a specific builder." },
+          limit: { type: "number", description: "How many to return (1-15). Default 6." },
+        },
+      }),
+      execute: async ({ query, limit = 6 }) => {
+        const lim = Math.min(Math.max(Number(limit) || 6, 1), 15)
+        const params: any[] = []
+        let nameClause = ""
+        if (query && String(query).trim()) { params.push(`%${String(query).trim()}%`); nameClause = `AND b.display_name ILIKE $${params.length}` }
+        params.push(lim)
+        const r = await pool.query(
+          `SELECT b.address, b.display_name, b.verified, b.twitter,
+                  COUNT(p.id)::int AS project_count,
+                  ((COUNT(p.id) * 500) + LEAST(COALESCE(SUM(p.view_count), 0), 5000))::int AS score
+             FROM builder_profiles b
+             LEFT JOIN projects p ON p.owner_wallet = b.address AND p.approved AND p.live
+            WHERE b.claimed_at IS NOT NULL AND b.display_name IS NOT NULL AND LENGTH(TRIM(b.display_name)) >= 2 ${nameClause}
+            GROUP BY b.address, b.display_name, b.verified, b.twitter
+            ORDER BY score DESC, b.claimed_at ASC
+            LIMIT $${params.length}`,
+          params,
+        ).catch(() => ({ rows: [] as any[] }))
+        if (!r.rows.length) return { count: 0, builders: [], note: query ? `No builder found matching "${query}".` : "No builder profiles yet." }
+        return {
+          count: r.rows.length,
+          builders: r.rows.map((b: any, i: number) => ({
+            rank: i + 1, name: b.display_name, wallet: b.address,
+            projects: b.project_count, verified: !!b.verified,
+            profile: `/builder/${b.address}`,
+          })),
+        }
+      },
+    }),
+
     get_project_metrics: tool({
       description:
         "Get one specific project's live, on-chain metrics by name or slug. Use when the user asks about a single " +

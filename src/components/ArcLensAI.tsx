@@ -474,6 +474,46 @@ function renderCards(cards: DataCard[]): React.ReactNode {
         </CardShell>
       )
     }
+    if (c.tool === "list_events") {
+      const rows: any[] = d.events || []
+      if (!rows.length) return <CardShell key={i}><div style={{ padding: "13px 14px", fontSize: "12.5px", color: T2, lineHeight: 1.5 }}>{d.note || "No events right now."}</div></CardShell>
+      return (
+        <CardShell key={i} title={`${d.count} event${d.count === 1 ? "" : "s"} on Arc`}>
+          {rows.map((e, r) => (
+            <a key={r} href={e.link || "#"} {...(e.link ? { target: "_blank", rel: "nofollow ugc noopener noreferrer" } : {})}
+               style={{ display: "flex", alignItems: "center", gap: "11px", padding: "11px 14px", textDecoration: "none", color: T1, borderTop: r === 0 ? "none" : `1px solid ${BDR}` }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: "13px", fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{e.title}</div>
+                <div style={{ fontSize: "10.5px", color: T3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{[e.when, e.where, e.type].filter(Boolean).join(" · ") || (e.tagline || "")}</div>
+              </div>
+              {e.link && <span style={{ color: ARC, flexShrink: 0 }}>↗</span>}
+            </a>
+          ))}
+        </CardShell>
+      )
+    }
+    if (c.tool === "list_builders") {
+      const rows: any[] = d.builders || []
+      if (!rows.length) return <CardShell key={i}><div style={{ padding: "13px 14px", fontSize: "12.5px", color: T2, lineHeight: 1.5 }}>{d.note || "No builders yet."}</div></CardShell>
+      return (
+        <CardShell key={i} title={`${d.count} builder${d.count === 1 ? "" : "s"} on Arc`}>
+          {rows.map((b, r) => (
+            <CardRow key={r} href={b.profile} first={r === 0}>
+              <span style={{ fontFamily: MONO, fontSize: "11px", color: T3, width: 14 }}>{b.rank}</span>
+              <TokenAvatar name={b.name} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: "13px", fontWeight: 600, display: "flex", alignItems: "center", gap: "6px" }}>
+                  <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{b.name}</span>
+                  {b.verified && <span style={{ color: USDC, fontSize: "10px" }}>✓</span>}
+                </div>
+                <div style={{ fontSize: "10.5px", color: T3 }}>{b.projects} project{b.projects === 1 ? "" : "s"}</div>
+              </div>
+              <span style={{ fontFamily: MONO, fontSize: "11px", color: ARC, flexShrink: 0 }}>View →</span>
+            </CardRow>
+          ))}
+        </CardShell>
+      )
+    }
     return null
   })
 }
