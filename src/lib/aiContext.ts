@@ -303,6 +303,21 @@ async function embedFact(id: number, topic: string, fact: string): Promise<void>
   } catch { /* embedding is best-effort */ }
 }
 
+// Self-healing embeddings: opportunistically embed a few knowledge rows that are
+// missing an embedding. Curated facts added or edited by admin become searchable
+// on their own as the agent runs — no manual "re-embed" step. Called fire-and-forget
+// after answers, and capped so it never adds latency or cost spikes.
+export async function backfillEmbeddings(max = 3): Promise<void> {
+  if (!getGeminiKey()) return
+  try {
+    const rows = await pool.query<{ id: number; topic: string; fact: string }>(
+      `SELECT id, topic, fact FROM ai_knowledge_base WHERE embedding IS NULL ORDER BY id LIMIT $1`,
+      [Math.max(1, Math.min(max, 10))],
+    )
+    for (const r of rows.rows) await embedFact(r.id, r.topic, r.fact)
+  } catch { /* best-effort */ }
+}
+
 export async function rememberProjects(slugs: string[]): Promise<number> {
   const list = Array.from(new Set((slugs || []).map(s => String(s || "").trim().toLowerCase()).filter(Boolean)))
   if (!list.length) return 0
