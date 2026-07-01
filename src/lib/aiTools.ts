@@ -196,6 +196,26 @@ export function buildTools() {
       },
     }),
 
+    list_categories: tool({
+      description:
+        "List the project categories on Arc and how many projects each has. Use this to answer 'what categories are on Arc', " +
+        "and ALWAYS before claiming a project is a specific type (lending, DEX, perps, oracle, wallet, bridge, RWA, stablecoin, etc.): " +
+        "check whether that type actually exists here. A category not in this list, or with 0 projects, means Arc has none of that type yet — " +
+        "say so plainly and never relabel an unrelated project as that type.",
+      inputSchema: jsonSchema<Record<string, never>>({ type: "object", properties: {} }),
+      execute: async () => {
+        const r = await pool.query(
+          `SELECT COALESCE(NULLIF(TRIM(category), ''), 'Other') AS category, COUNT(*)::int AS n
+             FROM projects WHERE approved AND live
+             GROUP BY 1 ORDER BY n DESC`,
+        ).catch(() => ({ rows: [] as any[] }))
+        return {
+          total_categories: r.rows.length,
+          categories: r.rows.map((c: any) => ({ category: c.category, projects: c.n })),
+        }
+      },
+    }),
+
     get_project_metrics: tool({
       description:
         "Get one specific project's live, on-chain metrics by name or slug. Use when the user asks about a single " +

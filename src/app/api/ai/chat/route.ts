@@ -11,7 +11,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { Pool } from "pg"
 import { getSession } from "@/lib/session"
-import { buildContext, logKnowledgeGap, rememberProjects, getGeminiKey, type AiContext } from "@/lib/aiContext"
+import { buildContext, logKnowledgeGap, rememberProjects, backfillEmbeddings, getGeminiKey, type AiContext } from "@/lib/aiContext"
 import { buildTools } from "@/lib/aiTools"
 import { payoutForAnswer, type PayoutTrace } from "@/lib/lensPay"
 import { enforce, rateLimit, getIp } from "@/lib/ratelimit"
@@ -97,33 +97,41 @@ export async function POST(req: NextRequest) {
 
   const session = getSession(req)
 
-  // Free-tier DAILY quota — counted PER USER (wallet) when signed in, so it
-  // can't be dodged by switching networks/IP. Anonymous callers have no
-  // identity, so they fall back to device-id + IP (best-effort) and get nudged
-  // to sign in. This 24h meter is also the foundation the paid API will bill
-  // against. The 20/min burst limiter above stays as flood protection.
-  // Free tier: 5/day signed out, 10/day signed in — signing in is the unlock, no
-  // user payment. (Agents still pay per call via x402 on /api/agent; that's separate.)
-  // Counted per identity so it can't be dodged by switching IP/device.
+  // Free tier: 5/day signed out, 10/day signed in. Signing in is the unlock, no
+  // user payment. Signed-in is metered per wallet. Signed-out is metered per device
+  // for nice per-browser UX, PLUS a per-IP/day ceiling that clearing the cache can
+  // NOT reset — so wiping localStorage no longer buys a fresh 5. (No anonymous limit
+  // is fully bypass-proof: a VPN or IP change still works. Signing in is the real,
+  // per-wallet gate.) The 20/min burst limiter above stays as flood protection.
   const FREE_ANON = 5
   const FREE_USER = 10
+  const ANON_IP_CAP = 15
+  const DAY = 24 * 60 * 60 * 1000
   const device = (req.headers.get("x-arclens-device") || "").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 64)
   const ip = getIp(req)
-  const identity = session?.addr ? `user:${session.addr}` : `anon:${device || "nodev"}:${ip}`
-  const dailyLimit = session?.addr ? FREE_USER : FREE_ANON
-  const daily = await rateLimit(`ai-daily:${identity}`, dailyLimit, 24 * 60 * 60 * 1000)
-  if (!daily.allowed) {
-    const hrs = Math.max(1, Math.ceil(daily.resetIn / 3_600_000))
-    if (session?.addr) {
+
+  if (session?.addr) {
+    const daily = await rateLimit(`ai-daily:user:${session.addr}`, FREE_USER, DAY)
+    if (!daily.allowed) {
+      const hrs = Math.max(1, Math.ceil(daily.resetIn / 3_600_000))
       return NextResponse.json(
         { error: `That's all ${FREE_USER} free questions for today. I reset in about ${hrs}h. Catch me then.`, code: "daily_limit", limit: FREE_USER, remaining: 0, resetInMs: daily.resetIn },
         { status: 429, headers: { "Retry-After": String(Math.ceil(daily.resetIn / 1000)) } },
       )
     }
-    return NextResponse.json(
-      { error: `That's your ${FREE_ANON} free questions for the day. Sign in and I'll unlock ${FREE_USER - FREE_ANON} more, free. Otherwise I reset in about ${hrs}h.`, code: "daily_limit_signin", limit: FREE_ANON, remaining: 0, resetInMs: daily.resetIn },
-      { status: 429, headers: { "Retry-After": String(Math.ceil(daily.resetIn / 1000)) } },
-    )
+  } else {
+    // Per-device count (resettable, fine) AND a per-IP ceiling (not resettable by
+    // clearing cache). Blocked when either is exhausted.
+    const dev = await rateLimit(`ai-daily:dev:${device || ip}`, FREE_ANON, DAY)
+    const ipc = await rateLimit(`ai-daily:ip:${ip}`, ANON_IP_CAP, DAY)
+    if (!dev.allowed || !ipc.allowed) {
+      const resetIn = Math.max(dev.resetIn, ipc.resetIn)
+      const hrs = Math.max(1, Math.ceil(resetIn / 3_600_000))
+      return NextResponse.json(
+        { error: `That's your ${FREE_ANON} free questions for the day. Sign in and I'll unlock ${FREE_USER - FREE_ANON} more, free. Otherwise I reset in about ${hrs}h.`, code: "daily_limit_signin", limit: FREE_ANON, remaining: 0, resetInMs: resetIn },
+        { status: 429, headers: { "Retry-After": String(Math.ceil(resetIn / 1000)) } },
+      )
+    }
   }
 
   const route   = String(body.route || "/").slice(0, 200)
@@ -236,6 +244,10 @@ export async function POST(req: NextRequest) {
         } catch (e: any) {
           console.error("[ai/chat] payout error:", e?.message || e)
         }
+
+        // Self-heal KB embeddings so curated/edited facts become searchable without
+        // a manual admin re-embed. Fire-and-forget, capped inside.
+        void backfillEmbeddings()
 
         const trailer = {
           conversationId: convId,
@@ -412,6 +424,7 @@ function buildSystemPrompt(ctx: AiContext): string {
   parts.push("9. LANGUAGE — reply in the SAME language the user writes in (Spanish, French, Portuguese, Arabic, Yoruba, Mandarin, Hindi, etc.), keeping your voice and personality. Project names, tickers, links and code stay as-is. Use English only when the user writes in English.")
   parts.push("10. NEVER use a template. Two different projects must read like two genuinely different answers. Don't open every 'what is X' the same way (e.g. NOT always 'X is a … On ArcLens its trust standing is …'). Lead with what's actually interesting or distinctive about THIS project, work the trust standing in naturally as a passing judgement (not a rote sentence), and only link the ecosystem page when it genuinely helps. Vary your openers, length, and rhythm — be the witty agent, not a form letter.")
   parts.push("11. NEVER loop or grovel. If a user pushes back ('that's wrong', 'not there', 'still nothing'), do NOT re-run the same tool and re-assert the same list, and do NOT pile on apologies. Acknowledge ONCE, briefly and with composure, then point them to the live page as the source of truth (e.g. [Trials](/trials)) and stop. You may apologize at most once. NEVER say your tools are 'broken', that you're 'stuck in a loop', or that your data is 'stale'. NEVER blame the user's browser, cache, refresh, or device — that is off-limits. If your tool returns nothing, the honest answer is simply that nothing is open right now, not that something exists but the user can't see it.")
+  parts.push("12. CATEGORY / TYPE ACCURACY — critical. When asked for a specific TYPE of protocol (lending, DEX, perps, bridge, oracle, wallet, RWA, stablecoin, launchpad, etc.), do NOT just return the highest-TVL or first project. First check what actually exists: call list_categories, and filter list_top_projects / search_ecosystem by that category (and search the keyword in descriptions). Rank WITHIN that type only. If Arc has nothing of that type, say so plainly — e.g. 'there's no lending protocol tracked on Arc yet' — and do NOT relabel an unrelated project to fill the gap (an AMM is NOT a lending protocol; a DEX is NOT a wallet). Always state a project's REAL category from the data; never invent one to make an answer fit.")
 
   return parts.join("\n")
 }
