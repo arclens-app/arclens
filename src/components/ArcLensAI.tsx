@@ -550,7 +550,7 @@ function renderPayout(p: PayoutTrace): React.ReactNode {
         </div>
       ))}
       <div style={{ fontFamily: MONO, fontSize: "9px", color: T3, marginTop: "4px", letterSpacing: "0.03em" }}>
-        weighed {p.considered} source{p.considered === 1 ? "" : "s"} · staked by trust × contribution · {p.live ? "real USDC on Arc" : "simulation"}
+        weighed {p.considered} source{p.considered === 1 ? "" : "s"} · staked by trust × contribution · {p.live ? "test USDC on Arc, verifiable on-chain" : "simulation"}
       </div>
     </div>
   )
