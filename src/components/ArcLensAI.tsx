@@ -387,6 +387,67 @@ function renderCards(cards: DataCard[]): React.ReactNode {
         </CardShell>
       )
     }
+    if (c.tool === "get_chain_stats") {
+      const stats = [
+        { label: "Cost to send", value: d.cost_to_send_usdc, color: USDC },
+        { label: "Block time",   value: d.block_time,        color: "#8aaeff" },
+        { label: "TPS",          value: d.tps,               color: T1 },
+        { label: "Latest block", value: d.latest_block,      color: T1 },
+      ].filter(s => s.value)
+      if (!stats.length) return <CardShell key={i}><div style={{ padding: "13px 14px", fontSize: "12.5px", color: T2 }}>{d.note || "Chain data unavailable right now."}</div></CardShell>
+      return (
+        <CardShell key={i} title="Arc · live from the chain">
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "20px", padding: "16px" }}>
+            {stats.map((s, r) => (
+              <div key={r} style={{ minWidth: 0 }}>
+                <div style={{ fontFamily: MONO, fontSize: "9px", color: T3, textTransform: "uppercase", letterSpacing: "0.08em" }}>{s.label}</div>
+                <div style={{ fontFamily: MONO, fontSize: "18px", fontWeight: 700, color: s.color, marginTop: "3px", letterSpacing: "-0.01em" }}>{s.value}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ padding: "0 16px 13px", fontFamily: MONO, fontSize: "9.5px", color: T3, letterSpacing: "0.03em" }}>gas paid in USDC · not ETH</div>
+        </CardShell>
+      )
+    }
+    if (c.tool === "get_transaction") {
+      if (d.found === false) return <CardShell key={i}><div style={{ padding: "13px 14px", fontSize: "12.5px", color: T2 }}>{d.note || "Transaction not found."}</div></CardShell>
+      const ok = d.status === "success", failed = d.status === "failed"
+      const sc = ok ? USDC : failed ? "#ff5a6e" : T2
+      const sbg = ok ? "rgba(0,200,150,0.12)" : failed ? "rgba(224,51,72,0.12)" : "rgba(127,127,127,0.12)"
+      const cut = (s: string | null | undefined) => (s ? `${s.slice(0, 6)}…${s.slice(-4)}` : "—")
+      return (
+        <CardShell key={i} title="Transaction">
+          <div style={{ padding: "14px", display: "flex", flexDirection: "column", gap: "12px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "9px" }}>
+              <span style={{ fontFamily: MONO, fontSize: "8.5px", fontWeight: 700, padding: "2px 7px", borderRadius: "4px", color: sc, background: sbg, textTransform: "uppercase", letterSpacing: "0.04em" }}>{d.status}</span>
+              <span style={{ fontFamily: MONO, fontSize: "17px", fontWeight: 700, color: T1 }}>{d.value_usdc}</span>
+            </div>
+            <div style={{ display: "flex", gap: "16px", flexWrap: "wrap" }}>
+              <Stat label="From" value={cut(d.from)} />
+              <Stat label="To" value={cut(d.to)} />
+              {d.block && <Stat label="Block" value={d.block} />}
+            </div>
+          </div>
+          {d.link && <a href={d.link} style={{ display: "block", padding: "10px 14px", borderTop: `1px solid ${BDR}`, fontFamily: MONO, fontSize: "11px", color: ARC, textDecoration: "none" }}>View on explorer →</a>}
+        </CardShell>
+      )
+    }
+    if (c.tool === "get_address") {
+      if (d.found === false) return <CardShell key={i}><div style={{ padding: "13px 14px", fontSize: "12.5px", color: T2 }}>{d.note || "Address not found."}</div></CardShell>
+      const cut = (s: string | null | undefined) => (s ? `${s.slice(0, 6)}…${s.slice(-4)}` : "—")
+      return (
+        <CardShell key={i} title="Address">
+          <div style={{ padding: "14px" }}>
+            <div style={{ fontFamily: MONO, fontSize: "12.5px", color: T2, marginBottom: "13px" }}>{cut(d.address)}</div>
+            <div style={{ display: "flex", gap: "20px" }}>
+              <Stat label="USDC balance" value={d.usdc_balance} />
+              <Stat label="Transactions" value={String(d.tx_count ?? "—")} />
+            </div>
+          </div>
+          {d.link && <a href={d.link} style={{ display: "block", padding: "10px 14px", borderTop: `1px solid ${BDR}`, fontFamily: MONO, fontSize: "11px", color: ARC, textDecoration: "none" }}>View on explorer →</a>}
+        </CardShell>
+      )
+    }
     return null
   })
 }
