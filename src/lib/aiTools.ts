@@ -61,6 +61,21 @@ function trustOf(row: any): { tier: string; established: boolean; risk: boolean;
   return { tier, established, risk, label }
 }
 
+// Live Arc chain reads (gas, blocks, tx, address) via JSON-RPC — so the agent can
+// actually answer "how much is gas", "how fast is Arc", "explain this tx / wallet".
+const ARC_RPC = process.env.ARC_RPC_URL || "https://rpc.testnet.arc.network"
+async function rpc(method: string, params: unknown[] = []): Promise<any> {
+  const res = await fetch(ARC_RPC, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ jsonrpc: "2.0", method, params, id: 1 }),
+    signal: AbortSignal.timeout(8000),
+  })
+  const j = await res.json().catch(() => ({} as any))
+  return j.result
+}
+const hexToInt = (h: string | null | undefined) => (h ? parseInt(h, 16) : 0)
+
 export function buildTools() {
   return {
     list_top_projects: tool({
@@ -213,6 +228,90 @@ export function buildTools() {
           total_categories: r.rows.length,
           categories: r.rows.map((c: any) => ({ category: c.category, projects: c.n })),
         }
+      },
+    }),
+
+    get_chain_stats: tool({
+      description:
+        "Live Arc chain stats: current cost to send USDC (gas is paid in USDC on Arc, not ETH), gas price, latest block, transactions per second, and average block time / finality. " +
+        "Use for 'how much is gas on Arc', 'how fast is Arc', 'what block are we on', 'how many TPS'.",
+      inputSchema: jsonSchema<Record<string, never>>({ type: "object", properties: {} }),
+      execute: async () => {
+        try {
+          const [blockHex, gasHex] = await Promise.all([rpc("eth_blockNumber"), rpc("eth_gasPrice")])
+          const num = hexToInt(blockHex)
+          const gasWei = hexToInt(gasHex)
+          const blocks: { tx: number; ts: number }[] = []
+          for (let i = 0; i < 5; i++) {
+            const b = await rpc("eth_getBlockByNumber", ["0x" + (num - i).toString(16), false])
+            if (b) blocks.push({ tx: (b.transactions || []).length, ts: hexToInt(b.timestamp) })
+          }
+          let tps: string | null = null, blockTime: string | null = null
+          if (blocks.length >= 2) {
+            const span = blocks[0].ts - blocks[blocks.length - 1].ts
+            if (span > 0) tps = (blocks.reduce((s, b) => s + b.tx, 0) / span).toFixed(1)
+            const avg = span / (blocks.length - 1)
+            if (avg > 0 && Number.isFinite(avg)) blockTime = avg < 10 ? avg.toFixed(2) + "s" : Math.round(avg) + "s"
+          }
+          return {
+            cost_to_send_usdc: gasWei ? "$" + (gasWei * 46000 / 1e18).toFixed(4) : null,
+            gas_price_gwei: gasWei ? (gasWei / 1e9).toFixed(3) : null,
+            latest_block: num ? num.toLocaleString() : null,
+            tps, block_time: blockTime,
+            note: "Gas on Arc is paid in USDC, not ETH.",
+          }
+        } catch { return { note: "Couldn't reach the Arc RPC just now." } }
+      },
+    }),
+
+    get_transaction: tool({
+      description:
+        "Look up and explain a specific Arc transaction by hash (0x + 64 hex). Returns from, to, native USDC value, status, and block. " +
+        "Use when the user pastes a tx hash or asks 'what is this transaction'.",
+      inputSchema: jsonSchema<{ hash: string }>({
+        type: "object",
+        properties: { hash: { type: "string", description: "Transaction hash (0x + 64 hex)." } },
+        required: ["hash"],
+      }),
+      execute: async ({ hash }) => {
+        const h = String(hash || "").trim()
+        if (!/^0x[0-9a-fA-F]{64}$/.test(h)) return { found: false, note: "That isn't a valid transaction hash." }
+        try {
+          const [tx, receipt] = await Promise.all([rpc("eth_getTransactionByHash", [h]), rpc("eth_getTransactionReceipt", [h])])
+          if (!tx) return { found: false, note: "No transaction with that hash on Arc." }
+          const valueUsdc = hexToInt(tx.value) / 1e18
+          return {
+            found: true, hash: h, from: tx.from ?? null, to: tx.to ?? null,
+            value_usdc: valueUsdc > 0 ? "$" + valueUsdc.toFixed(6) : "$0 (a contract call, e.g. an ERC-20 transfer)",
+            status: receipt ? (hexToInt(receipt.status) === 1 ? "success" : "failed") : "pending",
+            block: tx.blockNumber ? hexToInt(tx.blockNumber).toLocaleString() : null,
+            link: `/tx/${h}`,
+          }
+        } catch { return { found: false, note: "Couldn't reach the Arc RPC just now." } }
+      },
+    }),
+
+    get_address: tool({
+      description:
+        "Look up an Arc address / wallet by hex address (0x + 40 hex). Returns native USDC balance and transaction count. " +
+        "Use when the user pastes an address or asks about a wallet.",
+      inputSchema: jsonSchema<{ address: string }>({
+        type: "object",
+        properties: { address: { type: "string", description: "Address (0x + 40 hex)." } },
+        required: ["address"],
+      }),
+      execute: async ({ address }) => {
+        const a = String(address || "").trim()
+        if (!/^0x[0-9a-fA-F]{40}$/.test(a)) return { found: false, note: "That isn't a valid address." }
+        try {
+          const [balHex, cntHex] = await Promise.all([rpc("eth_getBalance", [a, "latest"]), rpc("eth_getTransactionCount", [a, "latest"])])
+          return {
+            found: true, address: a,
+            usdc_balance: "$" + (hexToInt(balHex) / 1e18).toFixed(4),
+            tx_count: hexToInt(cntHex),
+            link: `/address/${a}`,
+          }
+        } catch { return { found: false, note: "Couldn't reach the Arc RPC just now." } }
       },
     }),
 
