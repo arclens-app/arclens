@@ -100,7 +100,7 @@ export function buildTools() {
         if (category) { params.push(category); where += ` AND category ILIKE $${params.length}` }
         params.push(lim)
         const r = await pool.query(
-          `SELECT name, slug, category,
+          `SELECT name, slug, category, logo_url,
                   ${col}::text AS metric_e6,
                   tvl_usd_e6::text AS tvl, volume_cum_usd_e6::text AS volume, revenue_cum_usd_e6::text AS revenue,
                   ${TRUST_COLS}
@@ -116,7 +116,7 @@ export function buildTools() {
         return {
           metric,
           projects: r.rows.map((p, i) => ({
-            rank: i + 1, name: p.name, slug: p.slug, category: p.category,
+            rank: i + 1, name: p.name, slug: p.slug, category: p.category, logo: p.logo_url ?? null,
             tvl: fmtUsd(p.tvl), volume: fmtUsd(p.volume), revenue: fmtUsd(p.revenue),
             trust: trustOf(p).label,
           })),
@@ -142,7 +142,7 @@ export function buildTools() {
         const notFound: string[] = []
         for (const name of wanted) {
           const r = await pool.query(
-            `SELECT name, slug, category, tagline,
+            `SELECT name, slug, category, tagline, logo_url,
                     tvl_usd_e6::text AS tvl, volume_cum_usd_e6::text AS volume,
                     revenue_cum_usd_e6::text AS revenue, tvl_tracking_enabled,
                     ${TRUST_COLS}
@@ -155,7 +155,7 @@ export function buildTools() {
           if (r.rows[0]) {
             const p = r.rows[0]
             found.push({
-              name: p.name, slug: p.slug, category: p.category, tagline: p.tagline,
+              name: p.name, slug: p.slug, category: p.category, tagline: p.tagline, logo: p.logo_url ?? null,
               tvl: fmtUsd(p.tvl), volume: fmtUsd(p.volume), revenue: fmtUsd(p.revenue),
               tracking: p.tvl_tracking_enabled ? "enabled" : "off",
               trust: trustOf(p).label,
