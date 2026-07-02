@@ -29,6 +29,23 @@ const RPC_OVERSIZE_PATTERNS = [
   /-32602/,                  // generic invalid-params oversize
   /-32614/,                  // Arc testnet: range/size limit
 ]
+
+// Arc's public RPC is QuickNode-backed and hard-caps at ~100 req/sec. A busy
+// tick that bursts past it comes back as -32007 "100/second request limit
+// reached". This is NOT an oversize error — bisecting doesn't help (smaller
+// ranges are still one request each); waiting does. So on a rate-limit we back
+// off and retry the SAME range, then fall through to the oversize/throw logic.
+const RPC_RATE_LIMIT_PATTERNS = [
+  /-32007/,                        // QuickNode rate-limit JSON-RPC code
+  /request limit reached/i,
+  /reduce calls per second/i,
+  /rate.?limit/i,
+  /too many requests/i,
+  /\b429\b/,
+]
+
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
+
 export async function getLogsBisecting(
   provider: ethers.JsonRpcProvider,
   filter: { address?: string; topics?: any[] },
@@ -36,19 +53,31 @@ export async function getLogsBisecting(
   toBlock: number,
 ): Promise<ethers.Log[]> {
   if (fromBlock > toBlock) return []
-  try {
-    return await provider.getLogs({ ...filter, fromBlock, toBlock })
-  } catch (e: any) {
-    const msg = (e?.error?.message || e?.info?.error?.message || e?.message || "")
-    const oversize = RPC_OVERSIZE_PATTERNS.some(r => r.test(msg))
-    if (!oversize || fromBlock === toBlock) throw e
-    // Sequential halves (not Promise.all) — keeps RPC pressure constant
-    // even as we recurse into pathological ranges. The total wall-clock
-    // is bounded by MAX_LOG_RANGE anyway.
-    const mid = Math.floor((fromBlock + toBlock) / 2)
-    const a = await getLogsBisecting(provider, filter, fromBlock, mid)
-    const b = await getLogsBisecting(provider, filter, mid + 1, toBlock)
-    return a.concat(b)
+  // Retry the same range on rate-limit with exponential backoff + jitter.
+  // After exhausting retries the error is re-thrown (or handled below if it
+  // turns out to be an oversize error), so the cursor never advances past an
+  // un-scanned window — the next tick retries it.
+  const MAX_RL_RETRIES = 4
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await provider.getLogs({ ...filter, fromBlock, toBlock })
+    } catch (e: any) {
+      const msg = (e?.error?.message || e?.info?.error?.message || e?.message || "")
+      if (RPC_RATE_LIMIT_PATTERNS.some(r => r.test(msg)) && attempt < MAX_RL_RETRIES) {
+        // 400ms, 800ms, 1600ms, 3200ms (+ up to 250ms jitter to de-sync workers)
+        await sleep(400 * 2 ** attempt + Math.floor(Math.random() * 250))
+        continue
+      }
+      const oversize = RPC_OVERSIZE_PATTERNS.some(r => r.test(msg))
+      if (!oversize || fromBlock === toBlock) throw e
+      // Sequential halves (not Promise.all) — keeps RPC pressure constant
+      // even as we recurse into pathological ranges. The total wall-clock
+      // is bounded by MAX_LOG_RANGE anyway.
+      const mid = Math.floor((fromBlock + toBlock) / 2)
+      const a = await getLogsBisecting(provider, filter, fromBlock, mid)
+      const b = await getLogsBisecting(provider, filter, mid + 1, toBlock)
+      return a.concat(b)
+    }
   }
 }
 
