@@ -215,6 +215,11 @@ export async function PUT(req: NextRequest) {
       )).rows[0]
       const subject = subjectFor({ provenContract: after?.proven, slug: after?.slug })
       if (subject) attestOnChain(subject, after.trust_level, after.recognition, "arclenz.xyz/ecosystem/" + (after.slug || ""), !!after.established).catch(() => {})
+      // Pay out any pending-claim Lens AI credits to the newly attached wallet.
+      // Fire-and-forget: the claim must never wait on (or fail from) payout plumbing.
+      if (after?.slug) {
+        import("@/lib/lensPay").then(m => m.settleAccruedOnClaim(after.slug, addr)).catch(() => {})
+      }
     } catch {}
 
     return NextResponse.json({ success: true })

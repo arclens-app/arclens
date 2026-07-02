@@ -333,6 +333,65 @@ export async function payoutForAnswer(args: {
   }
 }
 
+// ── Settle pending-claim credits when a builder finally connects a wallet ────
+// Accrued credits (trusted builders with no wallet at answer time) sit as
+// status='accrued' with a placeholder builder_wallet ('unclaimed:<slug>'). The
+// moment the project attaches an owner wallet via the claim flow, we pay those
+// credits out to it over the same Circle rail, flip them to settled, and rebind
+// the wallet — so "pending claim" is a real credit that PAYS on claim, not a
+// display-only IOU. Fire-and-forget from the claim route; never blocks it.
+// Bounded by a per-claim safety ceiling so a large backlog can't drain at once.
+export async function settleAccruedOnClaim(
+  slug: string,
+  wallet: string,
+): Promise<{ settled: number; paid_e6: number }> {
+  await tableReady
+  const s = String(slug || "").trim().toLowerCase()
+  const w = String(wallet || "").toLowerCase()
+  if (!s || !/^0x[a-f0-9]{40}$/.test(w)) return { settled: 0, paid_e6: 0 }
+
+  const rows = (await pool.query<{ id: number; amount_e6: string }>(
+    `SELECT id, amount_e6::text FROM lens_payouts
+      WHERE LOWER(project_slug) = $1 AND status = 'accrued'
+      ORDER BY created_at ASC`,
+    [s],
+  )).rows
+  if (rows.length === 0) return { settled: 0, paid_e6: 0 }
+
+  const live = payoutsLive()
+  const SETTLE_CAP_E6 = Number(process.env.LENS_CLAIM_SETTLE_CAP_E6 || 1_000_000) // $1 safety ceiling per claim
+  let settled = 0
+  let spent = 0
+  for (const row of rows) {
+    const amount = Number(row.amount_e6)
+    if (spent + amount > SETTLE_CAP_E6) break
+    let status: PaidBuilder["status"] = live ? "pending" : "simulated"
+    let txHash: string | null = null
+    let txId: string | null = null
+    if (live) {
+      try {
+        const res = await sendUsdc(w, amount)
+        txHash = res.txHash
+        txId = res.txId
+        status = res.status
+      } catch (e: any) {
+        console.error("[lensPay] settle-on-claim send failed:", e?.message || e)
+        continue // leave as accrued; a later claim or sweeper can retry
+      }
+    }
+    await pool.query(
+      `UPDATE lens_payouts
+          SET status = $2, tx_hash = $3, tx_id = $4, builder_wallet = $5,
+              reason = 'settled on wallet claim'
+        WHERE id = $1`,
+      [row.id, status, txHash, txId, w],
+    )
+    settled++
+    spent += amount
+  }
+  return { settled, paid_e6: spent }
+}
+
 // ── On-chain settlement via Circle Developer-Controlled Wallet ──────────────
 // Dynamic import so the build never breaks if the SDK isn't installed yet, and
 // so simulation mode has zero dependency on Circle.
