@@ -680,10 +680,14 @@ export default function HomePage() {
             <a href="/ecosystem" style={{ height: "46px", padding: "0 32px", background: "transparent", color: "#e8ecff", fontSize: "14px", fontWeight: 500, borderRadius: "10px", textDecoration: "none", display: "inline-flex", alignItems: "center", border: `1px solid rgba(255,255,255,0.1)` }}>
               Browse Ecosystem
             </a>
-            <a href="/ecosystem#submit" style={{ height: "46px", padding: "0 32px", background: "transparent", color: link, fontSize: "14px", fontWeight: 500, borderRadius: "10px", textDecoration: "none", display: "inline-flex", alignItems: "center", border: "1px solid rgba(26,86,255,0.25)" }}>
-              Submit Your Project
-            </a>
           </div>
+          {/* Submit is a niche founder action, so it's a quiet link, not a third
+              button that points at the same /ecosystem page as "Browse". */}
+          <a href="/ecosystem#submit" style={{ display: "inline-block", marginTop: "24px", fontSize: "13px", fontFamily: mono, color: t2, textDecoration: "none", transition: "color .12s" }}
+            onMouseEnter={e => (e.currentTarget.style.color = link)}
+            onMouseLeave={e => (e.currentTarget.style.color = t2)}>
+            Building on Arc? List your project →
+          </a>
         </div>
 
       </div>
