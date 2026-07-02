@@ -23,6 +23,7 @@ import { ethers } from "ethers"
 import { ARC_RPC_HTTP } from "@/lib/constants"
 import {
   ERC20_BALANCE_ABI,
+  REORG_BUFFER,
   toUsdE6,
   type StablecoinRow,
   type ForexMap,
@@ -193,12 +194,17 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // Read balances at the SAME safe block the indexer writes from (head minus
+    // the reorg buffer) so we compare like-for-like. Reading at bare head while
+    // the cached value was computed at head-6 produced spurious drift alerts on
+    // fast-moving pools (Arc blocks are ~0.5s, so 6 blocks of activity is real).
+    const checkBlock = Math.max(0, stats.head - REORG_BUFFER)
     for (const row of tvlContracts.rows) {
-      if (stats.head < row.start_block) continue
+      if (checkBlock < row.start_block) continue
       for (const s of stables) {
         try {
           const c20 = new ethers.Contract(s.address, ERC20_BALANCE_ABI, provider)
-          const bal: bigint = await c20.balanceOf(row.address)
+          const bal: bigint = await c20.balanceOf(row.address, { blockTag: checkBlock })
           if (bal === BigInt(0)) continue
           const fx = forex[s.peg_currency] ?? forex.USD
           const usdE6 = toUsdE6(bal, s.decimals, fx.rate)
@@ -218,7 +224,7 @@ export async function GET(req: NextRequest) {
         const diff = cached > actual ? cached - actual : actual - cached
         await recordAlert(client, projectId, "tvl_drift", "warning",
           `${slug}: cached TVL $${(Number(cached) / 1e6).toFixed(2)} differs from on-chain $${(Number(actual) / 1e6).toFixed(2)} by $${(Number(diff) / 1e6).toFixed(2)}`,
-          { cached_usd_e6: cached.toString(), actual_usd_e6: actual.toString(), head_block: stats.head },
+          { cached_usd_e6: cached.toString(), actual_usd_e6: actual.toString(), check_block: checkBlock, head_block: stats.head },
           `tvl_drift:${projectId}`,
         )
         stats.tvlDriftAlerts++
