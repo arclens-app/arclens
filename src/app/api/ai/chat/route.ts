@@ -181,7 +181,7 @@ export async function POST(req: NextRequest) {
                   trs = (steps || []).flatMap(s => s.toolResults || [])
                 } catch {}
               }
-              const KNOWN = new Set(["list_top_projects", "compare_projects", "search_ecosystem", "get_project_metrics", "get_top_movers", "get_project_builder", "list_projects", "list_open_trials", "get_ecosystem_stats"])
+              const KNOWN = new Set(["list_top_projects", "compare_projects", "search_ecosystem", "get_project_metrics", "get_top_movers", "get_project_builder", "list_projects", "list_open_trials", "get_ecosystem_stats", "get_chain_stats", "get_transaction", "get_address", "get_lens_activity", "list_events", "list_builders"])
               cards = (trs || [])
                 .map(tr => ({ tool: tr.toolName, data: tr.output ?? tr.result }))
                 .filter(c => KNOWN.has(c.tool) && c.data)
