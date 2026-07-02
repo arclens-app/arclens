@@ -61,6 +61,29 @@ async function gatedAll<T>(items: T[], concurrency: number, fn: (item: T) => Pro
   await Promise.all(workers)
 }
 
+// Arc's public RPC (QuickNode) rate-limits at ~100 req/sec (-32007) and, under
+// load, sometimes returns an empty body that ethers surfaces as a bogus
+// CALL_EXCEPTION / "could not coalesce". Both are transient — retry the single
+// call with backoff before letting it propagate. Getlogs has its own bisecting
+// backoff; this covers getBlock + balanceOf.
+const TRANSIENT_RPC = /-32007|request limit reached|reduce calls per second|rate.?limit|too many requests|\b429\b|could not coalesce|missing revert data|timeout|ETIMEDOUT|ECONNRESET|socket hang up|fetch failed/i
+async function rlRetry<T>(fn: () => Promise<T>, attempts = 4): Promise<T> {
+  let last: any
+  for (let i = 0; i < attempts; i++) {
+    try { return await fn() }
+    catch (e: any) {
+      last = e
+      const msg = e?.error?.message || e?.info?.error?.message || e?.shortMessage || e?.message || String(e)
+      if (i < attempts - 1 && TRANSIENT_RPC.test(msg)) {
+        await new Promise(r => setTimeout(r, 300 * 2 ** i + Math.floor(Math.random() * 200)))
+        continue
+      }
+      throw e
+    }
+  }
+  throw last
+}
+
 // ─── AUTH ────────────────────────────────────────────────────────────────────
 function isAuthorized(req: NextRequest): boolean {
   const expected = process.env.CRON_SECRET
@@ -343,9 +366,14 @@ async function scanStablecoinRevenueEvents(
   // 100/sec cap when revenue events span many distinct blocks.
   const blockNums = Array.from(new Set(logs.map(l => l.blockNumber)))
   const blockTimes = new Map<number, Date>()
-  await gatedAll(blockNums, 20, async n => {
-    const b = await provider.getBlock(n)
-    if (b) blockTimes.set(n, new Date(b.timestamp * 1000))
+  await gatedAll(blockNums, 6, async n => {
+    // Non-fatal: a rate-limited block-time fetch must not abort the whole scan
+    // (that froze the cursor and re-failed every tick). Retry, then fall back to
+    // wall-clock for this block's events if it still won't come.
+    try {
+      const b = await rlRetry(() => provider.getBlock(n))
+      if (b) blockTimes.set(n, new Date(b.timestamp * 1000))
+    } catch { /* fall back to wall-clock for this block */ }
   })
 
   const fx = forex[s.peg_currency] ?? forex.USD
@@ -468,7 +496,7 @@ async function indexProjectTvl(
       stables.map(async s => {
         if (targetBlock < c.start_block) return // contract not deployed yet
         const erc20 = new ethers.Contract(s.address, ERC20_BALANCE_ABI, provider)
-        const balanceRaw: bigint = await erc20.balanceOf(c.address, { blockTag: targetBlock })
+        const balanceRaw: bigint = await rlRetry(() => erc20.balanceOf(c.address, { blockTag: targetBlock }))
         if (balanceRaw === BigInt(0)) return // skip empty pairs to keep snapshot lean
         const fx = forex[s.peg_currency] ?? forex.USD
         const usdE6 = toUsdE6(balanceRaw, s.decimals, fx.rate)
@@ -640,9 +668,14 @@ async function scanVolumeEvents(
   // Arc's 100/sec public-RPC cap on busy windows.
   const blockNums = Array.from(new Set(logs.map(l => l.blockNumber)))
   const blockTimes = new Map<number, Date>()
-  await gatedAll(blockNums, 20, async n => {
-    const b = await provider.getBlock(n)
-    if (b) blockTimes.set(n, new Date(b.timestamp * 1000))
+  await gatedAll(blockNums, 6, async n => {
+    // Non-fatal: a rate-limited block-time fetch must not abort the whole scan
+    // (that froze the cursor and re-failed every tick). Retry, then fall back to
+    // wall-clock for this block's events if it still won't come.
+    try {
+      const b = await rlRetry(() => provider.getBlock(n))
+      if (b) blockTimes.set(n, new Date(b.timestamp * 1000))
+    } catch { /* fall back to wall-clock for this block */ }
   })
 
   const fx = forex[stable.peg_currency] ?? forex.USD
@@ -797,9 +830,14 @@ async function scanVolumeOutflow(
   // Pre-fetch block timestamps, concurrency-gated.
   const blockNums = Array.from(new Set(logs.map(l => l.blockNumber)))
   const blockTimes = new Map<number, Date>()
-  await gatedAll(blockNums, 20, async n => {
-    const b = await provider.getBlock(n)
-    if (b) blockTimes.set(n, new Date(b.timestamp * 1000))
+  await gatedAll(blockNums, 6, async n => {
+    // Non-fatal: a rate-limited block-time fetch must not abort the whole scan
+    // (that froze the cursor and re-failed every tick). Retry, then fall back to
+    // wall-clock for this block's events if it still won't come.
+    try {
+      const b = await rlRetry(() => provider.getBlock(n))
+      if (b) blockTimes.set(n, new Date(b.timestamp * 1000))
+    } catch { /* fall back to wall-clock for this block */ }
   })
 
   const fx = forex[stable.peg_currency] ?? forex.USD
