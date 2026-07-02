@@ -832,14 +832,14 @@ export default function ArcLayout({ children, active, lockDark }: { children: Re
             <span style={{ fontSize: "15px", fontWeight: 700, letterSpacing: "-0.03em", color: arc }}>Lens</span>
           </a>
 
-          {/* LIVE DOT */}
-          <div style={{ display: "flex", alignItems: "center", gap: "5px", flexShrink: 0 }}>
+          {/* LIVE DOT — hidden on mobile to make room for the full wallet control */}
+          <div className="hide-sm" style={{ display: "flex", alignItems: "center", gap: "5px", flexShrink: 0 }}>
             <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: connected ? usdc : t3, animation: connected ? "pulse 2s infinite" : "none" }} />
             <span style={{ fontSize: "10px", fontFamily: mono, color: connected ? usdc : t3 }}>Live</span>
           </div>
 
-          {/* SEARCH */}
-          <form onSubmit={handleSearch} style={{ flex: 1, maxWidth: "560px" }}>
+          {/* SEARCH — hidden on mobile; Lens AI covers tx/address lookups there */}
+          <form onSubmit={handleSearch} className="hide-sm" style={{ flex: 1, maxWidth: "560px" }}>
             <div style={{ position: "relative" }}>
               <input
                 ref={searchRef}
@@ -886,6 +886,7 @@ export default function ArcLayout({ children, active, lockDark }: { children: Re
                 {walletAddr.slice(0,6)}...{walletAddr.slice(-4)}
               </button>
               <button onClick={copyAddress} title={copied ? "Copied!" : "Copy address"}
+                className="hide-sm"
                 style={{ height: "30px", padding: "0 7px", background: "rgba(0,184,122,0.08)", color: copied ? usdc : t3, fontSize: "11px", border: "1px solid rgba(0,184,122,0.2)", borderLeft: "none", cursor: "pointer", display: "flex", alignItems: "center", transition: "color .15s" }}>
                 {copied ? "✓" : (
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
