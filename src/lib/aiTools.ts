@@ -638,19 +638,26 @@ export function buildTools() {
         // the /trials page shows) or 'ended' (finished). Pending/draft/rejected are
         // internal — status IN ('active','ended') guarantees they never leak.
         const openExpr =
-          `status = 'active' AND ended_at IS NULL AND (expires_at IS NULL OR expires_at > NOW()) ` +
-          `AND (total_slots IS NULL OR filled_slots < total_slots)`
+          `c.status = 'active' AND c.ended_at IS NULL AND (c.expires_at IS NULL OR c.expires_at > NOW()) ` +
+          `AND (c.total_slots IS NULL OR c.filled_slots < c.total_slots)`
+        // Join the owning project (creator_wallet = owner_wallet) so each trial
+        // carries the PROJECT's slug + logo — the slug lets a campaign citation
+        // pay that builder, and the logo gives the card a real picture.
         const r = await pool.query(
-          `SELECT title, slug, tagline, project_name, total_slots, filled_slots, reward_type, reward_description,
+          `SELECT c.title, c.slug, c.tagline, c.project_name, c.total_slots, c.filled_slots,
+                  c.reward_type, c.reward_description,
+                  p.slug AS project_slug, p.logo_url AS project_logo,
                   CASE WHEN ${openExpr} THEN 'open' ELSE 'ended' END AS state
-           FROM campaigns
-           WHERE status IN ('active','ended')
-           ORDER BY (CASE WHEN ${openExpr} THEN 0 ELSE 1 END), created_at DESC NULLS LAST
+           FROM campaigns c
+           LEFT JOIN projects p ON p.owner_wallet = c.creator_wallet AND p.approved = true AND p.live = true
+           WHERE c.status IN ('active','ended')
+           ORDER BY (CASE WHEN ${openExpr} THEN 0 ELSE 1 END), c.created_at DESC NULLS LAST
            LIMIT $1`,
           [lim],
         ).catch(() => ({ rows: [] as any[] }))
         const trials = r.rows.map((c: any) => ({
-          title: c.title, slug: c.slug, project: c.project_name || null, tagline: c.tagline,
+          title: c.title, slug: c.slug, project: c.project_name || null,
+          project_slug: c.project_slug || null, logo: c.project_logo || null, tagline: c.tagline,
           state: c.state, // 'open' = joinable now; 'ended' = finished (never say it's joinable)
           slots: c.total_slots ? `${c.filled_slots ?? 0}/${c.total_slots} filled` : null,
           reward: c.reward_description || (c.reward_type ? String(c.reward_type).replace(/_/g, " ") : null),

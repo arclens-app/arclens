@@ -71,6 +71,9 @@ function slugsFromCards(cards: Array<{ tool: string; data: any }>): string[] {
     const d = c?.data || {}
     if (Array.isArray(d.projects)) for (const p of d.projects) if (p?.slug) out.push(String(p.slug))
     if (Array.isArray(d.found))    for (const p of d.found)    if (p?.slug) out.push(String(p.slug))
+    // Campaign citations: pay the project that ran the trial, not just named ones.
+    if (Array.isArray(d.trials))   for (const t of d.trials)   if (t?.project_slug) out.push(String(t.project_slug))
+    if (Array.isArray(d.builders)) for (const b of d.builders)  if (b?.slug) out.push(String(b.slug))
     if (typeof d.slug === "string") out.push(d.slug)
   }
   return Array.from(new Set(out))

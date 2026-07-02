@@ -334,7 +334,7 @@ function renderCards(cards: DataCard[]): React.ReactNode {
             const ended = t.state === "ended"
             return (
             <CardRow key={r} href={`/trials/${t.slug}`} first={r === 0}>
-              <TokenAvatar name={t.project || t.title} />
+              <TokenAvatar name={t.project || t.title} logo={t.logo} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: "13px", fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t.title}</div>
                 <div style={{ fontSize: "10.5px", color: T3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t.reward ? `Reward: ${t.reward}` : (t.project || "")}</div>
