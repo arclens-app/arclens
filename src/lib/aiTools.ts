@@ -570,15 +570,17 @@ export function buildTools() {
         "'newest projects', 'show me Gaming projects', 'what's featured', and for TRUST questions like 'a trustworthy DeFi project', " +
         "'safe DEXs', 'which projects are Verified or Established'. Set trusted_only for trust questions. Every result includes its " +
         "trust signal (Listed / Claimed / Verified / Arc Partner / Arc Official, plus Established, or Risk flagged). " +
-        "Filter by category / claimed-by-a-builder / verified-builder / trusted-only; sort by tvl, volume, newest, or featured.",
-      inputSchema: jsonSchema<{ category?: string; claimed_only?: boolean; verified_builder_only?: boolean; trusted_only?: boolean; sort?: "tvl" | "volume" | "newest" | "featured"; limit?: number }>({
+        "Filter by category / claimed-by-a-builder / verified-builder / trusted-only. Sort covers most listing questions: " +
+        "'trending' (most-viewed this week — use for 'trending', 'hot', 'what's popular'), 'newest', 'oldest' (use for 'first project to list'), " +
+        "'quiet' (least-viewed — use for 'most unknown', 'minimal activity', 'quietest project'), 'tvl', 'volume', or 'featured'.",
+      inputSchema: jsonSchema<{ category?: string; claimed_only?: boolean; verified_builder_only?: boolean; trusted_only?: boolean; sort?: "tvl" | "volume" | "newest" | "oldest" | "trending" | "quiet" | "featured"; limit?: number }>({
         type: "object",
         properties: {
           category:              { type: "string", description: "Optional category filter, e.g. 'DeFi', 'Gaming'." },
           claimed_only:          { type: "boolean", description: "Only projects claimed by a builder." },
           verified_builder_only: { type: "boolean", description: "Only projects whose builder is verified." },
           trusted_only:          { type: "boolean", description: "Only projects with a meaningful trust signal — Verified, Arc Partner, Arc Official, or Established — and never risk-flagged. Use for 'trustworthy'/'safe' questions." },
-          sort:                  { type: "string", enum: ["tvl", "volume", "newest", "featured"], description: "Default featured." },
+          sort:                  { type: "string", enum: ["tvl", "volume", "newest", "oldest", "trending", "quiet", "featured"], description: "Default featured. 'trending' = most-viewed this week, 'oldest' = first to list, 'quiet' = least-known / minimal activity." },
           limit:                 { type: "number", description: "Max results (1-20). Default 10." },
         },
       }),
@@ -592,10 +594,22 @@ export function buildTools() {
         if (trusted_only) where.push(
           `(p.recognition IN ('official','partner') OR p.trust_level = 'verified' OR p.established = true)
             AND COALESCE((p.trust_profile->>'hard_risk')::bool, false) = false`)
-        const order = sort === "tvl" ? "p.tvl_usd_e6 DESC NULLS LAST"
-          : sort === "volume" ? "p.volume_cum_usd_e6 DESC NULLS LAST"
-          : sort === "newest" ? "p.created_at DESC"
-          : "p.featured DESC, COALESCE(p.view_count, 0) DESC"
+        // 'trending' ranks by views THIS week (real momentum, not all-time);
+        // 'quiet' surfaces the least-seen (for 'most unknown'/'minimal activity');
+        // 'oldest' answers 'first project to list'. WEEK is a computed integer.
+        const WEEK = Math.floor(Date.now() / (7 * 24 * 60 * 60 * 1000))
+        let trendingJoin = ""
+        let order: string
+        if (sort === "tvl") order = "p.tvl_usd_e6 DESC NULLS LAST"
+        else if (sort === "volume") order = "p.volume_cum_usd_e6 DESC NULLS LAST"
+        else if (sort === "newest") order = "p.created_at DESC"
+        else if (sort === "oldest") order = "p.created_at ASC NULLS LAST"
+        else if (sort === "trending") {
+          trendingJoin = `LEFT JOIN (SELECT project_id, COUNT(*) AS wv FROM project_views WHERE week_num = ${WEEK} GROUP BY project_id) pv ON pv.project_id = p.id`
+          order = "COALESCE(pv.wv, 0) DESC, COALESCE(p.view_count, 0) DESC"
+        }
+        else if (sort === "quiet") order = "COALESCE(p.view_count, 0) ASC, p.created_at DESC"
+        else order = "p.featured DESC, COALESCE(p.view_count, 0) DESC"
         params.push(lim)
         const r = await pool.query(
           `SELECT p.name, p.slug, p.category, p.tagline, p.tvl_usd_e6::text AS tvl, p.logo_url,
@@ -603,6 +617,7 @@ export function buildTools() {
                   COALESCE((p.trust_profile->>'hard_risk')::bool, false) AS hard_risk,
                   b.display_name AS builder_name, b.verified AS builder_verified
            FROM projects p LEFT JOIN builder_profiles b ON b.address = LOWER(p.owner_wallet)
+           ${trendingJoin}
            WHERE ${where.join(" AND ")}
            ORDER BY ${order}
            LIMIT $${params.length}`,
