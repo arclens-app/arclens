@@ -13,7 +13,7 @@ export const runtime = "nodejs"
 import { NextRequest, NextResponse } from "next/server"
 import { Pool } from "pg"
 import { enforce, getIp } from "@/lib/ratelimit"
-import { verifyPremiumPayment, recordPremiumCall, premiumPriceE6, premiumPriceUsd, payoutForAnswer } from "@/lib/lensPay"
+import { verifyPremiumPayment, recordPremiumCall, premiumPriceE6, premiumPriceUsd, payoutForAnswer, agentPayoutBudgetE6 } from "@/lib/lensPay"
 import { gatewayConfigured, verifyAndSettle, paymentRequiredHeader, paymentResponseHeader } from "@/lib/gateway"
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
@@ -144,7 +144,9 @@ export async function POST(req: NextRequest) {
   // The agent's payment funds the builders whose data answered it, then we log
   // the premium. Never block the response on the money plumbing.
   let payout: any = null
-  try { if (slugs.length) payout = await payoutForAnswer({ conversationId: null, askerId: agentId, askerWallet: null, slugs }) } catch {}
+  // budgetE6 caps the total builder payout for this paid call below what the
+  // agent paid, so Lens AI stays net-positive on every agent-to-agent call.
+  try { if (slugs.length) payout = await payoutForAnswer({ conversationId: null, askerId: agentId, askerWallet: null, slugs, budgetE6: agentPayoutBudgetE6 }) } catch {}
   recordPremiumCall(agentId, premiumPriceE6, settledTx).catch(() => {})
 
   return NextResponse.json(

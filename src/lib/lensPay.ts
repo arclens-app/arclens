@@ -80,6 +80,16 @@ const PREMIUM_PRICE_E6 = Number(process.env.LENS_PREMIUM_PRICE_E6 || 1000) // $0
 export const premiumPriceE6 = PREMIUM_PRICE_E6
 export const premiumPriceUsd = `$${(PREMIUM_PRICE_E6 / 1e6).toFixed(4)}`
 
+// A PAID agent call must leave Lens AI net-positive: the total builder payout
+// for that call is capped to a SHARE of what the call brought in (default 60%
+// out, 40% kept as margin). So the agent→Lens AI→builder loop is a closed,
+// profitable pass-through, never minting more than it earns. Free human chat
+// has no inbound payment and stays subsidised (no budget passed).
+const AGENT_PAYOUT_SHARE = Math.min(Math.max(Number(process.env.LENS_AGENT_PAYOUT_SHARE || 0.6), 0), 0.95)
+export const agentPayoutBudgetE6 = Math.max(0, Math.floor(PREMIUM_PRICE_E6 * AGENT_PAYOUT_SHARE))
+// Don't bother paying dust — if the remaining call budget is below this, skip.
+const MIN_PAYOUT_E6 = Number(process.env.LENS_MIN_PAYOUT_E6 || 100) // $0.0001
+
 const premiumReady = pool.query(`
   CREATE TABLE IF NOT EXISTS lens_premium (
     id BIGSERIAL PRIMARY KEY, asker_id TEXT, amount_e6 BIGINT NOT NULL, tx_hash TEXT,
@@ -198,6 +208,7 @@ export async function payoutForAnswer(args: {
   askerId: string | null
   askerWallet: string | null
   slugs: string[]
+  budgetE6?: number   // optional total payout ceiling for THIS call (paid + accrued). Keeps a paid agent call net-positive; omit for subsidised free chat.
 }): Promise<PayoutTrace | null> {
   const slugs = Array.from(new Set((args.slugs || []).map(s => String(s || "").trim().toLowerCase()).filter(Boolean)))
   if (slugs.length === 0) return null
@@ -236,6 +247,10 @@ export async function payoutForAnswer(args: {
   const skipped: SkippedBuilder[] = []
   let dayRemaining = Math.max(0, PER_DAY_CAP - (await daySpentE6()))
   let answerSpent = 0
+  // Total committed this call (paid + accrued). Bounded by args.budgetE6 when set,
+  // so a paid agent call never pays out more than its share of what it earned.
+  const budgetE6 = args.budgetE6
+  let committed = 0
   // Cap on-chain payments per answer — pay the highest-trust builders first so
   // the reply never waits on a long tail of settlements. The rest are deferred
   // (no dedup recorded, so they can earn on a later answer).
@@ -267,9 +282,18 @@ export async function payoutForAnswer(args: {
     if (Number(p.vol_e6) > 0)                 contribution += 0.3
     if (Number(p.rev_e6) > 0)                 contribution += 0.2
     if ((p.tagline || "").trim().length > 20) contribution += 0.1
-    const amount = Math.round(BASE_E6 * (TIER_WEIGHT[earnKey] || 1) * contribution)
+    let amount = Math.round(BASE_E6 * (TIER_WEIGHT[earnKey] || 1) * contribution)
     const dedupKey = p.wallet || `unclaimed:${p.slug}`
     if (recent.has(dedupKey))          { skipped.push({ name: p.name, slug: p.slug, reason: "already rewarded for you recently" }); continue }
+
+    // Per-call profit cap: a paid agent call passes at most its budget through
+    // to builders (Lens AI keeps the rest). Cap this builder to what's left;
+    // once the budget is spent, stop — never pay out more than the call earned.
+    if (budgetE6 != null) {
+      const remaining = budgetE6 - committed
+      if (remaining < MIN_PAYOUT_E6) { skipped.push({ name: p.name, slug: p.slug, reason: "call budget spent — Lens AI keeps a margin" }); continue }
+      if (amount > remaining) amount = remaining
+    }
 
     // Trusted but NO wallet yet → ACCRUE (pending claim). No money moves, no
     // budget consumed; the builder collects when they connect a wallet.
@@ -280,6 +304,7 @@ export async function payoutForAnswer(args: {
         [args.conversationId, askerId, dedupKey, p.slug, p.name, label, amount],
       )
       recent.add(dedupKey)
+      committed += amount
       accrued.push({ name: p.name, slug: p.slug, logo: p.logo_url ?? null, trust: label, amount_e6: amount, amountUsd: fmtUsd(amount), status: "accrued", txHash: null })
       continue
     }
@@ -317,6 +342,7 @@ export async function payoutForAnswer(args: {
 
     answerSpent += amount
     dayRemaining -= amount
+    committed += amount
     recent.add(dedupKey)
     paid.push({ name: p.name, slug: p.slug, logo: p.logo_url ?? null, trust: label, amount_e6: amount, amountUsd: fmtUsd(amount), status, txHash })
   }
