@@ -126,9 +126,9 @@ export default function LensShowcase() {
           {/* MOST-CITED — borderless rows */}
           <div style={{ display: "flex", alignItems: "baseline", gap: 10, margin: "50px 0 8px", flexWrap: "wrap" }}>
             <h2 style={{ fontSize: 20, fontWeight: 700, margin: 0, letterSpacing: "-0.02em", color: T1 }}>Most-cited builders</h2>
-            {builders > 0 && (
+            {board.length > 0 && (
               <span style={{ fontFamily: MONO, fontSize: 12, fontWeight: 700, color: USDC, background: "rgba(0,200,150,0.1)", padding: "2px 8px", borderRadius: 6, whiteSpace: "nowrap" }}>
-                {builders} paid
+                {board.length} cited
               </span>
             )}
             <span style={{ fontSize: 13, color: T3 }}>the builders whose data Lens AI trusts most</span>
