@@ -9,7 +9,9 @@ import { getPayoutStats, getBuilderBoard, payoutsLive } from "@/lib/lensPay"
 
 export async function GET() {
   try {
-    const [stats, board] = await Promise.all([getPayoutStats(), getBuilderBoard(25)])
+    // Show every paid builder, not a truncated top-25. The board caps at 100
+    // (getBuilderBoard's own ceiling) which is well above current volume.
+    const [stats, board] = await Promise.all([getPayoutStats(), getBuilderBoard(100)])
     return NextResponse.json(
       { live: payoutsLive(), ...stats, board },
       { headers: { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=180" } },
