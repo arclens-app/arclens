@@ -397,7 +397,7 @@ function renderCards(cards: DataCard[]): React.ReactNode {
             {b ? (
               <>
                 <div style={{ display: "flex", alignItems: "center", gap: "9px" }}>
-                  <TokenAvatar name={b.name} />
+                  <TokenAvatar name={d.project || b.name} logo={b.avatar || d.logo} />
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontSize: "13px", fontWeight: 600, display: "flex", alignItems: "center", gap: "6px" }}>{b.name}{b.verified && <span style={{ color: USDC, fontSize: "11px" }}>✓</span>}</div>
                     {b.bio && <div style={{ fontSize: "11px", color: T3, marginTop: "2px", lineHeight: 1.4 }}>{b.bio}</div>}

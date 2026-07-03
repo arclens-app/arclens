@@ -535,9 +535,9 @@ export function buildTools() {
       }),
       execute: async ({ project }) => {
         const r = await pool.query(
-          `SELECT p.name, p.slug, p.owner_wallet,
+          `SELECT p.name, p.slug, p.owner_wallet, p.logo_url,
                   p.twitter AS proj_twitter, p.website AS proj_website, p.discord AS proj_discord, p.github AS proj_github,
-                  b.display_name, b.verified, b.bio,
+                  b.display_name, b.verified, b.bio, b.avatar_url,
                   b.twitter AS b_twitter, b.github AS b_github, b.telegram AS b_telegram, b.website AS b_website
            FROM projects p
            LEFT JOIN builder_profiles b ON b.address = LOWER(p.owner_wallet)
@@ -552,7 +552,7 @@ export function buildTools() {
         // Project-level links — present for almost every project.
         const project_links = { twitter: nn(p.proj_twitter), website: nn(p.proj_website), discord: nn(p.proj_discord), github: nn(p.proj_github) }
         if (!p.owner_wallet) {
-          return { found: true, project: p.name, slug: p.slug, builder: null, project_links,
+          return { found: true, project: p.name, slug: p.slug, builder: null, logo: nn(p.logo_url), project_links,
             note: "This project hasn't been claimed by a builder yet — no builder profile. Share the project's own links above." }
         }
         const claimed = !!p.display_name
@@ -560,11 +560,13 @@ export function buildTools() {
           found: true,
           project: p.name,
           slug: p.slug,
+          logo: nn(p.logo_url),                 // project logo — fallback avatar when the builder has none
           builder: {
             // NEVER expose the wallet — if there's no profile name, refer to "the team".
             name: p.display_name || "the team behind it (no public profile yet)",
             claimed,
             verified: !!p.verified,
+            avatar: nn(p.avatar_url),
             bio: nn(p.bio),
             socials: { twitter: nn(p.b_twitter), github: nn(p.b_github), telegram: nn(p.b_telegram), website: nn(p.b_website) },
           },
