@@ -428,6 +428,7 @@ export function buildTools() {
       execute: async ({ project }) => {
         const r = await pool.query(
           `SELECT name, slug, category, tagline, tvl_tracking_enabled,
+                  twitter, website, discord, github,
                   tvl_usd_e6::text AS tvl, volume_cum_usd_e6::text AS volume,
                   revenue_cum_usd_e6::text AS revenue,
                   tvl_ath_usd_e6::text AS tvl_ath, tvl_last_indexed_at,
@@ -440,6 +441,7 @@ export function buildTools() {
         )
         if (!r.rows[0]) return { found: false, note: `No live project matching "${project}".` }
         const p = r.rows[0]
+        const nn = (v: any) => { const s = v == null ? "" : String(v).trim(); return s ? s : null }
         const tracking = p.tvl_tracking_enabled
         return {
           found: true,
@@ -449,6 +451,7 @@ export function buildTools() {
           tvl_all_time_high: fmtUsd(p.tvl_ath),
           last_indexed: p.tvl_last_indexed_at,
           trust: trustOf(p).label,
+          links: { twitter: nn(p.twitter), website: nn(p.website), discord: nn(p.discord), github: nn(p.github) },
           note: tracking ? undefined : "This project hasn't enabled on-chain metric tracking, so figures may be zero.",
         }
       },
@@ -523,8 +526,8 @@ export function buildTools() {
 
     get_project_builder: tool({
       description:
-        "Find who built / owns a specific Arc project — use for 'who built X', 'who's behind X', 'who's the team behind X'. " +
-        "Returns the builder's profile name (or wallet if no profile yet) and a link to their builder profile.",
+        "Find who built / owns a specific Arc project and how to reach or follow them — use for 'who built X', 'who's behind X', 'what's X's Twitter/GitHub', 'how do I contact the team behind X'. " +
+        "Returns the builder's name, verification, bio and socials (X, GitHub, Telegram, website), plus the project's own links (X, website, Discord, GitHub). NEVER returns a wallet address.",
       inputSchema: jsonSchema<{ project: string }>({
         type: "object",
         properties: { project: { type: "string", description: "Project name or slug." } },
@@ -533,7 +536,9 @@ export function buildTools() {
       execute: async ({ project }) => {
         const r = await pool.query(
           `SELECT p.name, p.slug, p.owner_wallet,
-                  b.display_name, b.verified, b.twitter, b.claimed_at
+                  p.twitter AS proj_twitter, p.website AS proj_website, p.discord AS proj_discord, p.github AS proj_github,
+                  b.display_name, b.verified, b.bio,
+                  b.twitter AS b_twitter, b.github AS b_github, b.telegram AS b_telegram, b.website AS b_website
            FROM projects p
            LEFT JOIN builder_profiles b ON b.address = LOWER(p.owner_wallet)
            WHERE p.approved AND p.live AND (p.slug ILIKE $1 OR p.name ILIKE $1)
@@ -543,23 +548,30 @@ export function buildTools() {
         )
         if (!r.rows[0]) return { found: false, note: `No live project matching "${project}".` }
         const p = r.rows[0]
-        if (!p.owner_wallet) return { found: true, project: p.name, builder: null, note: "This project hasn't been claimed by a builder yet." }
-        const addr = String(p.owner_wallet).toLowerCase()
+        const nn = (v: any) => { const s = v == null ? "" : String(v).trim(); return s ? s : null }
+        // Project-level links — present for almost every project.
+        const project_links = { twitter: nn(p.proj_twitter), website: nn(p.proj_website), discord: nn(p.proj_discord), github: nn(p.proj_github) }
+        if (!p.owner_wallet) {
+          return { found: true, project: p.name, slug: p.slug, builder: null, project_links,
+            note: "This project hasn't been claimed by a builder yet — no builder profile. Share the project's own links above." }
+        }
         const claimed = !!p.display_name
         return {
           found: true,
           project: p.name,
           slug: p.slug,
           builder: {
-            name: p.display_name || `${addr.slice(0, 6)}…${addr.slice(-4)}`,
+            // NEVER expose the wallet — if there's no profile name, refer to "the team".
+            name: p.display_name || "the team behind it (no public profile yet)",
             claimed,
             verified: !!p.verified,
-            twitter: p.twitter || null,
-            profile_url: `/builder/${addr}`,
+            bio: nn(p.bio),
+            socials: { twitter: nn(p.b_twitter), github: nn(p.b_github), telegram: nn(p.b_telegram), website: nn(p.b_website) },
           },
+          project_links,
           note: claimed
-            ? undefined
-            : "This builder hasn't published a public profile yet. Answer briefly and professionally — say the team behind {project} hasn't set up a public builder profile yet, and link the profile page. Do NOT print the full wallet address, and don't pad the answer with extra background.",
+            ? "NEVER print or reveal the owner/builder wallet address. Point people to the socials + project page."
+            : "The team hasn't published a public builder profile yet — point people to the project's own links above. NEVER reveal the owner/builder wallet address.",
         }
       },
     }),

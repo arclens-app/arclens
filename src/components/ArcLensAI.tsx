@@ -370,20 +370,51 @@ function renderCards(cards: DataCard[]): React.ReactNode {
       )
     }
     if (c.tool === "get_project_builder") {
-      if (d.found === false || !d.builder) return <CardShell key={i}><div style={{ padding: "13px 14px", fontSize: "12.5px", color: T2, lineHeight: 1.5 }}>{d.note || "No builder on record yet."}</div></CardShell>
       const b = d.builder
+      const pl = d.project_links || {}
+      const hasProj = pl.twitter || pl.website || pl.discord || pl.github
+      if (d.found === false || (!b && !hasProj)) return <CardShell key={i}><div style={{ padding: "13px 14px", fontSize: "12.5px", color: T2, lineHeight: 1.5 }}>{d.note || "No builder or links on record yet."}</div></CardShell>
+      const socialHref = (kind: string, v: any): string | null => {
+        if (!v) return null
+        const s = String(v).trim()
+        if (/^https?:\/\//i.test(s)) return s
+        const h = s.replace(/^@/, "")
+        if (kind === "twitter") return `https://x.com/${h}`
+        if (kind === "github") return `https://github.com/${h}`
+        if (kind === "telegram") return `https://t.me/${h.replace(/^t\.me\//i, "")}`
+        return `https://${h}`
+      }
+      const chips = (obj: any, labels: Record<string, string>) => {
+        const items = Object.entries(labels).map(([k, label]) => { const href = socialHref(k, obj?.[k]); return href ? { label, href } : null }).filter(Boolean) as { label: string; href: string }[]
+        if (!items.length) return null
+        return <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginTop: "7px" }}>
+          {items.map((it, j) => <a key={j} href={it.href} target="_blank" rel="nofollow ugc noopener noreferrer" style={{ fontFamily: MONO, fontSize: "10.5px", color: ARC, textDecoration: "none", padding: "2px 9px", borderRadius: "5px", background: "rgba(59,107,255,0.1)", border: "1px solid rgba(59,107,255,0.2)" }}>{it.label} ↗</a>)}
+        </div>
+      }
       return (
         <CardShell key={i} title={`Builder of ${d.project}`}>
-          <CardRow href={b.profile_url} first>
-            <TokenAvatar name={b.name} />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: "13px", fontWeight: 600, display: "flex", alignItems: "center", gap: "6px" }}>
-                {b.name}{b.verified && <span style={{ color: USDC, fontSize: "11px" }}>✓</span>}
+          <div style={{ padding: "12px 14px" }}>
+            {b ? (
+              <>
+                <div style={{ display: "flex", alignItems: "center", gap: "9px" }}>
+                  <TokenAvatar name={b.name} />
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: "13px", fontWeight: 600, display: "flex", alignItems: "center", gap: "6px" }}>{b.name}{b.verified && <span style={{ color: USDC, fontSize: "11px" }}>✓</span>}</div>
+                    {b.bio && <div style={{ fontSize: "11px", color: T3, marginTop: "2px", lineHeight: 1.4 }}>{b.bio}</div>}
+                  </div>
+                </div>
+                {chips(b.socials, { twitter: "X", github: "GitHub", telegram: "Telegram", website: "Website" })}
+              </>
+            ) : (
+              <div style={{ fontSize: "12.5px", color: T2 }}>Not claimed by a builder yet.</div>
+            )}
+            {hasProj && (
+              <div style={{ marginTop: b ? "11px" : "0" }}>
+                <div style={{ fontSize: "9.5px", fontFamily: MONO, color: T3, textTransform: "uppercase", letterSpacing: "0.06em" }}>Project links</div>
+                {chips(pl, { twitter: "X", website: "Website", discord: "Discord", github: "GitHub" })}
               </div>
-              <div style={{ fontSize: "10.5px", color: T3 }}>{b.claimed ? "Builder profile" : "Profile not set up yet"}</div>
-            </div>
-            <span style={{ fontFamily: MONO, fontSize: "11px", color: ARC, flexShrink: 0 }}>View →</span>
-          </CardRow>
+            )}
+          </div>
         </CardShell>
       )
     }
