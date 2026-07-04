@@ -35,6 +35,43 @@ const METRIC_COL: Record<string, string> = {
   revenue: "revenue_cum_usd_e6",
 }
 
+// Fuzzy project resolver — the DB has no pg_trgm, so we handle typos in app code.
+// FALLBACK ONLY: called when an exact/substring lookup found nothing, so a small
+// misspelling ("omnifun" for "onmifun") still resolves instead of "not found".
+function lev(a: string, b: string): number {
+  const m = a.length, n = b.length
+  if (!m) return n
+  if (!n) return m
+  let prev = Array.from({ length: n + 1 }, (_, i) => i)
+  for (let i = 1; i <= m; i++) {
+    const cur = [i]
+    for (let j = 1; j <= n; j++) {
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1))
+    }
+    prev = cur
+  }
+  return prev[n]
+}
+const normName = (s: string) => String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "")
+async function fuzzyProjectSlug(query: string): Promise<string | null> {
+  const q = normName(query)
+  if (q.length < 3) return null
+  const r = await pool.query<{ slug: string; name: string }>(
+    `SELECT slug, name FROM projects WHERE approved AND live`,
+  ).catch(() => ({ rows: [] as { slug: string; name: string }[] }))
+  let best: string | null = null, bestD = Infinity
+  for (const row of r.rows) {
+    for (const cand of [normName(row.slug), normName(row.name)]) {
+      if (!cand) continue
+      const d = lev(q, cand)
+      if (d < bestD) { bestD = d; best = row.slug }
+    }
+  }
+  // Accept only near-misses (typos): roughly one edit per three characters.
+  const maxD = Math.max(1, Math.floor(q.length * 0.34))
+  return bestD <= maxD ? best : null
+}
+
 // The trust columns every project tool now selects, so the AI can see + reason
 // about a project's standing (and never call a baseline-Claimed project
 // "trustworthy" by accident).
@@ -426,8 +463,7 @@ export function buildTools() {
         required: ["project"],
       }),
       execute: async ({ project }) => {
-        const r = await pool.query(
-          `SELECT name, slug, category, tagline, tvl_tracking_enabled,
+        const sql = `SELECT name, slug, category, tagline, tvl_tracking_enabled,
                   twitter, website, discord, github,
                   tvl_usd_e6::text AS tvl, volume_cum_usd_e6::text AS volume,
                   revenue_cum_usd_e6::text AS revenue,
@@ -436,9 +472,9 @@ export function buildTools() {
            FROM projects
            WHERE approved AND live AND (slug ILIKE $1 OR name ILIKE $1)
            ORDER BY (slug = LOWER($2)) DESC
-           LIMIT 1`,
-          [`%${project}%`, project.toLowerCase()],
-        )
+           LIMIT 1`
+        let r = await pool.query(sql, [`%${project}%`, project.toLowerCase()])
+        if (!r.rows[0]) { const fz = await fuzzyProjectSlug(project); if (fz) r = await pool.query(sql, [`%${fz}%`, fz]) }
         if (!r.rows[0]) return { found: false, note: `No live project matching "${project}".` }
         const p = r.rows[0]
         const nn = (v: any) => { const s = v == null ? "" : String(v).trim(); return s ? s : null }
@@ -534,8 +570,7 @@ export function buildTools() {
         required: ["project"],
       }),
       execute: async ({ project }) => {
-        const r = await pool.query(
-          `SELECT p.name, p.slug, p.owner_wallet, p.logo_url,
+        const sql = `SELECT p.name, p.slug, p.owner_wallet, p.logo_url,
                   p.twitter AS proj_twitter, p.website AS proj_website, p.discord AS proj_discord, p.github AS proj_github,
                   b.display_name, b.verified, b.bio, b.avatar_url,
                   b.twitter AS b_twitter, b.github AS b_github, b.telegram AS b_telegram, b.website AS b_website
@@ -543,9 +578,9 @@ export function buildTools() {
            LEFT JOIN builder_profiles b ON b.address = LOWER(p.owner_wallet)
            WHERE p.approved AND p.live AND (p.slug ILIKE $1 OR p.name ILIKE $1)
            ORDER BY (p.slug = LOWER($2)) DESC
-           LIMIT 1`,
-          [`%${project}%`, project.toLowerCase()],
-        )
+           LIMIT 1`
+        let r = await pool.query(sql, [`%${project}%`, project.toLowerCase()])
+        if (!r.rows[0]) { const fz = await fuzzyProjectSlug(project); if (fz) r = await pool.query(sql, [`%${fz}%`, fz]) }
         if (!r.rows[0]) return { found: false, note: `No live project matching "${project}".` }
         const p = r.rows[0]
         const nn = (v: any) => { const s = v == null ? "" : String(v).trim(); return s ? s : null }
