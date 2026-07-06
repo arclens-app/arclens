@@ -243,39 +243,27 @@ export default function EventsPage() {
         onMouseLeave={ev => { ev.currentTarget.style.borderColor = border; ev.currentTarget.style.transform = "none"; ev.currentTarget.style.boxShadow = "none" }}
         style={{ background: surf, border: "1px solid " + border, borderRadius: "14px", overflow: "hidden", transition: "all .15s", display: "flex", flexDirection: "column", opacity: isPast ? 0.55 : 1 }}>
 
-        {/* TOP BAR */}
-        <div style={{ height: "3px", background: `linear-gradient(90deg, ${color}, ${color}60, transparent)` }} />
-
-        {/* HEADER */}
-        <div style={{ padding: "16px 18px 12px", display: "flex", alignItems: "flex-start", gap: "12px" }}>
-          {/* Logo */}
-          <div style={{ width: "44px", height: "44px", borderRadius: "10px", flexShrink: 0, overflow: "hidden", background: color + "18", border: "1px solid " + color + "28", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "16px", fontWeight: 700, fontFamily: mono, color }}>
-            {e.logo_url
-              ? <img src={imgSrc(e.logo_url)!} alt={e.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={ev => (ev.currentTarget.style.display = "none")} />
-              : e.name[0]
-            }
+        {/* BANNER — the poster is the hero, badges overlaid */}
+        <div style={{ position: "relative", width: "100%", aspectRatio: "1200 / 628", overflow: "hidden", background: `linear-gradient(135deg, ${color}22, ${color}08)`, flexShrink: 0 }}>
+          {e.logo_url
+            ? <img src={imgSrc(e.logo_url)!} alt={e.name} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} onError={ev => { ev.currentTarget.style.visibility = "hidden" }} />
+            : <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 22px", textAlign: "center", fontSize: "18px", fontWeight: 700, fontFamily: mono, letterSpacing: "-0.02em", lineHeight: 1.25, color }}>{e.name}</div>
+          }
+          {/* scrim keeps overlaid badges legible on any poster */}
+          <div style={{ position: "absolute", inset: 0, pointerEvents: "none", background: "linear-gradient(180deg, rgba(0,0,0,0.34) 0%, transparent 26%, transparent 60%, rgba(0,0,0,0.40) 100%)" }} />
+          {/* official / featured */}
+          <div style={{ position: "absolute", top: "10px", left: "10px", display: "flex", gap: "6px" }}>
+            {e.badge === "official" && <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", fontSize: "8.5px", fontWeight: 700, fontFamily: mono, letterSpacing: "0.06em", padding: "3px 8px", borderRadius: "999px", background: "rgba(26,86,255,0.92)", color: "#fff", boxShadow: "0 2px 8px rgba(0,0,0,0.28)" }}><span style={{ width: "4px", height: "4px", borderRadius: "50%", background: "#fff" }} />OFFICIAL</span>}
+            {e.featured && <span style={{ fontSize: "8.5px", fontWeight: 700, fontFamily: mono, letterSpacing: "0.06em", padding: "3px 8px", borderRadius: "999px", background: "rgba(192,136,40,0.92)", color: "#fff" }}>FEATURED</span>}
           </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: "flex", alignItems: "flex-start", gap: "6px", marginBottom: "5px", flexWrap: "wrap" }}>
-              <div style={{ fontSize: "14px", fontWeight: 700, letterSpacing: "-0.025em", color: t1, lineHeight: 1.3 }}>{e.name}</div>
-              {e.badge === "official" && <span style={{ fontSize: "7px", fontFamily: mono, padding: "1px 5px", borderRadius: "3px", background: "rgba(26,86,255,0.12)", color: "#8aaeff", border: "1px solid rgba(26,86,255,0.25)", flexShrink: 0 }}>🔵 OFFICIAL</span>}
-              {e.featured && <span style={{ fontSize: "7px", fontFamily: mono, padding: "1px 5px", borderRadius: "3px", background: "rgba(192,136,40,0.1)", color: "#c08828", border: "1px solid rgba(192,136,40,0.25)", flexShrink: 0 }}>FEATURED</span>}
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
-              {e.type && <span style={{ fontSize: "8.5px", fontFamily: mono, padding: "2px 8px", borderRadius: "99px", background: color + "14", color, border: "1px solid " + color + "28" }}>{e.type}</span>}
-              {!isPast && (
-                <span style={{ fontSize: "8.5px", fontFamily: mono, padding: "2px 8px", borderRadius: "99px",
-                  background: isUrgent ? "rgba(224,51,72,0.1)" : "rgba(0,184,122,0.08)",
-                  color: isUrgent ? "#e03348" : usdc,
-                  border: "1px solid " + (isUrgent ? "rgba(224,51,72,0.2)" : "rgba(0,184,122,0.2)"),
-                  fontWeight: isUrgent ? 700 : 400,
-                }}>
-                  {countdown}
-                </span>
-              )}
-            </div>
-          </div>
+          {/* countdown */}
+          {!isPast && <span style={{ position: "absolute", top: "10px", right: "10px", fontSize: "9px", fontWeight: 600, fontFamily: mono, padding: "3px 9px", borderRadius: "999px", background: "rgba(0,0,0,0.5)", color: isUrgent ? "#ff6b7a" : "#5ff0b0", border: "1px solid rgba(255,255,255,0.14)" }}>{countdown}</span>}
+          {/* type */}
+          {e.type && <span style={{ position: "absolute", bottom: "10px", left: "10px", fontSize: "9px", fontFamily: mono, padding: "3px 9px", borderRadius: "999px", background: "rgba(0,0,0,0.5)", color: "#fff", border: "1px solid rgba(255,255,255,0.14)" }}>{e.type}</span>}
         </div>
+
+        {/* TITLE */}
+        <div style={{ padding: "14px 18px 0", fontSize: "15px", fontWeight: 700, letterSpacing: "-0.02em", color: t1, lineHeight: 1.3, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{e.name}</div>
 
         {/* TAGLINE */}
         {e.tagline && (

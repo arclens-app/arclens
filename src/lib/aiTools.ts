@@ -381,29 +381,37 @@ export function buildTools() {
 
     list_events: tool({
       description:
-        "Events on or around Arc — meetups, hackathons, AMAs, launches, online or in person. " +
-        "Use for 'what events are on Arc', 'any hackathons', 'upcoming events'. Returns upcoming events with when, where, and a link.",
-      inputSchema: jsonSchema<{ limit?: number }>({
+        "Events on or around Arc — official Arc House events plus community meetups, hackathons, " +
+        "AMAs, launches, online or in person. Use for 'what events are on Arc', 'any hackathons', " +
+        "'whats happening this week', 'upcoming events', 'office hours'. Returns upcoming/ongoing events " +
+        "with when, where, official-vs-community, and a link. Official events carry the Arc House badge.",
+      inputSchema: jsonSchema<{ limit?: number; official_only?: boolean }>({
         type: "object",
-        properties: { limit: { type: "number", description: "Max events (1-12). Default 6." } },
+        properties: {
+          limit: { type: "number", description: "Max events (1-12). Default 6." },
+          official_only: { type: "boolean", description: "Only official Arc House events. Default false." },
+        },
       }),
-      execute: async ({ limit = 6 }) => {
+      execute: async ({ limit = 6, official_only = false }) => {
         const lim = Math.min(Math.max(Number(limit) || 6, 1), 12)
         const r = await pool.query(
-          `SELECT name, tagline, type, date, is_online, location, link, organizer
+          `SELECT name, tagline, type, date, end_date, is_online, location, link, organizer, badge
              FROM events
-            WHERE approved = true AND (date IS NULL OR date >= NOW() - INTERVAL '1 day')
-            ORDER BY featured DESC, date ASC
+            WHERE approved = true AND (date IS NULL OR COALESCE(end_date, date) >= NOW() - INTERVAL '1 day')
+              AND ($2 = false OR badge = 'official')
+            ORDER BY (badge = 'official') DESC, featured DESC, date ASC
             LIMIT $1`,
-          [lim],
+          [lim, official_only],
         ).catch(() => ({ rows: [] as any[] }))
         if (!r.rows.length) return { count: 0, events: [], note: "No upcoming events listed on Arc right now." }
+        const day = (d: any) => (d ? new Date(d).toISOString().slice(0, 10) : null)
         return {
           count: r.rows.length,
           events: r.rows.map((e: any) => ({
             title: e.name, tagline: e.tagline || null, type: e.type || null,
-            when: e.date ? new Date(e.date).toISOString().slice(0, 10) : null,
+            when: day(e.date), ends: day(e.end_date),
             where: e.is_online ? "Online" : (e.location || null),
+            official: e.badge === "official",
             organizer: e.organizer || null, link: e.link || null,
           })),
         }
@@ -468,6 +476,7 @@ export function buildTools() {
                   tvl_usd_e6::text AS tvl, volume_cum_usd_e6::text AS volume,
                   revenue_cum_usd_e6::text AS revenue,
                   tvl_ath_usd_e6::text AS tvl_ath, tvl_last_indexed_at,
+                  subgraph_tvl_usd_e6::text AS sg_tvl, subgraph_volume_usd_e6::text AS sg_volume,
                   ${TRUST_COLS}
            FROM projects
            WHERE approved AND live AND (slug ILIKE $1 OR name ILIKE $1)
@@ -479,6 +488,11 @@ export function buildTools() {
         const p = r.rows[0]
         const nn = (v: any) => { const s = v == null ? "" : String(v).trim(); return s ? s : null }
         const tracking = p.tvl_tracking_enabled
+        // Protocol-reported metrics from the project's own subgraph, for big
+        // multi-pool DEXes our per-contract indexer can't fully represent. These
+        // are NOT independently on-chain-verified — always labelled as such.
+        const sgTvl = p.sg_tvl && Number(p.sg_tvl) > 0 ? fmtUsd(p.sg_tvl) : null
+        const sgVol = p.sg_volume && Number(p.sg_volume) > 0 ? fmtUsd(p.sg_volume) : null
         return {
           found: true,
           name: p.name, slug: p.slug, category: p.category, tagline: p.tagline,
@@ -488,7 +502,13 @@ export function buildTools() {
           last_indexed: p.tvl_last_indexed_at,
           trust: trustOf(p).label,
           links: { twitter: nn(p.twitter), website: nn(p.website), discord: nn(p.discord), github: nn(p.github) },
-          note: tracking ? undefined : "This project hasn't enabled on-chain metric tracking, so figures may be zero.",
+          ...((sgTvl || sgVol) ? {
+            reported_by_protocol: {
+              tvl: sgTvl, volume: sgVol,
+              note: "These come from the project's OWN subgraph — protocol-reported, NOT independently on-chain-verified by ArcLens. When you cite them, say so plainly (e.g. 'the protocol reports ~$X via its subgraph'). For a large multi-pool DEX these are the fuller, real totals; the on-chain tvl/volume above only cover the specific contracts registered with ArcLens, so they read much lower. Lead with the reported total, labelled, and note the on-chain-verified slice.",
+            },
+          } : {}),
+          note: tracking ? undefined : "On-chain metric tracking isn't enabled for this project, so the on-chain figures may be zero.",
         }
       },
     }),

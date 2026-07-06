@@ -253,6 +253,18 @@ function renderCards(cards: DataCard[]): React.ReactNode {
           <div style={{ display: "flex", gap: "10px", padding: "2px 14px 14px" }}>
             <Stat label="TVL" value={d.tvl} /><Stat label="Volume" value={d.volume} /><Stat label="Revenue" value={d.revenue} />
           </div>
+          {d.reported_by_protocol && (d.reported_by_protocol.tvl || d.reported_by_protocol.volume) && (
+            <div style={{ padding: "0 14px 13px" }}>
+              <div style={{ fontSize: "8.5px", fontFamily: MONO, color: "#c08828", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "6px" }}>
+                Reported by protocol · via subgraph
+              </div>
+              <div style={{ display: "flex", gap: "10px" }}>
+                {d.reported_by_protocol.tvl && <Stat label="TVL" value={d.reported_by_protocol.tvl} />}
+                {d.reported_by_protocol.volume && <Stat label="Volume" value={d.reported_by_protocol.volume} />}
+              </div>
+              <div style={{ fontSize: "9px", color: T3, marginTop: "6px", lineHeight: 1.4 }}>Self-reported by the project, not on-chain-verified by ArcLens.</div>
+            </div>
+          )}
         </CardShell>
       )
     }
@@ -514,8 +526,11 @@ function renderCards(cards: DataCard[]): React.ReactNode {
             <a key={r} href={e.link || "#"} {...(e.link ? { target: "_blank", rel: "nofollow ugc noopener noreferrer" } : {})}
                style={{ display: "flex", alignItems: "center", gap: "11px", padding: "11px 14px", textDecoration: "none", color: T1, borderTop: r === 0 ? "none" : `1px solid ${BDR}` }}>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: "13px", fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{e.title}</div>
-                <div style={{ fontSize: "10.5px", color: T3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{[e.when, e.where, e.type].filter(Boolean).join(" · ") || (e.tagline || "")}</div>
+                <div style={{ display: "flex", alignItems: "center", gap: "6px", minWidth: 0 }}>
+                  <span style={{ fontSize: "13px", fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{e.title}</span>
+                  {e.official && <span style={{ flexShrink: 0, fontFamily: MONO, fontSize: "8px", fontWeight: 700, padding: "1px 5px", borderRadius: "4px", color: "#8aaeff", background: "rgba(26,86,255,0.12)", border: "1px solid rgba(26,86,255,0.25)", textTransform: "uppercase", letterSpacing: "0.04em" }}>Arc House</span>}
+                </div>
+                <div style={{ fontSize: "10.5px", color: T3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{[e.when && e.ends && e.ends !== e.when ? `${e.when} → ${e.ends}` : e.when, e.where, e.type].filter(Boolean).join(" · ") || (e.tagline || "")}</div>
               </div>
               {e.link && <span style={{ color: ARC, flexShrink: 0 }}>↗</span>}
             </a>
