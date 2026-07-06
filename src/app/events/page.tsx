@@ -96,6 +96,26 @@ function buildIcsUrl(e: Event) {
   return "data:text/calendar;charset=utf8," + encodeURIComponent(ics)
 }
 
+// One-click "Add to Google Calendar" — opens Google Calendar's web composer
+// pre-filled. Uses the same UTC time format as the .ics, so it localizes correctly.
+function buildGCalUrl(e: Event) {
+  function pad(n: number) { return String(n).padStart(2, "0") }
+  function fmt(d: string) {
+    const t = new Date(d)
+    return `${t.getUTCFullYear()}${pad(t.getUTCMonth() + 1)}${pad(t.getUTCDate())}T${pad(t.getUTCHours())}${pad(t.getUTCMinutes())}00Z`
+  }
+  const start = fmt(e.date)
+  const end   = e.end_date ? fmt(e.end_date) : fmt(new Date(new Date(e.date).getTime() + 3_600_000).toISOString())
+  const params = new URLSearchParams({
+    action: "TEMPLATE",
+    text: e.name,
+    dates: `${start}/${end}`,
+    details: [e.description || "", e.link || ""].filter(Boolean).join("\n\n"),
+    location: e.is_online ? "Online" : (e.location || ""),
+  })
+  return `https://calendar.google.com/calendar/render?${params.toString()}`
+}
+
 function daysUntil(d: string) {
   const diff = new Date(d).getTime() - Date.now()
   const days = Math.ceil(diff / (1000 * 60 * 60 * 24))
@@ -263,6 +283,7 @@ export default function EventsPage() {
       ? e.organizer_twitter.startsWith("http") ? e.organizer_twitter : "https://x.com/" + e.organizer_twitter.replace("@", "")
       : null
     const icsUrl = buildIcsUrl(e)
+    const gcalUrl = buildGCalUrl(e)
 
     return (
       <div
@@ -366,12 +387,22 @@ export default function EventsPage() {
               </a>
             )}
             {!isPast && (
-              <a href={icsUrl} download={`${e.name.replace(/\s+/g, "_")}.ics`}
+              <a href={gcalUrl} target="_blank" rel="noopener noreferrer" title="Add to Google Calendar"
+                style={{ display: "inline-flex", alignItems: "center", gap: "5px", height: "30px", padding: "0 12px", background: "transparent", color: t2, fontSize: "10px", fontFamily: mono, border: "1px solid " + border, borderRadius: "6px", textDecoration: "none", whiteSpace: "nowrap", flexShrink: 0 }}
+                onMouseEnter={ev => { (ev.currentTarget as HTMLAnchorElement).style.color = "#8aaeff"; (ev.currentTarget as HTMLAnchorElement).style.borderColor = "rgba(138,174,255,0.3)" }}
+                onMouseLeave={ev => { (ev.currentTarget as HTMLAnchorElement).style.color = t2; (ev.currentTarget as HTMLAnchorElement).style.borderColor = border }}
+              >
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}><rect x="3" y="4" width="18" height="17" rx="2.5" stroke="currentColor" strokeWidth="1.8"/><path d="M3 9h18M8 2v4M16 2v4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
+                Google
+              </a>
+            )}
+            {!isPast && (
+              <a href={icsUrl} download={`${e.name.replace(/\s+/g, "_")}.ics`} title="Download .ics for Apple, Outlook, etc."
                 style={{ display: "inline-flex", alignItems: "center", gap: "5px", height: "30px", padding: "0 12px", background: "transparent", color: t3, fontSize: "10px", fontFamily: mono, border: "1px solid " + border, borderRadius: "6px", textDecoration: "none", whiteSpace: "nowrap", flexShrink: 0 }}
                 onMouseEnter={ev => { (ev.currentTarget as HTMLAnchorElement).style.color = t2; (ev.currentTarget as HTMLAnchorElement).style.borderColor = "rgba(255,255,255,0.12)" }}
                 onMouseLeave={ev => { (ev.currentTarget as HTMLAnchorElement).style.color = t3; (ev.currentTarget as HTMLAnchorElement).style.borderColor = border }}
               >
-                + Add to Calendar
+                .ics
               </a>
             )}
           </div>
