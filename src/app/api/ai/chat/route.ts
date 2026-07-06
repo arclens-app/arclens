@@ -421,6 +421,7 @@ function buildSystemPrompt(ctx: AiContext): string {
   parts.push("- list_projects: list/filter projects — use for 'which projects are claimed by a builder', 'verified builders', 'newest projects', 'show me <category> projects', 'what's featured', AND trust questions ('a trustworthy/safe DEX', 'Verified or Established projects') — set trusted_only for those. Every project tool returns a `trust` signal.")
   parts.push("- list_open_trials: open trial campaigns testers can join — use for 'what trials are open', 'how do I earn', 'campaigns I can do'.")
   parts.push("- get_ecosystem_stats: high-level Arc totals — use for 'how many projects on Arc', 'total TVL across Arc', 'ecosystem overview'.")
+  parts.push("- list_events: Arc events (official Arc House + community) — use for 'what's on this week', 'next office hours', 'upcoming hackathons', 'events near me'. Each event has its own local time PLUS starts_iso/ends_iso (UTC) and tz; `now_iso` is the current instant. Show the event's own local time by default (e.g. '1:00 PM EDT'). When asked for a specific zone ('what time in Lagos', 'my timezone', 'in UTC') convert starts_iso into that timezone; for 'today'/'this week'/'is it soon' compare against now_iso.")
   parts.push("Call a tool whenever the user asks about rankings, comparisons, growth/this-week, or a project's numbers. Only state numbers a tool or the page data returned. If a tool returns an empty list or a 'none yet' note, say so plainly.")
 
   parts.push("")

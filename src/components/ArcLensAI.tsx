@@ -189,6 +189,15 @@ function TokenAvatar({ name, logo }: { name: string; logo?: string | null }) {
   }
   return <span style={{ width: 26, height: 26, borderRadius: "50%", flexShrink: 0, background: `linear-gradient(135deg, ${c}, ${c}aa)`, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 11, fontWeight: 700 }}>{(name || "?")[0].toUpperCase()}</span>
 }
+// Small rectangular event poster thumbnail (banners look wrong as round avatars).
+function EventThumb({ image, title }: { image?: string | null; title: string }) {
+  const [ok, setOk] = useState(true)
+  if (image && ok) {
+    return <img src={`/api/image-proxy?url=${encodeURIComponent(image)}`} alt="" onError={() => setOk(false)}
+      style={{ width: 48, height: 30, borderRadius: 6, flexShrink: 0, objectFit: "cover", background: SURF2, border: `1px solid ${BDR}` }} />
+  }
+  return <span style={{ width: 48, height: 30, borderRadius: 6, flexShrink: 0, background: `linear-gradient(135deg, ${ARC}33, ${ARC}11)`, border: `1px solid ${BDR}`, display: "flex", alignItems: "center", justifyContent: "center", color: T2, fontSize: 13, fontWeight: 700 }}>{(title || "?")[0].toUpperCase()}</span>
+}
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div style={{ flex: 1, minWidth: 0 }}>
@@ -525,12 +534,13 @@ function renderCards(cards: DataCard[]): React.ReactNode {
           {rows.map((e, r) => (
             <a key={r} href={e.link || "#"} {...(e.link ? { target: "_blank", rel: "nofollow ugc noopener noreferrer" } : {})}
                style={{ display: "flex", alignItems: "center", gap: "11px", padding: "11px 14px", textDecoration: "none", color: T1, borderTop: r === 0 ? "none" : `1px solid ${BDR}` }}>
+              <EventThumb image={e.image} title={e.title} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "6px", minWidth: 0 }}>
                   <span style={{ fontSize: "13px", fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{e.title}</span>
                   {e.official && <span style={{ flexShrink: 0, fontFamily: MONO, fontSize: "8px", fontWeight: 700, padding: "1px 5px", borderRadius: "4px", color: "#8aaeff", background: "rgba(26,86,255,0.12)", border: "1px solid rgba(26,86,255,0.25)", textTransform: "uppercase", letterSpacing: "0.04em" }}>Arc House</span>}
                 </div>
-                <div style={{ fontSize: "10.5px", color: T3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{[e.when && e.ends && e.ends !== e.when ? `${e.when} → ${e.ends}` : e.when, e.where, e.type].filter(Boolean).join(" · ") || (e.tagline || "")}</div>
+                <div style={{ fontSize: "10.5px", color: T3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{[e.ends && e.ends !== e.when ? `${e.when} → ${e.ends}` : (e.time ? `${e.when} · ${e.time}` : e.when), e.where, e.type].filter(Boolean).join(" · ") || (e.tagline || "")}</div>
               </div>
               {e.link && <span style={{ color: ARC, flexShrink: 0 }}>↗</span>}
             </a>

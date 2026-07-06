@@ -36,22 +36,37 @@ function formatDate(d: string) {
   return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
 }
 
-function formatTime(d: string) {
-  const date = new Date(d)
-  return date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", timeZoneName: "short" })
-}
-
-function formatDateRange(start: string, end: string | null) {
+// When to show, in the EVENT's own timezone (matches how Arc lists it, e.g. "1:00 PM EDT").
+// Same-day events get a date + time (range); multi-day get a date range, no time.
+function eventWhen(start: string, end: string | null, tz: string): { date: string; time: string | null } {
+  const zone = tz || "UTC"
   const s = new Date(start)
   const e = end ? new Date(end) : null
-  const opts: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" }
-  if (!e) return s.toLocaleDateString("en-US", { ...opts, year: "numeric" })
-  // Same month: "Apr 19–21, 2025"
-  if (s.getMonth() === e.getMonth() && s.getFullYear() === e.getFullYear()) {
-    return `${s.toLocaleDateString("en-US", opts)}–${e.getDate()}, ${s.getFullYear()}`
+  const dateFull = (d: Date) => d.toLocaleDateString("en-US", { timeZone: zone, month: "short", day: "numeric", year: "numeric" })
+  const dateShort = (d: Date) => d.toLocaleDateString("en-US", { timeZone: zone, month: "short", day: "numeric" })
+  const dayKey = (d: Date) => d.toLocaleDateString("en-CA", { timeZone: zone })
+  const t = (d: Date, withZone: boolean) => d.toLocaleTimeString("en-US", { timeZone: zone, hour: "numeric", minute: "2-digit", ...(withZone ? { timeZoneName: "short" } : {}) })
+  if (!e || dayKey(s) === dayKey(e)) {
+    const time = e && t(e, false) !== t(s, false) ? `${t(s, false)} – ${t(e, true)}` : t(s, true)
+    return { date: dateFull(s), time }
   }
-  // Different month: "Apr 30 – May 2, 2025"
-  return `${s.toLocaleDateString("en-US", opts)} – ${e.toLocaleDateString("en-US", { ...opts, year: "numeric" })}`
+  const range = dayKey(s).slice(0, 7) === dayKey(e).slice(0, 7)
+    ? `${dateShort(s)} – ${e.toLocaleDateString("en-US", { timeZone: zone, day: "numeric", year: "numeric" })}`
+    : `${dateShort(s)} – ${dateFull(e)}`
+  return { date: range, time: null }
+}
+
+// A <datetime-local> value is a naive wall-clock ("2026-07-10T13:00") with no zone.
+// Combine it with the chosen IANA timezone to get the correct UTC instant, so a
+// "1pm New York" submission is stored as the same instant Arc's own events use.
+function zonedToUtcISO(naive: string, tz: string): string {
+  if (!naive) return naive
+  const s = naive.length === 16 ? naive + ":00" : naive
+  const base = new Date(s + "Z") // read the wall-clock digits as if they were UTC
+  if (isNaN(base.getTime())) return naive
+  const utcD = new Date(base.toLocaleString("en-US", { timeZone: "UTC" }))
+  const tzD = new Date(base.toLocaleString("en-US", { timeZone: tz || "UTC" }))
+  return new Date(base.getTime() - (tzD.getTime() - utcD.getTime())).toISOString()
 }
 
 function buildIcsUrl(e: Event) {
@@ -137,7 +152,11 @@ export default function EventsPage() {
     tags: [] as string[],
   })
 
-  useEffect(() => { setMounted(true) }, [])
+  useEffect(() => {
+    setMounted(true)
+    // Default the timezone picker to the submitter's own zone, not UTC.
+    try { const tz = Intl.DateTimeFormat().resolvedOptions().timeZone; if (tz) setForm(f => ({ ...f, timezone: tz })) } catch {}
+  }, [])
 
   useEffect(() => {
     if (!mounted) return
@@ -183,7 +202,12 @@ export default function EventsPage() {
       const res  = await fetch("/api/events", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, logo_url: logoUrl }),
+        body: JSON.stringify({
+          ...form,
+          date: zonedToUtcISO(form.date, form.timezone),
+          end_date: form.end_date ? zonedToUtcISO(form.end_date, form.timezone) : "",
+          logo_url: logoUrl,
+        }),
       })
       const data = await res.json()
       if (data.success) { setSubmitted(true) }
@@ -285,8 +309,10 @@ export default function EventsPage() {
               <rect x="1" y="2" width="10" height="9" rx="2" stroke="currentColor" strokeWidth="1.2" fill="none"/>
               <path d="M4 1v2M8 1v2M1 5h10" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
             </svg>
-            <span style={{ fontSize: "11px", fontFamily: mono, color: t2 }}>{formatDateRange(e.date, e.end_date)}</span>
-            {!e.end_date && <span style={{ fontSize: "10px", fontFamily: mono, color: t3 }}>{formatTime(e.date)}</span>}
+            {(() => { const w = eventWhen(e.date, e.end_date, e.timezone); return (<>
+              <span style={{ fontSize: "11px", fontFamily: mono, color: t2 }}>{w.date}</span>
+              {w.time && <span style={{ fontSize: "10.5px", fontFamily: mono, color: t2, fontWeight: 500, opacity: 0.92 }}>{w.time}</span>}
+            </>) })()}
           </div>
           {/* Location */}
           {(e.location || e.is_online) && (
@@ -433,7 +459,7 @@ export default function EventsPage() {
                   <div>
                     <label style={{ display: "block", fontSize: "9.5px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "5px" }}>Timezone</label>
                     <select style={inputStyle} value={form.timezone} onChange={e => setForm(p => ({ ...p, timezone: e.target.value }))}>
-                      {["UTC","America/New_York","America/Los_Angeles","America/Chicago","Europe/London","Europe/Berlin","Asia/Dubai","Asia/Singapore","Asia/Tokyo","Australia/Sydney"].map(tz => <option key={tz} value={tz}>{tz}</option>)}
+                      {Array.from(new Set([form.timezone, "UTC","America/New_York","America/Los_Angeles","America/Chicago","Europe/London","Europe/Berlin","Asia/Dubai","Asia/Singapore","Asia/Tokyo","Australia/Sydney"].filter(Boolean))).map(tz => <option key={tz} value={tz}>{tz}</option>)}
                     </select>
                   </div>
 

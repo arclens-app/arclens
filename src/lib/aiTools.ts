@@ -395,7 +395,7 @@ export function buildTools() {
       execute: async ({ limit = 6, official_only = false }) => {
         const lim = Math.min(Math.max(Number(limit) || 6, 1), 12)
         const r = await pool.query(
-          `SELECT name, tagline, type, date, end_date, is_online, location, link, organizer, badge
+          `SELECT name, tagline, type, date, end_date, timezone, is_online, location, link, organizer, badge, logo_url
              FROM events
             WHERE approved = true AND (date IS NULL OR COALESCE(end_date, date) >= NOW() - INTERVAL '1 day')
               AND ($2 = false OR badge = 'official')
@@ -405,13 +405,25 @@ export function buildTools() {
         ).catch(() => ({ rows: [] as any[] }))
         if (!r.rows.length) return { count: 0, events: [], note: "No upcoming events listed on Arc right now." }
         const day = (d: any) => (d ? new Date(d).toISOString().slice(0, 10) : null)
+        // Time in the event's OWN timezone (e.g. "1:00 PM EDT") — matches how Arc lists it.
+        const time = (d: any, tz: string) => {
+          if (!d) return null
+          try { return new Date(d).toLocaleTimeString("en-US", { timeZone: tz || "UTC", hour: "numeric", minute: "2-digit", timeZoneName: "short" }) } catch { return null }
+        }
         return {
           count: r.rows.length,
+          // The raw UTC instant (starts_iso/ends_iso) + IANA tz are included so you can
+          // convert the time into ANY timezone the user asks for. `time` is the event's
+          // own local time as a convenience; `now_iso` is the current instant.
+          now_iso: new Date().toISOString(),
           events: r.rows.map((e: any) => ({
             title: e.name, tagline: e.tagline || null, type: e.type || null,
-            when: day(e.date), ends: day(e.end_date),
+            when: day(e.date), ends: day(e.end_date), time: time(e.date, e.timezone),
+            starts_iso: e.date ? new Date(e.date).toISOString() : null,
+            ends_iso: e.end_date ? new Date(e.end_date).toISOString() : null,
+            tz: e.timezone || "UTC",
             where: e.is_online ? "Online" : (e.location || null),
-            official: e.badge === "official",
+            official: e.badge === "official", image: e.logo_url || null,
             organizer: e.organizer || null, link: e.link || null,
           })),
         }
