@@ -11,7 +11,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { Pool } from "pg"
 import { getSession } from "@/lib/session"
-import { buildContext, logKnowledgeGap, rememberProjects, backfillEmbeddings, getGeminiKey, type AiContext } from "@/lib/aiContext"
+import { buildContext, logKnowledgeGap, rememberProjects, backfillEmbeddings, projectSlugsInText, getGeminiKey, type AiContext } from "@/lib/aiContext"
 import { buildTools } from "@/lib/aiTools"
 import { payoutForAnswer, type PayoutTrace } from "@/lib/lensPay"
 import { enforce, rateLimit, getIp } from "@/lib/ratelimit"
@@ -75,6 +75,18 @@ function slugsFromCards(cards: Array<{ tool: string; data: any }>): string[] {
     if (Array.isArray(d.trials))   for (const t of d.trials)   if (t?.project_slug) out.push(String(t.project_slug))
     if (Array.isArray(d.builders)) for (const b of d.builders)  if (b?.slug) out.push(String(b.slug))
     if (typeof d.slug === "string") out.push(d.slug)
+  }
+  return Array.from(new Set(out))
+}
+
+// Projects whose KB facts grounded the answer. rememberProjects stores each
+// project's facts with source_url = /ecosystem/<slug>, so a KB hit maps back to
+// a payable builder even when the answer used no tool card.
+function slugsFromKbHits(kbHits: Array<{ source_url: string | null }>): string[] {
+  const out: string[] = []
+  for (const h of kbHits || []) {
+    const m = String(h?.source_url || "").match(/\/(?:ecosystem|dashboard)\/([a-z0-9-]+)/i)
+    if (m) out.push(m[1].toLowerCase())
   }
   return Array.from(new Set(out))
 }
@@ -232,7 +244,14 @@ export async function POST(req: NextRequest) {
         // the reply. No grounded projects → no payout (free-first).
         let payout: PayoutTrace | null = null
         try {
-          const slugs = slugsFromCards(cards)
+          // Pay the builders it learned from, from ALL grounding sources: tool
+          // cards, the KB facts that grounded the answer, and the projects the
+          // answer actually names. The payout layer trust-gates + caps + de-dups.
+          const slugs = Array.from(new Set([
+            ...slugsFromCards(cards),
+            ...slugsFromKbHits(ctx.kbHits),
+            ...(await projectSlugsInText(answerText).catch(() => [])),
+          ]))
           if (slugs.length > 0) {
             payout = await payoutForAnswer({
               conversationId: convId,

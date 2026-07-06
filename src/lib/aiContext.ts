@@ -318,6 +318,31 @@ export async function backfillEmbeddings(max = 3): Promise<void> {
   } catch { /* best-effort */ }
 }
 
+// Which approved projects does the ANSWER actually name? Lens AI often answers
+// from its knowledge base and cites projects in prose without a tool card, so
+// card-only payouts miss the builders it just learned from. This resolves the
+// projects mentioned in the answer text so they get paid too. Whole-word,
+// case-insensitive, names >= 4 chars to avoid false positives; the payout layer
+// still trust-gates, caps, and de-dups, so over-matching is harmless.
+export async function projectSlugsInText(text: string): Promise<string[]> {
+  const t = String(text || "")
+  if (t.length < 4) return []
+  try {
+    const r = await pool.query<{ slug: string; name: string }>(
+      `SELECT slug, name FROM projects WHERE approved AND live`,
+    )
+    const out: string[] = []
+    for (const row of r.rows) {
+      const name = String(row.name || "").trim()
+      if (name.length < 4) continue
+      const esc = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+      const re = new RegExp(`(^|[^A-Za-z0-9])${esc}([^A-Za-z0-9]|$)`, "i")
+      if (re.test(t)) out.push(String(row.slug).toLowerCase())
+    }
+    return Array.from(new Set(out))
+  } catch { return [] }
+}
+
 export async function rememberProjects(slugs: string[]): Promise<number> {
   const list = Array.from(new Set((slugs || []).map(s => String(s || "").trim().toLowerCase()).filter(Boolean)))
   if (!list.length) return 0
