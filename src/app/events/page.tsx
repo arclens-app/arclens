@@ -69,7 +69,7 @@ function zonedToUtcISO(naive: string, tz: string): string {
   return new Date(base.getTime() - (tzD.getTime() - utcD.getTime())).toISOString()
 }
 
-function buildIcsUrl(e: Event) {
+function buildIcsText(e: Event) {
   function pad(n: number) { return String(n).padStart(2, "0") }
   function toIcsDate(d: string) {
     const dt = new Date(d)
@@ -93,7 +93,26 @@ function buildIcsUrl(e: Event) {
     "END:VEVENT",
     "END:VCALENDAR",
   ].filter(Boolean).join("\r\n")
-  return "data:text/calendar;charset=utf8," + encodeURIComponent(ics)
+  return ics
+}
+
+// Download the .ics via an in-browser Blob URL — more reliable than a data: URL
+// on mobile browsers. Purely client-side; never touches our server/storage.
+function downloadIcs(name: string, ics: string) {
+  try {
+    const blob = new Blob([ics], { type: "text/calendar;charset=utf-8" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `${name.replace(/\s+/g, "_")}.ics`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    setTimeout(() => URL.revokeObjectURL(url), 2000)
+  } catch {
+    // Fallback: open the calendar data inline so the browser can still handle it.
+    window.open("data:text/calendar;charset=utf8," + encodeURIComponent(ics), "_blank")
+  }
 }
 
 // One-click "Add to Google Calendar" — opens Google Calendar's web composer
@@ -282,7 +301,7 @@ export default function EventsPage() {
     const twitterUrl = e.organizer_twitter
       ? e.organizer_twitter.startsWith("http") ? e.organizer_twitter : "https://x.com/" + e.organizer_twitter.replace("@", "")
       : null
-    const icsUrl = buildIcsUrl(e)
+    const icsText = buildIcsText(e)
     const gcalUrl = buildGCalUrl(e)
 
     return (
@@ -397,13 +416,13 @@ export default function EventsPage() {
               </a>
             )}
             {!isPast && (
-              <a href={icsUrl} download={`${e.name.replace(/\s+/g, "_")}.ics`} title="Download .ics for Apple, Outlook, etc."
-                style={{ display: "inline-flex", alignItems: "center", gap: "5px", height: "30px", padding: "0 12px", background: "transparent", color: t3, fontSize: "10px", fontFamily: mono, border: "1px solid " + border, borderRadius: "6px", textDecoration: "none", whiteSpace: "nowrap", flexShrink: 0 }}
-                onMouseEnter={ev => { (ev.currentTarget as HTMLAnchorElement).style.color = t2; (ev.currentTarget as HTMLAnchorElement).style.borderColor = "rgba(255,255,255,0.12)" }}
-                onMouseLeave={ev => { (ev.currentTarget as HTMLAnchorElement).style.color = t3; (ev.currentTarget as HTMLAnchorElement).style.borderColor = border }}
+              <button type="button" onClick={() => downloadIcs(e.name, icsText)} title="Download .ics for Apple, Outlook, etc."
+                style={{ display: "inline-flex", alignItems: "center", gap: "5px", height: "30px", padding: "0 12px", background: "transparent", color: t3, fontSize: "10px", fontFamily: mono, border: "1px solid " + border, borderRadius: "6px", cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}
+                onMouseEnter={ev => { (ev.currentTarget as HTMLButtonElement).style.color = t2; (ev.currentTarget as HTMLButtonElement).style.borderColor = "rgba(255,255,255,0.12)" }}
+                onMouseLeave={ev => { (ev.currentTarget as HTMLButtonElement).style.color = t3; (ev.currentTarget as HTMLButtonElement).style.borderColor = border }}
               >
                 .ics
-              </a>
+              </button>
             )}
           </div>
         )}
