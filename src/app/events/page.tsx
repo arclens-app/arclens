@@ -96,10 +96,6 @@ function buildIcsUrl(e: Event) {
   return "data:text/calendar;charset=utf8," + encodeURIComponent(ics)
 }
 
-function isUpcoming(d: string) {
-  return new Date(d) >= new Date()
-}
-
 function daysUntil(d: string) {
   const diff = new Date(d).getTime() - Date.now()
   const days = Math.ceil(diff / (1000 * 60 * 60 * 24))
@@ -236,8 +232,11 @@ export default function EventsPage() {
     color: t1, outline: "none",
   } as React.CSSProperties
 
-  const upcoming = events.filter(e => isUpcoming(e.date))
-  const past     = events.filter(e => !isUpcoming(e.date))
+  // "Upcoming" includes events still running (end date in the future), not just
+  // ones that haven't started — so multi-day hackathons/bootcamps stay visible.
+  const isActive = (e: Event) => new Date(e.end_date || e.date) >= new Date()
+  const upcoming = events.filter(isActive)
+  const past     = events.filter(e => !isActive(e))
 
   const filtered = (showPast ? past : upcoming).filter(e => {
     const matchType   = filter === "All" || e.type === filter
@@ -253,8 +252,12 @@ export default function EventsPage() {
 
   function EventCard({ e }: { e: Event }) {
     const color      = TYPE_COLOR[e.type || ""] || "#6b7da8"
-    const countdown  = daysUntil(e.date)
-    const isPast     = countdown === "Past"
+    const now        = Date.now()
+    const started    = new Date(e.date).getTime() <= now
+    const ended      = new Date(e.end_date || e.date).getTime() < now
+    const isPast     = ended
+    // Multi-day events that have started but not ended read "Live now", not "Past".
+    const countdown  = ended ? "Past" : started ? "Live now" : daysUntil(e.date)
     const isUrgent   = countdown === "Today" || countdown === "Tomorrow"
     const twitterUrl = e.organizer_twitter
       ? e.organizer_twitter.startsWith("http") ? e.organizer_twitter : "https://x.com/" + e.organizer_twitter.replace("@", "")
