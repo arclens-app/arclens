@@ -16,6 +16,10 @@
     {
       "path": "/api/cron/trust-recheck",
       "schedule": "30 3 * * *"
+    },
+    {
+      "path": "/api/cron/subgraph-metrics",
+      "schedule": "0 4 * * *"
     }
   ]
 }

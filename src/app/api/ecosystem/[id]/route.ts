@@ -38,7 +38,12 @@ export async function GET(
               volume_cum_usd_e6::text   AS volume_cum_usd_e6,
               volume_ath_day_usd_e6::text AS volume_ath_day_usd_e6,
               volume_ath_day,
-              tvl_last_indexed_at
+              tvl_last_indexed_at,
+              subgraph_tvl_usd_e6::text    AS subgraph_tvl_usd_e6,
+              subgraph_volume_usd_e6::text AS subgraph_volume_usd_e6,
+              subgraph_updated_at,
+              subgraph_source_ts::text     AS subgraph_source_ts,
+              subgraph_series
        FROM projects
        WHERE approved = true AND live = true
          AND (slug = $1 OR id::text = $1)

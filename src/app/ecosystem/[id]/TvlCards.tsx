@@ -69,6 +69,14 @@ interface ProjectLike {
   volume_ath_day_usd_e6?: string | null
   volume_ath_day?: string | null
   tvl_last_indexed_at?: string | null
+  // Protocol-reported (from the project's own subgraph) — never verified on-chain.
+  subgraph_tvl_usd_e6?: string | null
+  subgraph_volume_usd_e6?: string | null
+  subgraph_updated_at?: string | null
+  // The subgraph's OWN last-indexed unix time (data freshness), and a daily
+  // TVL history [{ t: unixSeconds, usd }] for the trend line.
+  subgraph_source_ts?: string | number | null
+  subgraph_series?: Array<{ t: number; usd: number }> | null
 }
 
 interface Theme {
@@ -190,20 +198,23 @@ export default function TvlCards({ project, tvl, theme, slug }: Props) {
   const revSeries = useMemo(() => (tvl?.revenue_series ?? []).map(p => Number(BigInt(p.total_usd_e6)) / 1e6), [tvl?.revenue_series])
   const volSeries = useMemo(() => (tvl?.volume_series ?? []).map(p => Number(BigInt(p.total_usd_e6)) / 1e6), [tvl?.volume_series])
 
-  // Don't render anything if the founder hasn't opted in.
-  if (!project.tvl_tracking_enabled) return null
-
   const tvlFmt        = fmt(project.tvl_usd_e6)
   const tvlAthFmt     = fmt(project.tvl_ath_usd_e6)
   const revCumFmt     = fmt(project.revenue_cum_usd_e6)
   const revAthDayFmt  = fmt(project.revenue_ath_day_usd_e6)
   const volCumFmt     = fmt(project.volume_cum_usd_e6)
   const volAthDayFmt  = fmt(project.volume_ath_day_usd_e6)
+  // Protocol-reported (from the project's own subgraph) — labelled, never verified.
+  const sgTvlFmt      = fmt(project.subgraph_tvl_usd_e6)
+  const sgVolFmt      = fmt(project.subgraph_volume_usd_e6)
+  const hasSubgraph   = !!(sgTvlFmt || sgVolFmt)
+  const hasVerified   = !!(tvlFmt || volCumFmt || revCumFmt)
 
-  // If literally nothing has been indexed yet, render a soft empty state so
-  // visitors know tracking exists and is just warming up.
-  const nothingYet = !tvlFmt && !revCumFmt && !volCumFmt
-  if (nothingYet) {
+  // Nothing opted-in and nothing reported → render nothing.
+  if (!project.tvl_tracking_enabled && !hasSubgraph) return null
+
+  // Tracking on but nothing indexed yet, and no reported metrics → soft empty state.
+  if (!hasVerified && !hasSubgraph) {
     return (
       <div style={{ background: surf, border: "1px solid " + bdr, borderRadius: "14px", padding: "20px 28px", marginBottom: "16px" }}>
         <div style={{ fontSize: "10px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "10px" }}>
@@ -222,19 +233,59 @@ export default function TvlCards({ project, tvl, theme, slug }: Props) {
 
   // One panel; only reported metrics get a cell. Hairline dividers via a 1px
   // grid gap over the border color. Stacks to a single column on mobile.
-  const presentCount = [tvlFmt, volCumFmt, revCumFmt].filter(Boolean).length
+  const presentCount = [tvlFmt || sgTvlFmt, volCumFmt || sgVolFmt, revCumFmt].filter(Boolean).length
+
+  // Badge styles: green = verified on-chain by us; amber = self-reported via the
+  // project's own subgraph (never independently verified).
+  const badgeV = { fontSize: "8.5px", fontFamily: mono, padding: "2px 8px", borderRadius: "4px", background: "rgba(0,184,122,0.08)", color: USDC_GREEN, border: "1px solid rgba(0,184,122,0.25)" }
+  const badgeR = { fontSize: "8.5px", fontFamily: mono, padding: "2px 8px", borderRadius: "4px", background: "rgba(224,136,16,0.08)", color: "#e08810", border: "1px solid rgba(224,136,16,0.25)" }
+  const REPORTED_TITLE = "Self-reported by the project via its own subgraph. Not independently verified on-chain by ArcLens."
+
+  // Daily TVL history from the subgraph → sparkline points (USD).
+  const sgSeries = useMemo(
+    () => (project.subgraph_series ?? []).map(p => p.usd).filter(n => Number.isFinite(n)),
+    [project.subgraph_series],
+  )
+
+  // Freshness = the subgraph's OWN last-indexed time (when the number is true
+  // as of), with our sync time as the secondary signal. Falls back gracefully.
+  const sourceTsMs = project.subgraph_source_ts != null ? Number(project.subgraph_source_ts) * 1000 : null
+  const freshness =
+    sourceTsMs && Number.isFinite(sourceTsMs)
+      ? `Protocol data as of ${new Date(sourceTsMs).toLocaleString()}.`
+      : project.subgraph_updated_at
+      ? `Synced ${new Date(project.subgraph_updated_at).toLocaleTimeString()}.`
+      : ""
+
+  // One number, one honest badge. When a metric comes from the project's own
+  // subgraph we show THAT single figure with the amber "reported" badge, in
+  // place of the verified card, never two competing numbers. TVL also gets the
+  // daily history sparkline when we have it.
+  const subgraphCard = (label: string, value: string | null, color: string, sparkPoints?: number[]) => (
+    <div style={{ background: surf, padding: "22px 24px", display: "flex", flexDirection: "column", gap: "12px" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px" }}>
+        <div style={{ fontSize: "10px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.1em" }}>{label}</div>
+        <span style={badgeR} title={REPORTED_TITLE}>reported · via subgraph</span>
+      </div>
+      <div style={{ fontSize: "34px", fontWeight: 700, color, letterSpacing: "-0.03em", fontFamily: mono, lineHeight: 1.1 }}>{value}</div>
+      {sparkPoints && sparkPoints.length >= 2 && <Sparkline points={sparkPoints} color={color === t1 ? ACCENT : color} width={300} height={42} />}
+      <div style={{ fontSize: "10px", fontFamily: mono, color: t3, lineHeight: 1.6 }}>
+        Self-reported via the project&apos;s own subgraph. Not verified on-chain by ArcLens.{freshness ? " " + freshness : ""}
+      </div>
+    </div>
+  )
 
   return (
     <div style={{ marginBottom: "16px", background: surf, border: "1px solid " + bdr, borderRadius: "16px", overflow: "hidden" }}>
       <style>{`.al-metric-cells{display:grid;gap:1px;background:${bdr};grid-template-columns:repeat(${presentCount || 1},minmax(0,1fr))}@media(max-width:680px){.al-metric-cells{grid-template-columns:1fr}}`}</style>
       <div style={{ padding: "14px 22px", borderBottom: "1px solid " + bdr, display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px" }}>
         <span style={{ fontSize: "10px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.12em" }}>Protocol Metrics</span>
-        <span style={{ fontSize: "8.5px", fontFamily: mono, padding: "2px 8px", borderRadius: "4px", background: "rgba(0,184,122,0.08)", color: USDC_GREEN, border: "1px solid rgba(0,184,122,0.25)" }}>✓ verified on-chain</span>
+        <span style={hasSubgraph ? badgeR : badgeV} title={hasSubgraph ? REPORTED_TITLE : undefined}>{hasSubgraph ? "protocol-reported" : "✓ verified on-chain"}</span>
       </div>
       <div className="al-metric-cells">
 
       {/* ── TVL CARD ── */}
-      {tvlFmt && (
+      {sgTvlFmt ? subgraphCard("Total Value Locked", fmt(project.subgraph_tvl_usd_e6, { precise: true }), t1, sgSeries) : tvlFmt && (
         <div style={{ background: surf, padding: "22px 24px", display: "flex", flexDirection: "column", gap: "14px" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px" }}>
             <div style={{ fontSize: "10px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.1em" }}>
@@ -347,7 +398,7 @@ export default function TvlCards({ project, tvl, theme, slug }: Props) {
       )}
 
       {/* ── VOLUME CARD ── */}
-      {volCumFmt && (() => {
+      {sgVolFmt ? subgraphCard("Volume (cumulative)", fmt(project.subgraph_volume_usd_e6, { precise: true }), ACCENT_S) : volCumFmt && (() => {
         // The honesty badge depends on HOW we computed this number. If any
         // of the volume contracts use outflow_transfer, we mark the whole
         // number as approximate so analysts can adjust confidence.
