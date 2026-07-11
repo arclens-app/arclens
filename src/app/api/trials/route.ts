@@ -153,6 +153,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Steps are still the untouched template — describe the actual actions testers should take in your app" }, { status: 400 })
     }
 
+    // A dedicated campaign banner is required — without one the campaign page
+    // stretches the project logo, which reads as unfinished to testers.
+    if (!campaign_logo || typeof campaign_logo !== "string" || !campaign_logo.trim()) {
+      return NextResponse.json({ error: "A campaign banner is required — upload custom 16:9 art for this campaign" }, { status: 400 })
+    }
+
     // ── XP validation ────────────────────────────────────────────────────────
     // Tower's project-specific XP system. Two opt-in modes:
     //   batch (Mode A, default):  founder rates ★1-5 once, XP = (rating/5) × max_xp.

@@ -385,6 +385,7 @@ export default function CreateCampaignPage() {
     if (!description.trim()) { setError("Description is required"); return }
     if (tasks.some(t => !t.title.trim()))     { setError("All tasks must have a title"); return }
     if (isUneditedTemplate()) { setError("Your steps are still the untouched template. Testers see these exact instructions — rewrite each one for your app (name the real actions, screens, and outcomes)."); return }
+    if (!campaignLogo)       { setError("Upload a campaign banner — custom 16:9 art is required. Campaigns without a dedicated banner are not approved."); return }
     if (questions.some(q => !q.label.trim())) { setError("All questions must have a label"); return }
     if (rewardType === "usdc" && !rewardUsdcAmount) { setError("Enter the USDC amount per tester"); return }
     if (rewardType === "usdc" && !totalSlots)        { setError("Set a slot count for USDC campaigns"); return }
@@ -687,9 +688,9 @@ export default function CreateCampaignPage() {
               <div>
                 <div>
                   <div style={{ fontSize: 12, fontWeight: 500, color: t1, marginBottom: 6 }}>
-                    Campaign banner
+                    Campaign banner <span style={{ color: "#e03348" }}>*</span>
                     <span style={{ fontSize: 10, fontFamily: mono, color: t3, fontWeight: 400, marginLeft: 6 }}>
-                      {logoPreview ? "· drag to reposition · exact size as live page" : "· renders 16:9 full-width on the campaign page"}
+                      {logoPreview ? "· drag to reposition · exact size as live page" : "· required — custom 16:9 art, renders full-width on the campaign page"}
                     </span>
                   </div>
                   {/* Banner preview — drag to reposition when image loaded */}
