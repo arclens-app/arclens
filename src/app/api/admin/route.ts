@@ -418,6 +418,7 @@ export async function GET(req: NextRequest) {
                   c.contract_address, c.app_url, c.min_rank, c.is_fcfs,
                   c.creator_wallet, c.project_name, c.project_logo, c.campaign_logo,
                   c.total_slots, c.expires_at, c.status, c.created_at, c.deposit_tx_hash,
+                  c.max_xp_per_completion, c.xp_mode,
                   (SELECT COUNT(*) FROM campaign_completions WHERE campaign_id = c.id) AS completion_count
            FROM campaigns c WHERE c.status = 'pending_approval' ORDER BY c.created_at DESC`
         )

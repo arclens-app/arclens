@@ -32,12 +32,13 @@ interface Event {
 }
 interface AdminCampaign {
   id: number; title: string; tagline: string|null; type: string
-  description: string; tasks: {id:string;title:string;description:string}[]
+  description: string; tasks: {id:string;title:string;description:string;proof_type?:string;contract_address?:string|null}[]
   review_questions: {id:string;label:string;min_words:number;required:boolean}[]
   reward_type: string; reward_description: string|null; reward_usdc_amount: number|null
   contract_address: string|null; app_url: string|null; min_rank: number; is_fcfs: boolean
   creator_wallet: string; project_name: string|null; project_logo: string|null; campaign_logo: string|null
   total_slots: number|null; expires_at: string|null; status: string; created_at: string
+  max_xp_per_completion: number|null; xp_mode: string|null; deposit_tx_hash: string|null
   completion_count: number
 }
 
@@ -558,6 +559,8 @@ export default function AdminPage() {
   const totalPending     = pendingCount + pendingUpdates.length + pendingEvents + pendingCampaigns.length + pendingCampaignUpdates.length
   const missingLoc       = [...submissions,...projects].filter((p:any)=>!p.lat).length
   const CAMPAIGN_TYPE_LABELS: Record<string,string> = { beta_test:"Beta Test", stress_test:"Stress Test", edge_case:"Edge Case Hunt", ux_review:"UX Review", onboarding:"Onboarding Test", integration:"Integration Test", builder_audit:"Builder Audit", payment_flow:"Payment Flow Test" }
+  // Same wording testers see on the proof inputs at /trials/[id]
+  const PROOF_LABELS: Record<string,string> = { x_link:"X post URL", tx_hash:"transaction hash", url:"URL", screenshot:"screenshot" }
   const REWARD_TYPE_LABELS: Record<string,string>   = { whitelist:"Whitelist", early_access:"Early Access", discord_role:"Discord Role", credit:"Public Credit", token_allocation:"Token Alloc.", usdc:"USDC", other:"Other" }
 
   // ── Sidebar nav config ──
@@ -1410,7 +1413,12 @@ export default function AdminPage() {
                     <EmptyState icon="✦" title="No pending campaigns" sub="Campaign submissions from founders will appear here for review" />
                   ) : (
                     <div style={{ display:"flex", flexDirection:"column", gap:"10px" }}>
-                      {pendingCampaigns.map((c: AdminCampaign) => (
+                      {pendingCampaigns.map((c: AdminCampaign) => {
+                        // Mirrors the tester flow at /trials/[id]: when the campaign (or any
+                        // task) carries a contract address, ArcLens auto-verifies on-chain and
+                        // proof inputs are skipped entirely.
+                        const hasInternal = !!c.contract_address || (c.tasks||[]).some(t => !!t.contract_address)
+                        return (
                         <div key={c.id} style={{ background:surf, border:"1px solid "+bdr, borderRadius:"12px", overflow:"hidden" }}>
                           <div style={{ padding:"18px 22px" }}>
                             {/* Header row */}
@@ -1418,7 +1426,7 @@ export default function AdminPage() {
                               <div style={{ flex:1, minWidth:0 }}>
                                 <div style={{ display:"flex", alignItems:"center", gap:"10px", marginBottom:"6px" }}>
                                   {(c.campaign_logo||c.project_logo) && (
-                                    <img src={`/api/image-proxy?url=${encodeURIComponent((c.campaign_logo||c.project_logo)!)}`} alt="" style={{ width:32,height:32,borderRadius:7,objectFit:"cover",flexShrink:0 }} />
+                                    <img src={`/api/image-proxy?url=${encodeURIComponent((c.campaign_logo||c.project_logo)!)}`} alt="" style={{ width:40,height:40,borderRadius:9,objectFit:"cover",flexShrink:0 }} />
                                   )}
                                   <div>
                                     <div style={{ fontSize:"15px", fontWeight:600, color:t1 }}>{c.title}</div>
@@ -1430,10 +1438,11 @@ export default function AdminPage() {
                                   <span style={pill(c.reward_type==="usdc"?"#00d990":t2, c.reward_type==="usdc"?"rgba(0,184,122,0.2)":bdr)}>
                                     {REWARD_TYPE_LABELS[c.reward_type]||c.reward_type}{c.reward_usdc_amount?` · $${c.reward_usdc_amount} USDC`:""}
                                   </span>
-                                  {c.total_slots && <span style={pill(t3,bdr)}>{c.total_slots} slots</span>}
+                                  {c.total_slots && <span style={pill(t3,bdr)}>{c.total_slots} slots{c.is_fcfs ? " · first come, first served" : ""}</span>}
+                                  {c.max_xp_per_completion != null && <span style={pill("#a78bfa","rgba(167,139,250,0.2)")}>up to {c.max_xp_per_completion} XP{c.xp_mode === "per_question" ? " · per-question" : ""}</span>}
+                                  {c.expires_at && <span style={pill(t2,bdr)}>ends {new Date(c.expires_at).toLocaleDateString(undefined,{ month:"short", day:"numeric", year:"numeric" })}</span>}
                                   {c.min_rank > 0 && <span style={pill("#c08828","rgba(192,136,40,0.2)")}>Min rank: {["Scout","Builder","Verified","Trusted","Arc Proven"][c.min_rank]}</span>}
-                                  {c.contract_address && <span style={pill("#00d990","rgba(0,184,122,0.15)")}>✓ on-chain</span>}
-                                  {c.app_url && <span style={pill("#6366f1","rgba(99,102,241,0.15)")}>has app URL</span>}
+                                  {hasInternal && <span style={pill("#00d990","rgba(0,184,122,0.15)")}>✓ auto-verified on-chain</span>}
                                 </div>
                                 <div style={{ fontSize:"12px", color:t2 }}>
                                   {c.project_name && <><span style={{ color:t1, fontWeight:500 }}>{c.project_name}</span> · </>}
@@ -1441,36 +1450,57 @@ export default function AdminPage() {
                                   <span style={{ marginLeft:10, fontSize:"10px", fontFamily:mono, color:t3 }}>Submitted {new Date(c.created_at).toLocaleDateString()}</span>
                                 </div>
                               </div>
-                              <div style={{ display:"flex", gap:"8px", flexShrink:0 }}>
+                              <div style={{ display:"flex", gap:"8px", flexShrink:0, flexWrap:"wrap", justifyContent:"flex-end" }}>
+                                <a href={`/trials/${c.id}`} target="_blank" rel="noopener noreferrer"
+                                  style={{ height:"30px", padding:"0 14px", display:"inline-flex", alignItems:"center", background:"rgba(26,86,255,0.1)", color:"#8aaeff", fontSize:"11px", fontWeight:600, border:"1px solid rgba(26,86,255,0.3)", borderRadius:"5px", textDecoration:"none", fontFamily:"'Geist',sans-serif", whiteSpace:"nowrap" }}>
+                                  Preview as tester ↗
+                                </a>
                                 <ActionBtn onClick={() => act(c.id, "approve", "campaigns")} disabled={acting} color="green">Approve</ActionBtn>
                                 <ActionBtn onClick={() => { setRejectingCampaignId(c.id); setRejectReason("") }} disabled={acting} color="red">Reject</ActionBtn>
                               </div>
                             </div>
 
-                            {/* Description */}
+                            {/* Description — verbatim what testers read */}
                             <div style={{ padding:"10px 14px", background:surf2, border:"1px solid "+bdr, borderRadius:"8px", fontSize:"12px", color:t2, lineHeight:1.6, marginBottom:"10px" }}>
                               {c.description}
                             </div>
 
-                            {/* Tasks */}
+                            {/* Tester flow — the steps exactly as testers walk them, with each
+                                step's proof requirement (or the on-chain auto-verify note) */}
                             {c.tasks?.length > 0 && (
                               <div style={{ marginBottom:"10px" }}>
-                                <div style={{ fontSize:"10px", fontFamily:mono, color:t3, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:"6px" }}>Tasks ({c.tasks.length})</div>
-                                <div style={{ display:"flex", flexDirection:"column", gap:"4px" }}>
-                                  {c.tasks.map((t,i) => (
-                                    <div key={t.id} style={{ display:"flex", gap:"8px", fontSize:"12px", color:t2 }}>
-                                      <span style={{ fontFamily:mono, color:t3, flexShrink:0 }}>{String(i+1).padStart(2,"0")}</span>
-                                      <span><span style={{ color:t1, fontWeight:500 }}>{t.title}</span>{t.description ? ` — ${t.description}` : ""}</span>
-                                    </div>
-                                  ))}
+                                <div style={{ fontSize:"10px", fontFamily:mono, color:t3, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:"6px" }}>
+                                  Tester flow — {c.tasks.length} step{c.tasks.length === 1 ? "" : "s"}
+                                </div>
+                                <div style={{ display:"flex", flexDirection:"column", gap:"6px" }}>
+                                  {c.tasks.map((t,i) => {
+                                    const pt = t.proof_type || "none"
+                                    return (
+                                      <div key={t.id} style={{ display:"flex", gap:"10px", padding:"8px 12px", background:surf2, border:"1px solid "+bdr, borderRadius:"8px" }}>
+                                        <span style={{ fontFamily:mono, fontSize:"11px", color:t3, flexShrink:0, paddingTop:"1px" }}>{String(i+1).padStart(2,"0")}</span>
+                                        <div style={{ flex:1, minWidth:0 }}>
+                                          <div style={{ fontSize:"12px", color:t1, fontWeight:500 }}>{t.title}</div>
+                                          {t.description && <div style={{ fontSize:"11.5px", color:t2, lineHeight:1.5, marginTop:2 }}>{t.description}</div>}
+                                          <div style={{ marginTop:"5px", display:"flex", gap:"6px", flexWrap:"wrap" }}>
+                                            {hasInternal
+                                              ? <span style={pill("#00d990","rgba(0,184,122,0.2)")}>✓ auto-verified on-chain — no proof asked</span>
+                                              : pt === "none"
+                                              ? <span style={pill(t3,bdr)}>no proof required</span>
+                                              : <span style={pill("#e0a810","rgba(224,168,16,0.25)")}>proof: {PROOF_LABELS[pt]||pt}</span>}
+                                            {t.contract_address && <span style={{ ...pill("#00d990","rgba(0,184,122,0.15)"), fontFamily:mono }}>{t.contract_address.slice(0,10)}…{t.contract_address.slice(-6)}</span>}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    )
+                                  })}
                                 </div>
                               </div>
                             )}
 
-                            {/* Review questions */}
+                            {/* Review questions — testers answer these after the final step */}
                             {c.review_questions?.length > 0 && (
                               <div style={{ marginBottom:"10px" }}>
-                                <div style={{ fontSize:"10px", fontFamily:mono, color:t3, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:"6px" }}>Review questions ({c.review_questions.length})</div>
+                                <div style={{ fontSize:"10px", fontFamily:mono, color:t3, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:"6px" }}>Review questions — answered after the final step ({c.review_questions.length})</div>
                                 <div style={{ display:"flex", flexDirection:"column", gap:"4px" }}>
                                   {c.review_questions.map((q,i) => (
                                     <div key={q.id} style={{ fontSize:"12px", color:t2 }}>
@@ -1483,7 +1513,7 @@ export default function AdminPage() {
                               </div>
                             )}
 
-                            {/* App URL + contract */}
+                            {/* App URL + campaign contract */}
                             {(c.app_url || c.contract_address) && (
                               <div style={{ display:"flex", gap:"10px", flexWrap:"wrap" }}>
                                 {c.app_url && (
@@ -1495,6 +1525,7 @@ export default function AdminPage() {
                               </div>
                             )}
 
+                            {/* Reward note — verbatim what testers read */}
                             {c.reward_description && (
                               <div style={{ marginTop:"10px", padding:"8px 12px", background:surf2, border:"1px solid "+bdr, borderRadius:"7px", fontSize:"12px", color:t2, fontStyle:"italic" }}>
                                 "{c.reward_description}"
@@ -1526,7 +1557,7 @@ export default function AdminPage() {
                             </div>
                           )}
                         </div>
-                      ))}
+                      )})}
                     </div>
                   )}
 
