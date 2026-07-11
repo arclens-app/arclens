@@ -1,5 +1,5 @@
 ﻿"use client"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState, type ReactNode } from "react"
 import { useParams, useRouter } from "next/navigation"
 import ArcLayout from "@/components/ArcLayout"
 import { WalletAvatar } from "@/components/WalletAvatar"
@@ -60,6 +60,61 @@ interface Campaign {
   max_xp_per_completion:  number | null
   xp_mode:                "batch" | "per_question" | null
   project_twitter:        string | null
+}
+
+// ── Description formatter ────────────────────────────────────────────────────
+// Founders type plain text with "• " bullets and bare URLs. Render it with real
+// structure: consecutive bullet lines become <ul>, URLs become links, and short
+// heading-like lines (no ending punctuation) become subheads. Content-safe by
+// construction — every line renders as SOMETHING; worst case it stays a <p>.
+
+function linkify(text: string, keyBase: string): ReactNode[] {
+  const parts = text.split(/(https?:\/\/[^\s]+)/g)
+  return parts.map((part, i) =>
+    /^https?:\/\//.test(part)
+      ? <a key={`${keyBase}-${i}`} href={part} target="_blank" rel="noopener noreferrer"
+          style={{ color: "#8aaeff", textDecoration: "none", wordBreak: "break-all" }}>{part.replace(/^https?:\/\//, "")}</a>
+      : part
+  )
+}
+
+function FormattedDescription({ text }: { text: string }) {
+  const lines = text.split(/\r?\n/)
+  const blocks: ReactNode[] = []
+  let bullets: string[] = []
+  let key = 0
+
+  const flushBullets = () => {
+    if (!bullets.length) return
+    blocks.push(
+      <ul key={`ul-${key++}`} style={{ margin: "0 0 14px", padding: 0, listStyle: "none" }}>
+        {bullets.map((b, i) => (
+          <li key={i} style={{ fontSize: 13.5, lineHeight: 1.65, color: "var(--t2,#6b7da8)", position: "relative", paddingLeft: 20, marginBottom: 6, maxWidth: "62ch" }}>
+            <span style={{ position: "absolute", left: 2, top: "0.62em", width: 6, height: 6, borderRadius: 2, background: "#1a56ff", opacity: 0.65 }} />
+            {linkify(b, `li-${key}-${i}`)}
+          </li>
+        ))}
+      </ul>
+    )
+    bullets = []
+  }
+
+  for (const raw of lines) {
+    const line = raw.trim()
+    if (!line) { flushBullets(); continue }
+    const bulletMatch = line.match(/^[•\-\*]\s+(.*)/)
+    if (bulletMatch) { bullets.push(bulletMatch[1]); continue }
+    flushBullets()
+    // Heading heuristic: short line, no sentence-ending punctuation, no URL.
+    const isHeading = line.length <= 60 && !/[.!?:;,]$/.test(line) && !/https?:\/\//.test(line)
+    if (isHeading) {
+      blocks.push(<h4 key={`h-${key++}`} style={{ fontSize: 14, fontWeight: 700, letterSpacing: "-0.01em", color: "var(--t1,#e8ecff)", margin: "20px 0 8px" }}>{line}</h4>)
+    } else {
+      blocks.push(<p key={`p-${key++}`} style={{ fontSize: 13.5, lineHeight: 1.7, color: "var(--t2,#6b7da8)", margin: "0 0 12px", maxWidth: "62ch" }}>{linkify(line, `p-${key}`)}</p>)
+    }
+  }
+  flushBullets()
+  return <>{blocks}</>
 }
 
 // Normalize Twitter/X handle: accepts "@handle", "handle", or any x.com/twitter.com
@@ -623,7 +678,16 @@ export default function CampaignDetailPage() {
 
               {/* Share + Leaderboard buttons. Leaderboard only appears when at
                   least one rated submission exists — empty campaigns hide it. */}
-              <div style={{ display: "flex", gap: 6, flexShrink: 0, flexWrap: "wrap" }}>
+              <div style={{ display: "flex", gap: 6, flexShrink: 0, flexWrap: "wrap", alignItems: "center" }}>
+                {/* Primary CTA — scrolls to the tester flow. Only for joinable
+                    campaigns; pending/ended/full states have nothing to start. */}
+                {campaign.status === "active" && !isFull && !isOwner && (
+                  <button
+                    onClick={() => document.getElementById("tester-flow")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                    style={{ height: 34, padding: "0 18px", background: "#1a56ff", color: "#fff", border: "none", borderRadius: 8, fontSize: 12.5, fontWeight: 650, cursor: "pointer", whiteSpace: "nowrap", letterSpacing: "-0.01em", boxShadow: "0 3px 12px rgba(26,86,255,0.35)" }}>
+                    Start testing →
+                  </button>
+                )}
                 {/* Leaderboard link — always rendered so it's reachable even
                     before any tester is rated. The destination page handles the
                     empty state gracefully. Clean text-only pill. */}
@@ -671,9 +735,14 @@ export default function CampaignDetailPage() {
           </div>
           {/* Stat bar */}
           {(() => {
+            // Zero completions reads as an invitation, not an empty room.
+            // pg returns COUNT(*) as a string — coerce before comparing.
+            const noneYet = Number(campaign.completion_count) === 0 && campaign.status !== "ended"
             const items: { label: string; value: string; color: string }[] = [
               { label: "slots left", value: slotsLeft !== null ? (slotsLeft === 0 ? "Full" : String(slotsLeft)) : "Open", color: slotsLeft === 0 ? "#e03348" : "#00b87a" },
-              { label: "completed",  value: String(campaign.completion_count), color: "var(--t1,#e8ecff)" },
+              noneYet
+                ? { label: "be the first tester", value: "✦ Open", color: "#8aaeff" }
+                : { label: "completed", value: String(campaign.completion_count), color: "var(--t1,#e8ecff)" },
             ]
             if (campaign.max_xp_per_completion != null) {
               items.push({ label: "max xp", value: String(campaign.max_xp_per_completion), color: "#8aaeff" })
@@ -699,26 +768,95 @@ export default function CampaignDetailPage() {
         >
 
           {/* ── Left column ── */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
 
-            {/* Description */}
-            <div style={{ background: "var(--surf,#0a0e1a)", border: "1px solid var(--bdr,rgba(255,255,255,0.06))", borderRadius: 12, padding: "18px 20px" }}>
-              <div style={{ fontSize: 11, fontFamily: "var(--font-mono,monospace)", color: "var(--t2,#6b7da8)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 }}>About this campaign</div>
-              <p style={{ fontSize: 13, color: "var(--t1,#e8ecff)", lineHeight: 1.6, margin: "0 0 14px", whiteSpace: "pre-wrap" }}>{campaign.description}</p>
+            {/* Description — one continuous surface: no box, mono eyebrow +
+                whitespace do the separating. Founder text gets real structure
+                (lists, links, subheads) via FormattedDescription. */}
+            <div style={{ padding: "6px 4px 0" }}>
+              <div style={{ fontSize: 10, fontFamily: "var(--font-mono,monospace)", color: "var(--t3,#2e3a5c)", textTransform: "uppercase", letterSpacing: "0.14em", marginBottom: 14 }}>About this campaign</div>
+              <FormattedDescription text={campaign.description} />
               {campaign.app_url && (
                 <a href={campaign.app_url} target="_blank" rel="noopener noreferrer"
-                  style={{ display: "inline-flex", alignItems: "center", gap: 8, height: 38, padding: "0 18px", background: "rgba(26,86,255,0.1)", color: "#8aaeff", border: "1px solid rgba(26,86,255,0.25)", borderRadius: 8, fontSize: 13, fontWeight: 600, textDecoration: "none", letterSpacing: "-0.01em" }}>
+                  style={{ display: "inline-flex", alignItems: "center", gap: 8, height: 38, padding: "0 18px", marginTop: 8, background: "rgba(26,86,255,0.1)", color: "#8aaeff", border: "1px solid rgba(26,86,255,0.25)", borderRadius: 8, fontSize: 13, fontWeight: 600, textDecoration: "none", letterSpacing: "-0.01em" }}>
                   Open app →
                 </a>
               )}
             </div>
 
-            {/* ── Step-by-step tester flow ── */}
+            {/* ── Step-by-step tester flow ──
+                Boxed container for the interactive states (connect / tasks /
+                submit). The pending read-only walkthrough renders borderless —
+                part of the continuous article surface. */}
             {!isOwner && (
-              <div style={{ background: "var(--surf,#0a0e1a)", border: "1px solid var(--bdr,rgba(255,255,255,0.06))", borderRadius: 12, overflow: "hidden" }}>
+              <div id="tester-flow" style={campaign.status === "pending_approval"
+                ? { padding: "0 4px" }
+                : { background: "var(--surf,#0a0e1a)", border: "1px solid var(--bdr,rgba(255,255,255,0.06))", borderRadius: 12, overflow: "hidden", scrollMarginTop: 20 }}>
 
                 {/* Campaign not active */}
                 {campaign.status !== "active" ? (
+                  campaign.status === "pending_approval" && campaign.tasks?.length > 0 ? (
+                    /* Read-only walkthrough while under review — the exact steps testers
+                       will walk once live, shown without inputs so admins and founders
+                       can review the full flow before approval. */
+                    (() => {
+                      const hasInternal = !!campaign.contract_address || campaign.tasks.some(t => !!t.contract_address)
+                      const PROOF_PREVIEW: Record<string, string> = { x_link: "X post URL", tx_hash: "transaction hash", url: "URL", screenshot: "screenshot" }
+                      return (
+                        <div style={{ padding: "26px 0 0" }}>
+                          <div style={{ fontSize: 10, fontFamily: "var(--font-mono,monospace)", color: "var(--t3,#2e3a5c)", textTransform: "uppercase", letterSpacing: "0.14em", marginBottom: 6 }}>
+                            The walkthrough — {campaign.tasks.length} step{campaign.tasks.length === 1 ? "" : "s"}
+                          </div>
+                          <div style={{ fontSize: 12, color: "var(--t2,#6b7da8)", lineHeight: 1.6, marginBottom: 18, maxWidth: "60ch" }}>
+                            Read-only while under review. Once live, testers walk these steps one at a time{hasInternal ? " — completion is auto-verified on-chain, no manual proof asked" : ""}.
+                          </div>
+                          <div>
+                            {campaign.tasks.map((t, i) => {
+                              const pt = t.proof_type || "none"
+                              const isLast = i === campaign.tasks.length - 1
+                              return (
+                                <div key={t.id} style={{ display: "flex", gap: 18, position: "relative", paddingBottom: isLast ? 0 : 26 }}>
+                                  {/* Rail segment connecting this node to the next */}
+                                  {!isLast && <div style={{ position: "absolute", left: 15, top: 34, bottom: 0, width: 2, background: "var(--bdr,rgba(255,255,255,0.08))" }} />}
+                                  <div style={{ width: 32, height: 32, borderRadius: "50%", background: "var(--surf,#0a0e1a)", border: "1.5px solid #1a56ff", color: "#8aaeff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, fontFamily: "var(--font-mono,monospace)", flexShrink: 0, position: "relative", zIndex: 1 }}>
+                                    {i + 1}
+                                  </div>
+                                  <div style={{ paddingTop: 5, minWidth: 0 }}>
+                                    <div style={{ fontSize: 14, fontWeight: 650, color: "var(--t1,#e8ecff)", letterSpacing: "-0.01em" }}>{t.title}</div>
+                                    {t.description && <div style={{ fontSize: 12.5, color: "var(--t2,#6b7da8)", lineHeight: 1.6, marginTop: 3, maxWidth: "56ch" }}>{t.description}</div>}
+                                    <div style={{ marginTop: 8 }}>
+                                      {hasInternal ? (
+                                        <span style={{ fontSize: 9.5, fontFamily: "var(--font-mono,monospace)", color: "#00d990", background: "rgba(0,217,144,0.08)", padding: "3px 9px", borderRadius: 4, letterSpacing: "0.04em" }}>✓ auto-verified on-chain</span>
+                                      ) : pt === "none" ? (
+                                        <span style={{ fontSize: 9.5, fontFamily: "var(--font-mono,monospace)", color: "var(--t3,#2e3a5c)", border: "1px solid var(--bdr,rgba(255,255,255,0.08))", padding: "3px 9px", borderRadius: 4, letterSpacing: "0.04em" }}>no proof required</span>
+                                      ) : (
+                                        <span style={{ fontSize: 9.5, fontFamily: "var(--font-mono,monospace)", color: "#e0a810", background: "rgba(224,168,16,0.09)", padding: "3px 9px", borderRadius: 4, letterSpacing: "0.04em" }}>proof: {PROOF_PREVIEW[pt] || pt}</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          </div>
+                          {campaign.review_questions?.length > 0 && (
+                            <div style={{ marginTop: 30 }}>
+                              <div style={{ fontSize: 10, fontFamily: "var(--font-mono,monospace)", color: "var(--t3,#2e3a5c)", textTransform: "uppercase", letterSpacing: "0.14em", marginBottom: 14 }}>
+                                Then testers answer {campaign.review_questions.length} review question{campaign.review_questions.length === 1 ? "" : "s"}
+                              </div>
+                              <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                                {campaign.review_questions.map((q, i) => (
+                                  <div key={q.id} style={{ borderLeft: "2px solid var(--bdr,rgba(255,255,255,0.08))", paddingLeft: 16 }}>
+                                    <div style={{ fontSize: 13.5, color: "var(--t1,#e8ecff)", fontWeight: 550, lineHeight: 1.5 }}>{q.label}</div>
+                                    <div style={{ fontFamily: "var(--font-mono,monospace)", color: "var(--t3,#2e3a5c)", fontSize: 10, letterSpacing: "0.04em", marginTop: 3 }}>Q{i + 1} · min {q.min_words} words{q.required ? " · required" : ""}</div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })()
+                  ) : (
                   <div style={{ padding: "32px 20px", textAlign: "center", color: "var(--t2,#6b7da8)", fontSize: 13 }}>
                     {campaign.status === "approved"
                       ? "This campaign is approved but not yet funded — check back soon"
@@ -726,6 +864,7 @@ export default function CampaignDetailPage() {
                       ? "This campaign has ended and is no longer accepting submissions"
                       : "This campaign is not currently accepting submissions"}
                   </div>
+                  )
 
                 ) : isFull ? (
                   <div style={{ padding: "32px 20px", textAlign: "center", color: "var(--t2,#6b7da8)", fontSize: 13 }}>
@@ -1516,51 +1655,42 @@ export default function CampaignDetailPage() {
             )}
           </div>
 
-          {/* ── Right sidebar ── */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          {/* ── Right sidebar — one sticky facts panel: reward header, details
+                 rows, hosted-by footer. Replaces three separate boxes. ── */}
+          <div style={{ position: "sticky", top: 20 }}>
+            <div style={{ background: "var(--surf,#0a0e1a)", border: "1px solid var(--bdr,rgba(255,255,255,0.06))", borderRadius: 14, overflow: "hidden" }}>
 
-            {/* Reward */}
-            <div style={{ background: "var(--surf,#0a0e1a)", border: `1px solid ${rm.color}30`, borderRadius: 12, padding: "16px 18px" }}>
-              <div style={{ fontSize: 10, fontFamily: "var(--font-mono,monospace)", color: rm.color, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>What you get</div>
-              <div style={{ fontSize: 14, fontWeight: 600, color: rm.color, marginBottom: 6 }}>{rm.label}</div>
-              {campaign.reward_description && (
-                <p style={{ fontSize: 12, color: "var(--t2,#6b7da8)", margin: 0, lineHeight: 1.5 }}>{campaign.reward_description}</p>
-              )}
-            </div>
-
-            {/* Rank requirement */}
-            {campaign.min_rank > 0 && (
-              <div style={{ background: "var(--surf,#0a0e1a)", border: "1px solid var(--bdr,rgba(255,255,255,0.06))", borderRadius: 12, padding: "16px 18px" }}>
-                <div style={{ fontSize: 10, fontFamily: "var(--font-mono,monospace)", color: "var(--t2,#6b7da8)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>Rank Required</div>
-                <div style={{ fontSize: 14, fontWeight: 600, color: "#c08828" }}>{RANK_LABELS[campaign.min_rank]}</div>
-                <div style={{ fontSize: 11, color: "var(--t2,#6b7da8)", marginTop: 4 }}>Complete other campaigns to unlock this one</div>
+              {/* Reward header */}
+              <div style={{ padding: "16px 20px", background: `${rm.color}0d`, borderBottom: "1px solid var(--bdr,rgba(255,255,255,0.06))" }}>
+                <div style={{ fontSize: 10, fontFamily: "var(--font-mono,monospace)", color: rm.color, textTransform: "uppercase", letterSpacing: "0.14em", marginBottom: 5 }}>What you get</div>
+                <div style={{ fontSize: 17, fontWeight: 700, color: "var(--t1,#e8ecff)", letterSpacing: "-0.02em" }}>{rm.label}</div>
+                {campaign.reward_description && (
+                  <p style={{ fontSize: 11.5, color: "var(--t2,#6b7da8)", margin: "4px 0 0", lineHeight: 1.5 }}>{campaign.reward_description}</p>
+                )}
               </div>
-            )}
 
-            {/* Campaign details */}
-            <div style={{ background: "var(--surf,#0a0e1a)", border: "1px solid var(--bdr,rgba(255,255,255,0.06))", borderRadius: 12, padding: "16px 18px" }}>
-              <div style={{ fontSize: 10, fontFamily: "var(--font-mono,monospace)", color: "var(--t2,#6b7da8)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Details</div>
-              {[
-                { label: "Type",      value: TYPE_META[campaign.type]?.label || campaign.type },
-                { label: "Slots",     value: campaign.total_slots ? `${campaign.filled_slots}/${campaign.total_slots}` : "Unlimited" },
-                { label: "Selection", value: campaign.is_fcfs ? "First come, first served" : "Builder selects" },
-                { label: "Tasks",     value: `${campaign.tasks.length} step${campaign.tasks.length !== 1 ? "s" : ""}` },
-                { label: "Posted",    value: new Date(campaign.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) },
-                ...(campaign.expires_at ? [{ label: "Closes", value: new Date(campaign.expires_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) }] : []),
-              ].map(d => (
-                <div key={d.label} style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
-                  <span style={{ fontSize: 12, color: "var(--t2,#6b7da8)" }}>{d.label}</span>
-                  <span style={{ fontSize: 12, color: "var(--t1,#e8ecff)", fontWeight: 500 }}>{d.value}</span>
-                </div>
-              ))}
-            </div>
+              {/* Details rows */}
+              <div style={{ padding: "6px 20px" }}>
+                {[
+                  { label: "Type",      value: TYPE_META[campaign.type]?.label || campaign.type },
+                  { label: "Slots",     value: campaign.total_slots ? `${campaign.filled_slots}/${campaign.total_slots}` : "Unlimited" },
+                  { label: "Selection", value: campaign.is_fcfs ? "First come, first served" : "Builder selects" },
+                  { label: "Tasks",     value: `${campaign.tasks.length} step${campaign.tasks.length !== 1 ? "s" : ""}` },
+                  ...(campaign.min_rank > 0 ? [{ label: "Rank required", value: RANK_LABELS[campaign.min_rank] }] : []),
+                  { label: "Posted",    value: new Date(campaign.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) },
+                  ...(campaign.expires_at ? [{ label: "Closes", value: new Date(campaign.expires_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) }] : []),
+                ].map((d, i, arr) => (
+                  <div key={d.label} style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, padding: "9px 0", borderBottom: i < arr.length - 1 ? "1px solid var(--bdr,rgba(255,255,255,0.04))" : "none" }}>
+                    <span style={{ fontSize: 11.5, color: "var(--t3,#2e3a5c)", flexShrink: 0 }}>{d.label}</span>
+                    <span style={{ fontSize: 12, color: d.label === "Rank required" ? "#c08828" : "var(--t1,#e8ecff)", fontWeight: 550, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{d.value}</span>
+                  </div>
+                ))}
+              </div>
 
-            {/* Builder info */}
-            <div style={{ background: "var(--surf,#0a0e1a)", border: "1px solid var(--bdr,rgba(255,255,255,0.06))", borderRadius: 12, padding: "16px 18px" }}>
-              <div style={{ fontSize: 10, fontFamily: "var(--font-mono,monospace)", color: "var(--t2,#6b7da8)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Hosted by</div>
-              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <div style={{ position: "relative", width: 44, height: 44, borderRadius: 10, overflow: "hidden", flexShrink: 0, border: "1px solid var(--bdr,rgba(255,255,255,0.06))", background: "var(--surf2,#0e1224)" }}>
-                  <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 700, color: "var(--t3,#2e3a5c)", fontFamily: "var(--font-mono,monospace)" }}>
+              {/* Hosted-by footer */}
+              <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 20px", borderTop: "1px solid var(--bdr,rgba(255,255,255,0.06))", background: "var(--surf2,#0e1224)" }}>
+                <div style={{ position: "relative", width: 38, height: 38, borderRadius: 9, overflow: "hidden", flexShrink: 0, border: "1px solid var(--bdr,rgba(255,255,255,0.06))", background: "var(--surf,#0a0e1a)" }}>
+                  <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 700, color: "var(--t3,#2e3a5c)", fontFamily: "var(--font-mono,monospace)" }}>
                     {(campaign.project_name || "?").slice(0, 1).toUpperCase()}
                   </span>
                   {(campaign.project_logo || campaign.campaign_logo) && (
@@ -1570,15 +1700,15 @@ export default function CampaignDetailPage() {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   {campaign.project_name
                     ? <a href={`/ecosystem/${campaign.project_name.toLowerCase().replace(/\s+/g, "-")}`}
-                        style={{ fontSize: 14, fontWeight: 700, color: "var(--t1,#e8ecff)", textDecoration: "none", display: "block", marginBottom: 3 }}
+                        style={{ fontSize: 13, fontWeight: 700, color: "var(--t1,#e8ecff)", textDecoration: "none", display: "block", marginBottom: 2 }}
                         onMouseOver={e => (e.currentTarget.style.color = "#8aaeff")}
                         onMouseOut={e => (e.currentTarget.style.color = "var(--t1,#e8ecff)")}
                       >
                         {campaign.project_name}
                       </a>
-                    : <span style={{ fontSize: 14, fontWeight: 700, color: "var(--t1,#e8ecff)", display: "block", marginBottom: 3 }}>Unknown Project</span>
+                    : <span style={{ fontSize: 13, fontWeight: 700, color: "var(--t1,#e8ecff)", display: "block", marginBottom: 2 }}>Unknown Project</span>
                   }
-                  <div style={{ fontSize: 11, color: "var(--t3,#2e3a5c)" }}>Verified on Arc Ecosystem</div>
+                  <div style={{ fontSize: 10.5, color: "#00d990" }}>✓ Verified on Arc Ecosystem</div>
                 </div>
               </div>
             </div>
