@@ -69,9 +69,13 @@ npm audit --omit=dev
 - **`next` itself**: check for a newer patch on the SAME minor line
   (`npm view next dist-tags`). Patch bumps (e.g. 16.2.1 → 16.2.10) are safe and
   often carry security fixes; keep `eslint-config-next` in lockstep.
-- Known accepted risk (do not re-flag as new): the `@web3modal/ethers` /
-  `@coinbase/wallet-sdk` cluster needs a breaking migration to Reown AppKit —
-  tracked as future work.
+- Known accepted risk (do not re-flag as new): `undici` pinned inside
+  `@circle-fin/w3s-pw-web-sdk` → `firebase` — browser-only code path, undici
+  never executes there. Fix arrives when Circle bumps their SDK; check
+  `npm view @circle-fin/w3s-pw-web-sdk version` for a newer release each audit.
+- `@web3modal/ethers` was removed 2026-07-11 as a dead dependency (wallet
+  detection is homegrown EIP-6963 in `src/context/web3modal.ts`). If a wallet
+  package reappears in package.json, confirm it's actually imported.
 
 ## 5. Database & runtime hygiene (report-only trends)
 
