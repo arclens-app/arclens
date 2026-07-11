@@ -1,4 +1,6 @@
-﻿import { NextRequest, NextResponse } from "next/server"
+﻿// `after` aliased to runAfter — several handlers below use a local `const after`
+// for the post-update DB row, which would shadow (and TDZ-break) the import.
+import { NextRequest, NextResponse, after as runAfter } from "next/server"
 import { Pool } from "pg"
 import { Resend } from "resend"
 import { timingSafeEqual } from "crypto"
@@ -461,10 +463,13 @@ export async function POST(req: NextRequest) {
   if (!id || !action) return NextResponse.json({ error: "Missing fields" }, { status: 400 })
   try {
     if (table === "campaigns") {
+      let refundFailed = false
       if (action === "approve") {
         // Deposit already paid at creation — approve goes straight to active
         await pool.query("UPDATE campaigns SET status = 'active' WHERE id = $1", [id])
-        await sendCampaignEmail(id, "approved")
+        // Notify the founder AFTER the response — the admin's click shouldn't
+        // wait on a Resend round-trip. runAfter (next/server after) is serverless-safe.
+        runAfter(() => sendCampaignEmail(id, "approved"))
       } else if (action === "reject") {
         // Refund USDC to founder if campaign was pre-funded
         const camp = await pool.query(
@@ -504,7 +509,8 @@ export async function POST(req: NextRequest) {
             }
           } catch (refundErr) {
             console.error("[Admin] USDC refund failed:", refundErr)
-            // Still reject — log refund failure for manual follow-up
+            // Still reject — but tell the admin so they can refund manually
+            refundFailed = true
           }
         }
         const reason = data?.reason?.trim() || null
@@ -512,9 +518,9 @@ export async function POST(req: NextRequest) {
           "UPDATE campaigns SET status = 'rejected', rejection_reason = $2 WHERE id = $1",
           [id, reason]
         )
-        await sendCampaignEmail(id, "rejected", reason || undefined)
+        runAfter(() => sendCampaignEmail(id, "rejected", reason || undefined))
       }
-      return NextResponse.json({ success: true })
+      return NextResponse.json({ success: true, refund_failed: refundFailed })
     }
     if (action === "approve") {
       if (table === "contracts") {
@@ -529,7 +535,7 @@ export async function POST(req: NextRequest) {
         await pool.query("UPDATE events SET approved = true WHERE id = $1", [id])
       } else {
         await pool.query("UPDATE projects SET approved = true, live = true WHERE id = $1", [id])
-        await sendProjectEmail(Number(id), "approved")
+        runAfter(() => sendProjectEmail(Number(id), "approved"))
         // Publish the project on-chain the moment it goes live, at its current
         // tier (listed unless already higher) — every accepted project lands in
         // the registry, not just ones that later earn a tier change. Env-gated.
@@ -553,7 +559,7 @@ export async function POST(req: NextRequest) {
         await pool.query("DELETE FROM events WHERE id = $1", [id])
       } else {
         const reason = data?.reason?.trim() || null
-        await sendProjectEmail(Number(id), "rejected", reason || undefined)
+        runAfter(() => sendProjectEmail(Number(id), "rejected", reason || undefined))
         await pool.query("DELETE FROM projects WHERE id = $1", [id])
       }
       return NextResponse.json({ success: true })
@@ -598,7 +604,7 @@ export async function POST(req: NextRequest) {
       // Send approval email only if project is being made live for the first time
       const goingLive = data.live !== false
       if (goingLive && (!wasApproved || !wasLive)) {
-        await sendProjectEmail(Number(id), "approved")
+        runAfter(() => sendProjectEmail(Number(id), "approved"))
       }
 
       // Recognition is the manual lever. Trust level itself is automatic — Claimed
@@ -650,13 +656,13 @@ export async function POST(req: NextRequest) {
         await pool.query(`UPDATE pending_updates SET status = 'approved' WHERE id = $1`, [u.id])
         appliedChanges.push({ field: u.field, new_value: String(u.new_value) })
       }
-      await sendProjectUpdateEmail(Number(id), "approved", undefined, appliedChanges)
+      runAfter(() => sendProjectUpdateEmail(Number(id), "approved", undefined, appliedChanges))
       return NextResponse.json({ success: true })
     }
     if (action === "reject-all-updates") {
       const reason = data?.reason?.trim() || null
       await pool.query(`UPDATE pending_updates SET status = 'rejected' WHERE project_id = $1 AND status = 'pending'`, [id])
-      await sendProjectUpdateEmail(Number(id), "rejected", reason || undefined)
+      runAfter(() => sendProjectUpdateEmail(Number(id), "rejected", reason || undefined))
       return NextResponse.json({ success: true })
     }
     if (action === "approve-update") {
@@ -720,7 +726,7 @@ export async function POST(req: NextRequest) {
         const setClauses = keys.map((k, i) => `${k} = $${i + 2}`).join(", ")
         await pool.query(`UPDATE campaigns SET ${setClauses} WHERE id = $1`, [u.campaign_id, ...keys.map(k => ch[k])])
         await pool.query(`UPDATE pending_campaign_updates SET status = 'approved' WHERE id = $1`, [id])
-        await sendCampaignUpdateEmail(u.campaign_id, u.campaign_title, "approved")
+        runAfter(() => sendCampaignUpdateEmail(u.campaign_id, u.campaign_title, "approved"))
       }
       return NextResponse.json({ success: true })
     }
@@ -730,7 +736,7 @@ export async function POST(req: NextRequest) {
       await pool.query(`UPDATE pending_campaign_updates SET status = 'rejected', admin_note = $2 WHERE id = $1`, [id, reason])
       if (upd.rows.length > 0) {
         const u = upd.rows[0] as any
-        await sendCampaignUpdateEmail(u.campaign_id, u.campaign_title, "rejected", reason || undefined)
+        runAfter(() => sendCampaignUpdateEmail(u.campaign_id, u.campaign_title, "rejected", reason || undefined))
       }
       return NextResponse.json({ success: true })
     }

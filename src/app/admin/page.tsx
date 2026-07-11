@@ -419,7 +419,17 @@ export default function AdminPage() {
       })
       const data = await res.json()
       if (data.success || data.ok) {
+        // Optimistic: drop the handled campaign from the pending list NOW —
+        // loadAll() reconciles everything in the background, but the admin
+        // shouldn't stare at a stale card while every dataset refetches.
+        if (table === "campaigns" && (action === "approve" || action === "reject")) {
+          setPendingCampaigns(p => p.filter(c => c.id !== id))
+        }
+        if (data.refund_failed) {
+          showToast(false, "Rejected — but the USDC refund FAILED. Refund the founder manually.")
+        } else {
         showToast(true, action === "approve" ? "Approved" : action === "approve-all-updates" ? "All changes applied" : action === "reject-all-updates" ? "Changes rejected" : action === "approve-update" ? "Update applied" : action === "reject-update" ? "Update rejected" : action === "approve-campaign-update" ? "Campaign update applied" : action === "reject-campaign-update" ? "Campaign update rejected" : action === "delete" || action === "reject" ? "Removed" : "Done")
+        }
         loadAll()
       } else {
         showToast(false, data.error || "Action failed")
@@ -1420,6 +1430,25 @@ export default function AdminPage() {
                         const hasInternal = !!c.contract_address || (c.tasks||[]).some(t => !!t.contract_address)
                         return (
                         <div key={c.id} style={{ background:surf, border:"1px solid "+bdr, borderRadius:"12px", overflow:"hidden" }}>
+                          {/* Banner preview — the exact art testers see on the campaign
+                              page. Amber warning when the founder uploaded no campaign
+                              banner and the project logo would be stretched instead. */}
+                          {(c.campaign_logo || c.project_logo) ? (
+                            <div style={{ position:"relative", width:"100%", aspectRatio:"16 / 5", background:surf2, borderBottom:"1px solid "+bdr, overflow:"hidden" }}>
+                              <img src={`/api/image-proxy?url=${encodeURIComponent((c.campaign_logo || c.project_logo)!)}`} alt=""
+                                onError={e => (e.currentTarget.style.display = "none")}
+                                style={{ position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"cover" }} />
+                              {!c.campaign_logo && (
+                                <span style={{ position:"absolute", top:10, right:10, fontSize:"9.5px", fontFamily:mono, background:"rgba(0,0,0,0.65)", color:"#e0a810", border:"1px solid rgba(224,168,16,0.4)", padding:"3px 9px", borderRadius:4, backdropFilter:"blur(4px)" }}>
+                                  ⚠ no campaign banner — project logo stretched
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <div style={{ display:"flex", alignItems:"center", justifyContent:"center", aspectRatio:"16 / 8", background:surf2, borderBottom:"1px solid "+bdr, fontSize:"11px", fontFamily:mono, color:"#e0a810" }}>
+                              ⚠ no banner art at all — reject and ask for custom art
+                            </div>
+                          )}
                           <div style={{ padding:"18px 22px" }}>
                             {/* Header row */}
                             <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:"12px", marginBottom:"14px" }}>
