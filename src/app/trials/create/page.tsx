@@ -344,6 +344,15 @@ export default function CreateCampaignPage() {
     if (CONTRACT_HIDDEN.has(t)) setContractAddress("")
   }
 
+  // True when every step still matches the selected type's template verbatim.
+  // Templates are starting points — testers see these exact instructions, so
+  // untouched placeholders ("Complete the core action" of what?) are unusable.
+  function isUneditedTemplate(): boolean {
+    const tpl = TEMPLATES[type]?.tasks
+    if (!tpl || tasks.length !== tpl.length) return false
+    return tasks.every((t, i) => t.title.trim() === tpl[i].title && (t.description || "").trim() === tpl[i].description)
+  }
+
   function addTask() { setTasks(p => [...p, { id: uid(), title: "", description: "", contract_address: "" }]) }
   function updateTask(id: string, f: keyof Task, v: string) { setTasks(p => p.map(t => t.id === id ? { ...t, [f]: v } : t)) }
   function removeTask(id: string) { if (tasks.length > 1) setTasks(p => p.filter(t => t.id !== id)) }
@@ -375,6 +384,7 @@ export default function CreateCampaignPage() {
     if (!title.trim())       { setError("Title is required"); return }
     if (!description.trim()) { setError("Description is required"); return }
     if (tasks.some(t => !t.title.trim()))     { setError("All tasks must have a title"); return }
+    if (isUneditedTemplate()) { setError("Your steps are still the untouched template. Testers see these exact instructions — rewrite each one for your app (name the real actions, screens, and outcomes)."); return }
     if (questions.some(q => !q.label.trim())) { setError("All questions must have a label"); return }
     if (rewardType === "usdc" && !rewardUsdcAmount) { setError("Enter the USDC amount per tester"); return }
     if (rewardType === "usdc" && !totalSlots)        { setError("Set a slot count for USDC campaigns"); return }
@@ -847,6 +857,16 @@ export default function CreateCampaignPage() {
 
           {/* ── 03 Tester Tasks ── */}
           <Card step="03" title="What should testers do?" sub={CONTRACT_REQUIRED.has(type) ? "Each step can have its own contract address — expand a step to set it. Testers are verified on-chain against every contract you add. Drag the ⋮⋮ handle to reorder." : "Walk testers through exactly what to do, step by step. Drag the ⋮⋮ handle to reorder."}>
+            {isUneditedTemplate() && (
+              <div style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "11px 14px", background: "rgba(224,168,16,0.07)", border: "1px solid rgba(224,168,16,0.25)", borderRadius: 9, marginBottom: 12 }}>
+                <span style={{ color: "#e0a810", fontSize: 13, lineHeight: 1.4, flexShrink: 0 }}>⚠</span>
+                <span style={{ fontSize: 12, color: t2, lineHeight: 1.6 }}>
+                  These steps are <strong style={{ color: "#e0a810" }}>template placeholders</strong> — testers will see them word-for-word.
+                  Rewrite each step for your app, e.g. <em>"Swap mUSDC → MONKE on the Pools page"</em> instead of <em>"Complete the core action"</em>.
+                  Campaigns with untouched template steps can't be submitted.
+                </span>
+              </div>
+            )}
             <DndContext sensors={dndSensors} collisionDetection={closestCenter} onDragEnd={onTaskDragEnd}>
               <SortableContext items={tasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
                 <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 10 }}>

@@ -144,6 +144,15 @@ export async function POST(req: NextRequest) {
     if (!tasks?.length)         return NextResponse.json({ error: "At least one task required" }, { status: 400 })
     if (!review_questions?.length) return NextResponse.json({ error: "At least one review question required" }, { status: 400 })
 
+    // Reject the untouched generic beta template — steps like "Complete the
+    // core action" give testers nothing to act on and admins nothing to review.
+    // (The create form blocks this too; this guards direct API submissions.)
+    const GENERIC_TEMPLATE_TITLES = ["connect your wallet to the app", "complete the core action", "verify the outcome"]
+    const titlesNorm = (tasks as { title?: string }[]).map(t => String(t?.title || "").trim().toLowerCase())
+    if (titlesNorm.length === GENERIC_TEMPLATE_TITLES.length && GENERIC_TEMPLATE_TITLES.every(g => titlesNorm.includes(g))) {
+      return NextResponse.json({ error: "Steps are still the untouched template — describe the actual actions testers should take in your app" }, { status: 400 })
+    }
+
     // ── XP validation ────────────────────────────────────────────────────────
     // Tower's project-specific XP system. Two opt-in modes:
     //   batch (Mode A, default):  founder rates ★1-5 once, XP = (rating/5) × max_xp.
