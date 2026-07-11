@@ -843,7 +843,7 @@ function LM({
 }: {
   id: string; n: string; title: string; deliverable: string; time: string
   aiBest: string | null; aiBestHref?: string; aiAlt?: string; aiWhy?: string
-  checkpoint: string[]; children: React.ReactNode; last: boolean
+  checkpoint: string[]; children: React.ReactNode; last?: boolean
   done: boolean; onToggle: (id: string) => void
 }) {
   const mono = "'DM Mono', monospace"

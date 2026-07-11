@@ -496,7 +496,7 @@ export default function EventsPage() {
                   ].map((f: any) => (
                     <div key={f.k}>
                       <label style={{ display: "block", fontSize: "9.5px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "5px" }}>{f.l}</label>
-                      <input style={inputStyle} value={(form as Record<string,string>)[f.k]} onChange={e => setForm(p => ({ ...p, [f.k]: e.target.value }))} placeholder={f.p} spellCheck={false} />
+                      <input style={inputStyle} value={(form as unknown as Record<string,string>)[f.k]} onChange={e => setForm(p => ({ ...p, [f.k]: e.target.value }))} placeholder={f.p} spellCheck={false} />
                     </div>
                   ))}
 

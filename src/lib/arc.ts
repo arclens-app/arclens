@@ -34,7 +34,7 @@ export function getWsProvider(): ethers.WebSocketProvider {
       name:    "arc-testnet",
     })
 
-    _wsProvider.websocket.addEventListener("close", () => {
+    ;(_wsProvider.websocket as WebSocket).addEventListener("close", () => {
       console.warn("[ArcLens] WebSocket closed — reconnecting…")
       _wsProvider = null
       setTimeout(getWsProvider, 3000)
@@ -100,7 +100,8 @@ export async function getTransaction(hash: string) {
 
   if (!tx) throw new Error(`Transaction not found: ${hash}`)
 
-  const baseFee  = receipt?.effectiveGasPrice ?? tx.gasPrice ?? BigInt(160) * BigInt(10) ** BigInt(9)
+  // ethers v6: the effective gas price lives on receipt.gasPrice
+  const baseFee  = receipt?.gasPrice ?? tx.gasPrice ?? BigInt(160) * BigInt(10) ** BigInt(9)
   const gasUsed  = receipt?.gasUsed ?? BigInt(0)
   const feeWei   = gasUsed * baseFee
   const feeUSDC  = formatUSDC(feeWei / BigInt(10) ** BigInt(12))

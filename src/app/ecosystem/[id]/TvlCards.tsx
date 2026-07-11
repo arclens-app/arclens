@@ -197,6 +197,11 @@ export default function TvlCards({ project, tvl, theme, slug }: Props) {
   const series    = useMemo(() => (tvl?.series ?? []).map(p => Number(BigInt(p.total_usd_e6)) / 1e6), [tvl?.series])
   const revSeries = useMemo(() => (tvl?.revenue_series ?? []).map(p => Number(BigInt(p.total_usd_e6)) / 1e6), [tvl?.revenue_series])
   const volSeries = useMemo(() => (tvl?.volume_series ?? []).map(p => Number(BigInt(p.total_usd_e6)) / 1e6), [tvl?.volume_series])
+  // Daily TVL history from the subgraph → sparkline points (USD).
+  const sgSeries  = useMemo(
+    () => (project.subgraph_series ?? []).map(p => p.usd).filter(n => Number.isFinite(n)),
+    [project.subgraph_series],
+  )
 
   const tvlFmt        = fmt(project.tvl_usd_e6)
   const tvlAthFmt     = fmt(project.tvl_ath_usd_e6)
@@ -240,12 +245,6 @@ export default function TvlCards({ project, tvl, theme, slug }: Props) {
   const badgeV = { fontSize: "8.5px", fontFamily: mono, padding: "2px 8px", borderRadius: "4px", background: "rgba(0,184,122,0.08)", color: USDC_GREEN, border: "1px solid rgba(0,184,122,0.25)" }
   const badgeR = { fontSize: "8.5px", fontFamily: mono, padding: "2px 8px", borderRadius: "4px", background: "rgba(224,136,16,0.08)", color: "#e08810", border: "1px solid rgba(224,136,16,0.25)" }
   const REPORTED_TITLE = "Self-reported by the project via its own subgraph. Not independently verified on-chain by ArcLens."
-
-  // Daily TVL history from the subgraph → sparkline points (USD).
-  const sgSeries = useMemo(
-    () => (project.subgraph_series ?? []).map(p => p.usd).filter(n => Number.isFinite(n)),
-    [project.subgraph_series],
-  )
 
   // Freshness = the subgraph's OWN last-indexed time (when the number is true
   // as of), with our sync time as the secondary signal. Falls back gracefully.
