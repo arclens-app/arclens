@@ -102,6 +102,9 @@ export default function AdminPage() {
   const [pendingUpdates, setPendingUpdates] = useState<PendingUpdate[]>([])
   const [events, setEvents]           = useState<Event[]>([])
   const [pendingCampaigns, setPendingCampaigns] = useState<AdminCampaign[]>([])
+  // URL reputation cache (VirusTotal verdicts keyed by URL) + in-flight re-checks
+  const [urlScans, setUrlScans] = useState<Record<string, { verdict: string; malicious: number; suspicious: number; total_engines: number }>>({})
+  const [rescanning, setRescanning] = useState<string | null>(null)
   const [pendingCampaignUpdates, setPendingCampaignUpdates] = useState<any[]>([])
   const [allCampaigns, setAllCampaigns] = useState<any[]>([])
   const [repairOpen, setRepairOpen]   = useState<number|null>(null)
@@ -185,6 +188,7 @@ export default function AdminPage() {
       setPendingCampaigns(data.pendingCampaigns || [])
       setPendingCampaignUpdates(data.pendingCampaignUpdates || [])
       setAllCampaigns(data.allCampaigns || [])
+      setUrlScans(data.urlScans || {})
 
       // Surface payout wallet balance so the operator knows before the gas
       // tank runs dry. If the endpoint errors (missing env var, auth, Arcscan),
@@ -436,6 +440,54 @@ export default function AdminPage() {
       }
     } catch { showToast(false, "Network error") }
     finally { setActing(false) }
+  }
+
+  // One admin-triggered VirusTotal check for a URL — no timers, no background
+  // usage; the fresh verdict lands straight back into local state.
+  async function rescanUrl(url: string) {
+    setRescanning(url)
+    try {
+      const res  = await fetch("/api/admin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${password}` },
+        body: JSON.stringify({ id: url, action: "rescan-url" }),
+      })
+      const data = await res.json()
+      if (data.success && data.scan) {
+        setUrlScans(p => ({ ...p, [data.scan.url]: data.scan }))
+        showToast(true, data.scan.verdict === "flagged" ? "URL FLAGGED — check before approving" : `URL scan: ${data.scan.verdict}`)
+      } else {
+        showToast(false, data.error || "Scan failed")
+      }
+    } catch { showToast(false, "Network error") }
+    finally { setRescanning(null) }
+  }
+
+  // Reputation chip + re-check button for a founder-submitted URL. Reads the
+  // cached VirusTotal verdict (exact URL or trailing-slash variant).
+  function urlRepChip(url: string | null | undefined) {
+    if (!url) return null
+    const scan = urlScans[url] || urlScans[url.replace(/\/$/, "")] || urlScans[url + "/"]
+    const busy = rescanning === url
+    const chip = !scan
+      ? { txt: "URL not scanned", c: t3, b: bdr }
+      : scan.verdict === "clean"   ? { txt: `✓ URL clean · ${scan.total_engines} engines`, c: "#00d990", b: "rgba(0,217,144,0.3)" }
+      : scan.verdict === "flagged" ? { txt: `⚠ URL FLAGGED by ${scan.malicious + scan.suspicious}/${scan.total_engines} engines`, c: "#e03348", b: "rgba(224,51,72,0.4)" }
+      : scan.verdict === "queued"  ? { txt: "URL scan pending (VirusTotal analyzing)", c: "#e0a810", b: "rgba(224,168,16,0.3)" }
+      : scan.verdict === "no_key"  ? { txt: "URL scanning not configured (VIRUSTOTAL_API_KEY)", c: t3, b: bdr }
+      :                              { txt: "URL scan error", c: "#e0a810", b: "rgba(224,168,16,0.3)" }
+    return (
+      <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+        <span style={{ ...pill(chip.c, chip.b), fontWeight: scan?.verdict === "flagged" ? 700 : 400 }}>{chip.txt}</span>
+        <button
+          onClick={() => rescanUrl(url)}
+          disabled={busy}
+          title="Re-check this URL against VirusTotal (one API call)"
+          style={{ height: 20, padding: "0 8px", background: "transparent", border: "1px solid " + bdr, borderRadius: 4, fontSize: "9px", fontFamily: mono, color: t3, cursor: busy ? "default" : "pointer", opacity: busy ? 0.5 : 1 }}>
+          {busy ? "checking…" : "re-check"}
+        </button>
+      </span>
+    )
   }
 
   function confirmDelete(id: number|string, table: string) {
@@ -922,6 +974,7 @@ export default function AdminPage() {
                               <span style={pill(t3, bdr)}>{s.category}</span>
                               <span style={pill(t3, bdr)}>{s.email || "No email"}</span>
                               {s.website && <span style={pill(t3, bdr)}>{s.website.replace(/^https?:\/\//, "").replace(/\/$/, "")}</span>}
+                              {s.website && urlRepChip(s.website)}
                               {s.contract && <span style={pill(t3, bdr)}>{s.contract.slice(0,6)}…{s.contract.slice(-4)}</span>}
                               <span style={pill(t3, bdr)}>{new Date(s.created_at).toLocaleDateString()}</span>
                             </div>
@@ -946,6 +999,7 @@ export default function AdminPage() {
                             >
                               <option value="">Select a reason or type below...</option>
                               <option value="Project does not appear to be deployed or active on Arc Testnet.">Not deployed or active on Arc Testnet</option>
+                              <option value="Your website was flagged as suspicious or malicious by one or more security scanners (VirusTotal). Resolve the flag with the scanning vendors (or move to a clean domain), then resubmit — we cannot list projects whose sites security tools warn users about.">Website flagged by security scanners</option>
                               <option value="Insufficient project information — missing website, description, or verifiable links.">Insufficient information</option>
                               <option value="Logo or branding does not meet listing standards.">Logo or branding quality</option>
                               <option value="Project category or description appears misleading.">Misleading category or description</option>
@@ -1544,10 +1598,11 @@ export default function AdminPage() {
 
                             {/* App URL + campaign contract */}
                             {(c.app_url || c.contract_address) && (
-                              <div style={{ display:"flex", gap:"10px", flexWrap:"wrap" }}>
+                              <div style={{ display:"flex", gap:"10px", flexWrap:"wrap", alignItems:"center" }}>
                                 {c.app_url && (
                                   <a href={c.app_url} target="_blank" rel="noopener noreferrer" style={{ fontSize:"11px", fontFamily:mono, color:"#6366f1", textDecoration:"none" }}>↗ {c.app_url}</a>
                                 )}
+                                {c.app_url && urlRepChip(c.app_url)}
                                 {c.contract_address && (
                                   <span style={{ fontSize:"11px", fontFamily:mono, color:"#00d990" }}>{c.contract_address}</span>
                                 )}
@@ -1564,6 +1619,20 @@ export default function AdminPage() {
                           {rejectingCampaignId === c.id && (
                             <div style={{ borderTop:"1px solid rgba(224,51,72,0.15)", padding:"14px 22px 18px", background:"rgba(224,51,72,0.03)" }}>
                               <div style={{ fontSize:"10px", fontFamily:mono, color:"#e03348", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:"8px" }}>Rejection reason (shown to founder)</div>
+                              {/* One-click templates for the recurring rejection causes */}
+                              <div style={{ display:"flex", gap:"6px", flexWrap:"wrap", marginBottom:"8px" }}>
+                                {[
+                                  { l: "Flagged URL",     v: "Your app URL was flagged as suspicious or malicious by one or more security scanners (VirusTotal). Resolve the flag with the scanning vendors (or move to a clean domain), then resubmit — we cannot send testers to a site security tools warn about." },
+                                  { l: "Template steps",  v: "The tester steps are still generic placeholders. Rewrite each step for your app — name the exact actions, screens, and outcomes testers should verify — then resubmit." },
+                                  { l: "Expired deadline", v: "The campaign deadline is already in the past — it would end the moment it goes live. Update the end date and resubmit." },
+                                  { l: "Banner quality",  v: "The campaign banner does not meet listing standards — upload custom 16:9 campaign art (not a stretched logo or unrelated image) and resubmit." },
+                                ].map(t => (
+                                  <button key={t.l} onClick={() => setRejectReason(t.v)}
+                                    style={{ height:"22px", padding:"0 10px", background: rejectReason === t.v ? "rgba(224,51,72,0.12)" : "transparent", border:"1px solid rgba(224,51,72,0.25)", borderRadius:"5px", fontSize:"9.5px", fontFamily:mono, color:"#e03348", cursor:"pointer" }}>
+                                    {t.l}
+                                  </button>
+                                ))}
+                              </div>
                               <textarea
                                 value={rejectReason}
                                 onChange={e => setRejectReason(e.target.value)}

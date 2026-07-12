@@ -435,12 +435,22 @@ export async function GET(req: NextRequest) {
         allCampaigns = ac.rows
       } catch { }
 
+      // URL reputation cache — own try/catch so a missing url_scans table can
+      // never break the admin lists. Keyed by exact URL; client also checks
+      // the trailing-slash variant (normalization adds one to bare origins).
+      const urlScans: Record<string, unknown> = {}
+      try {
+        const us = await pool.query(`SELECT url, verdict, malicious, suspicious, total_engines, scanned_at FROM url_scans`)
+        for (const r of us.rows) urlScans[r.url] = r
+      } catch { }
+
       return NextResponse.json({
         submissions: pending.rows,
         projects: approved.rows,
         contracts: contracts.rows,
         pendingUpdates,
         events,
+        urlScans,
         pendingCampaigns,
         pendingCampaignUpdates,
         allCampaigns,
@@ -462,6 +472,19 @@ export async function POST(req: NextRequest) {
   if (!checkAuth(resolvePassword(req))) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   if (!id || !action) return NextResponse.json({ error: "Missing fields" }, { status: 400 })
   try {
+    // Admin-triggered URL reputation re-check (id = the URL). One VirusTotal
+    // call, on demand only — no timers, no background usage.
+    if (action === "rescan-url") {
+      const url = String(id)
+      const { scanUrl } = await import("@/lib/urlScan")
+      await scanUrl(url)
+      const r = await pool.query(
+        `SELECT url, verdict, malicious, suspicious, total_engines, scanned_at
+         FROM url_scans WHERE url = $1 OR url = $1 || '/' ORDER BY scanned_at DESC LIMIT 1`,
+        [url],
+      )
+      return NextResponse.json({ success: true, scan: r.rows[0] || null })
+    }
     if (table === "campaigns") {
       let refundFailed = false
       if (action === "approve") {

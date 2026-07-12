@@ -1,5 +1,6 @@
-﻿import { NextRequest, NextResponse } from "next/server"
+﻿import { NextRequest, NextResponse, after } from "next/server"
 import { Pool } from "pg"
+import { scanUrl } from "@/lib/urlScan"
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
 
@@ -118,6 +119,7 @@ export async function POST(req: NextRequest) {
              logo_url||null, website?.trim()||null, twitter?.trim()||null,
              github?.trim()||null, discord?.trim()||null, contract.trim().toLowerCase(), founderSocial]
           )
+          if (website?.trim()) after(() => scanUrl(website))
           return NextResponse.json({ success: true, updated: true })
         } else {
           return NextResponse.json({ error: "A project with this contract address already exists. Use the same email you registered with to update it." }, { status: 409 })
@@ -150,6 +152,9 @@ export async function POST(req: NextRequest) {
        contract?.trim()?.toLowerCase()||null, contractsArr, email.trim(),
        city?.trim()||null, country?.trim()||null, founderSocial, finalSlug]
     )
+    // Reputation-scan the submitted website (VirusTotal) after responding —
+    // the verdict lands in url_scans and shows in the admin review panel.
+    if (website?.trim()) after(() => scanUrl(website))
     return NextResponse.json({ success: true, updated: false })
   } catch (err) {
     console.error("[Ecosystem POST]", err)

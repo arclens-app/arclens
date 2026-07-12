@@ -1,4 +1,5 @@
-﻿import { NextRequest, NextResponse } from "next/server"
+﻿import { NextRequest, NextResponse, after } from "next/server"
+import { scanUrl } from "@/lib/urlScan"
 import { Pool } from "pg"
 import { rateLimit, getIp } from "@/lib/ratelimit"
 
@@ -316,6 +317,9 @@ export async function POST(req: NextRequest) {
       ]
     )
 
+    // Reputation-scan the campaign's app URL (VirusTotal) after responding —
+    // the verdict shows in the admin review dossier before approval.
+    if (app_url?.trim()) after(() => scanUrl(app_url))
     return NextResponse.json({ success: true, id: result.rows[0].id, slug: result.rows[0].slug })
   } catch (e) {
     console.error(e)
