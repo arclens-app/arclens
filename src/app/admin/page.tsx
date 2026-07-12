@@ -999,7 +999,7 @@ export default function AdminPage() {
                             >
                               <option value="">Select a reason or type below...</option>
                               <option value="Project does not appear to be deployed or active on Arc Testnet.">Not deployed or active on Arc Testnet</option>
-                              <option value="Your website was flagged as suspicious or malicious by one or more security scanners (VirusTotal). Resolve the flag with the scanning vendors (or move to a clean domain), then resubmit — we cannot list projects whose sites security tools warn users about.">Website flagged by security scanners</option>
+                              <option value="Your website was flagged as suspicious or malicious by one or more security scanners. Resolve the flag with the scanning vendors (or move to a clean domain), then resubmit — we cannot list projects whose sites security tools warn users about.">Website flagged by security scanners</option>
                               <option value="Insufficient project information — missing website, description, or verifiable links.">Insufficient information</option>
                               <option value="Logo or branding does not meet listing standards.">Logo or branding quality</option>
                               <option value="Project category or description appears misleading.">Misleading category or description</option>
@@ -1622,7 +1622,7 @@ export default function AdminPage() {
                               {/* One-click templates for the recurring rejection causes */}
                               <div style={{ display:"flex", gap:"6px", flexWrap:"wrap", marginBottom:"8px" }}>
                                 {[
-                                  { l: "Flagged URL",     v: "Your app URL was flagged as suspicious or malicious by one or more security scanners (VirusTotal). Resolve the flag with the scanning vendors (or move to a clean domain), then resubmit — we cannot send testers to a site security tools warn about." },
+                                  { l: "Flagged URL",     v: "Your app URL was flagged as suspicious or malicious by one or more security scanners. Resolve the flag with the scanning vendors (or move to a clean domain), then resubmit — we cannot send testers to a site security tools warn about." },
                                   { l: "Template steps",  v: "The tester steps are still generic placeholders. Rewrite each step for your app — name the exact actions, screens, and outcomes testers should verify — then resubmit." },
                                   { l: "Expired deadline", v: "The campaign deadline is already in the past — it would end the moment it goes live. Update the end date and resubmit." },
                                   { l: "Banner quality",  v: "The campaign banner does not meet listing standards — upload custom 16:9 campaign art (not a stretched logo or unrelated image) and resubmit." },
