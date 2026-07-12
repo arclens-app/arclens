@@ -1212,7 +1212,10 @@ export default function AdminPage() {
                           {p.featured && <span style={pill("#c08828","rgba(192,136,40,0.2)")}>Featured</span>}
                           {p.live && <span style={pill("#00b87a","rgba(0,184,122,0.2)")}>Live</span>}
                         </div>
-                        <div style={{ fontSize:"11px", color:t2 }}>{p.category} · {p.website || "No website"}</div>
+                        <div style={{ fontSize:"11px", color:t2, display:"flex", alignItems:"center", gap:"8px", flexWrap:"wrap" }}>
+                          <span>{p.category} · {p.website || "No website"}</span>
+                          {p.website && urlRepChip(p.website)}
+                        </div>
                       </div>
                       <div style={{ display:"flex", gap:"6px", flexShrink:0 }}>
                         <ActionBtn onClick={() => startEdit(p)} color="blue">Edit</ActionBtn>
