@@ -1,0 +1,6 @@
+Contact: mailto:support@arclenz.xyz
+Contact: https://arclenz.xyz/privacy
+Expires: 2027-07-12T00:00:00.000Z
+Preferred-Languages: en
+Canonical: https://arclenz.xyz/.well-known/security.txt
+Policy: https://arclenz.xyz/terms
