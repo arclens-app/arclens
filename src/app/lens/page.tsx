@@ -194,7 +194,7 @@ circle services pay https://arclenz.xyz/api/agent \\
 # → { result: { trust: "Established", ... },
 #     paid_to_builders: [ { project, amount, tx } ] }`}</pre>
           <div style={{ fontSize: 12.5, color: T3, marginTop: 10 }}>
-            actions: <b style={{ color: T2 }}>trust</b> · <b style={{ color: T2 }}>discover</b> · <b style={{ color: T2 }}>project</b> — manifest at <a href="/api/agent" style={{ color: "#6691ff", textDecoration: "none" }}>/api/agent</a> · ERC-8004 agent #842439
+            actions: <b style={{ color: T2 }}>trust</b> · <b style={{ color: T2 }}>discover</b> · <b style={{ color: T2 }}>project</b> · <b style={{ color: T2 }}>metrics</b> · <b style={{ color: T2 }}>risk</b> — manifest at <a href="/api/agent" style={{ color: "#6691ff", textDecoration: "none" }}>/api/agent</a> · ERC-8004 agent #842439
           </div>
 
           <div style={{ marginTop: 56, paddingTop: 24, borderTop: `1px solid ${HAIR}`, textAlign: "center", fontFamily: MONO, fontSize: 11, color: T3, letterSpacing: "0.04em" }}>

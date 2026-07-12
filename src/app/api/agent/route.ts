@@ -14,6 +14,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { enforce, getIp } from "@/lib/ratelimit"
 import { verifyPremiumPayment, recordPremiumCall, premiumPriceE6, premiumPriceUsd, payoutForAnswer, agentPayoutBudgetE6 } from "@/lib/lensPay"
 import { gatewayConfigured, verifyAndSettle, paymentRequiredHeader, paymentResponseHeader } from "@/lib/gateway"
+import { passesVetting } from "@/lib/trustEngine"
 import { getPool } from "@/lib/dbPool"
 
 const pool = getPool()
@@ -51,6 +52,8 @@ const MANIFEST = {
     trust:    { description: "Trust verdict for a project on Arc.", params: { target: "project name or slug" } },
     discover: { description: "Find Arc projects, optionally trusted-only.", params: { category: "optional", trusted_only: "optional bool", limit: "1-20 (default 8)" } },
     project:  { description: "A project's live metrics + trust standing.", params: { name: "project name or slug" } },
+    metrics:  { description: "Verified metrics history for a project — TVL series, daily volume & revenue, all-time totals.", params: { name: "project name or slug", days: "history window 7-90 (default 30)" } },
+    risk:     { description: "Deep risk verdict — trust tier, contract analysis (upgradeability, admin keys, verified source), website reputation across 90+ security engines.", params: { name: "project name or slug" } },
   },
 }
 
@@ -65,7 +68,7 @@ export async function POST(req: NextRequest) {
   let body: any
   try { body = await req.json() } catch { return NextResponse.json({ error: "Bad JSON" }, { status: 400 }) }
   const action = String(body?.action || "").toLowerCase()
-  if (!["trust", "discover", "project"].includes(action)) {
+  if (!["trust", "discover", "project", "metrics", "risk"].includes(action)) {
     return NextResponse.json({ error: "Unknown action — see manifest.", ...MANIFEST }, { status: 400 })
   }
 
@@ -120,6 +123,106 @@ export async function POST(req: NextRequest) {
         result = action === "trust"
           ? { found: true, name: p.name, slug: p.slug, trust: trustLabel(p) }
           : { found: true, name: p.name, slug: p.slug, category: p.category, trust: trustLabel(p), tvl: fmtUsd(p.tvl), volume: fmtUsd(p.volume), revenue: fmtUsd(p.revenue) }
+      }
+    } else if (action === "metrics") {
+      const q = String(body?.target || body?.name || "").trim()
+      if (!q) return NextResponse.json({ error: "target/name required" }, { status: 400 })
+      const days = Math.min(Math.max(Number(body?.days) || 30, 7), 90)
+      const r = await pool.query(
+        `SELECT id, name, slug, category, ${TRUST_COLS},
+                tvl_usd_e6::text tvl, tvl_ath_usd_e6::text tvl_ath,
+                volume_cum_usd_e6::text volume_cum, revenue_cum_usd_e6::text revenue_cum
+           FROM projects WHERE approved AND live AND (slug ILIKE $1 OR name ILIKE $1)
+          ORDER BY (slug = LOWER($2)) DESC LIMIT 1`,
+        [`%${q}%`, q.toLowerCase()],
+      )
+      if (!r.rows[0]) result = { found: false, note: `No live Arc project matching "${q}".` }
+      else {
+        const p = r.rows[0]; slugs.push(p.slug)
+        const e6 = (v: string | null) => v == null ? null : Number(BigInt(v)) / 1e6
+        const [vol, rev, tvlSeries] = await Promise.all([
+          pool.query(
+            `SELECT day::text, total_usd_e6::text FROM volume_daily
+              WHERE project_id = $1 AND day >= CURRENT_DATE - $2::int ORDER BY day ASC`,
+            [p.id, days],
+          ),
+          pool.query(
+            `SELECT day::text, total_usd_e6::text FROM revenue_daily
+              WHERE project_id = $1 AND day >= CURRENT_DATE - $2::int ORDER BY day ASC`,
+            [p.id, days],
+          ),
+          // Downsampled to ≤ 60 points so agent payloads stay small.
+          pool.query(
+            `WITH s AS (
+               SELECT block_time, total_usd_e6::text,
+                      ROW_NUMBER() OVER (ORDER BY block_number ASC) rn,
+                      COUNT(*) OVER () n
+                 FROM tvl_snapshots
+                WHERE project_id = $1 AND block_time >= NOW() - make_interval(days => $2::int)
+             )
+             SELECT block_time, total_usd_e6 FROM s
+              WHERE rn % GREATEST(1, n / 60) = 0 OR rn = 1 OR rn = n
+              ORDER BY block_time ASC`,
+            [p.id, days],
+          ),
+        ])
+        result = {
+          found: true, name: p.name, slug: p.slug, trust: trustLabel(p), window_days: days,
+          totals: { tvl: fmtUsd(p.tvl), tvl_ath: fmtUsd(p.tvl_ath), volume_all_time: fmtUsd(p.volume_cum), revenue_all_time: fmtUsd(p.revenue_cum) },
+          tvl_series:    tvlSeries.rows.map((x: any) => ({ t: x.block_time, usd: e6(x.total_usd_e6) })),
+          daily_volume:  vol.rows.map((x: any) => ({ day: x.day, usd: e6(x.total_usd_e6) })),
+          daily_revenue: rev.rows.map((x: any) => ({ day: x.day, usd: e6(x.total_usd_e6) })),
+          methodology: "on-chain-verified by ArcLens; protocol-reported figures are excluded from this endpoint",
+        }
+      }
+    } else if (action === "risk") {
+      const q = String(body?.target || body?.name || "").trim()
+      if (!q) return NextResponse.json({ error: "target/name required" }, { status: 400 })
+      const r = await pool.query(
+        `SELECT id, name, slug, website, trust_profile, ${TRUST_COLS}
+           FROM projects WHERE approved AND live AND (slug ILIKE $1 OR name ILIKE $1)
+          ORDER BY (slug = LOWER($2)) DESC LIMIT 1`,
+        [`%${q}%`, q.toLowerCase()],
+      )
+      if (!r.rows[0]) result = { found: false, note: `No live Arc project matching "${q}".` }
+      else {
+        const p = r.rows[0]; slugs.push(p.slug)
+        const profile: any = p.trust_profile || {}
+        // Cached multi-engine reputation for the project's website (vendor
+        // deliberately unnamed in public responses).
+        let webRep: any = { verdict: "unscanned" }
+        try {
+          if (p.website) {
+            const us = await pool.query(
+              `SELECT verdict, malicious, suspicious, total_engines, scanned_at
+                 FROM url_scans WHERE url = $1 OR url = $1 || '/'
+                ORDER BY scanned_at DESC LIMIT 1`,
+              [p.website],
+            )
+            if (us.rows[0] && us.rows[0].verdict !== "no_key") {
+              const u = us.rows[0]
+              webRep = { verdict: u.verdict, flagged_by: u.malicious + u.suspicious, engines: u.total_engines, checked_at: u.scanned_at }
+            }
+          }
+        } catch { /* scan cache unavailable — report unscanned, never fail the call */ }
+        result = {
+          found: true, name: p.name, slug: p.slug, trust: trustLabel(p),
+          verdict: {
+            hard_risk: !!p.hard_risk,
+            risk_reason: profile.risk_reason ?? null,
+            caution: !!profile.caution,
+            caution_note: profile.caution_note ?? null,
+            vetted: passesVetting(profile),
+          },
+          website_reputation: webRep,
+          contracts: (profile.contracts || []).map((c: any) => ({
+            address: c.address, role: c.role,
+            source_verified: !!c.source_verified,
+            upgradeable: !!c.upgradeable, admin: c.admin ?? "n/a", ownership: c.ownership ?? "unknown",
+            powers_to_review: c.powers_to_review ?? [],
+          })),
+          assessed_at: profile.computed_at ?? null,
+        }
       }
     } else {
       const lim = Math.min(Math.max(Number(body?.limit) || 8, 1), 20)
