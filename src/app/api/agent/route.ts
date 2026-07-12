@@ -11,12 +11,12 @@
 
 export const runtime = "nodejs"
 import { NextRequest, NextResponse } from "next/server"
-import { Pool } from "pg"
 import { enforce, getIp } from "@/lib/ratelimit"
 import { verifyPremiumPayment, recordPremiumCall, premiumPriceE6, premiumPriceUsd, payoutForAnswer, agentPayoutBudgetE6 } from "@/lib/lensPay"
 import { gatewayConfigured, verifyAndSettle, paymentRequiredHeader, paymentResponseHeader } from "@/lib/gateway"
+import { getPool } from "@/lib/dbPool"
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
+const pool = getPool()
 
 const TRUST_COLS = `trust_level, recognition, established, COALESCE((trust_profile->>'hard_risk')::bool, false) AS hard_risk`
 function trustLabel(p: any): string {

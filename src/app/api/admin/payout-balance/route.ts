@@ -1,10 +1,10 @@
 export const runtime = "nodejs"
 import { NextRequest, NextResponse } from "next/server"
 import { timingSafeEqual } from "crypto"
-import { Pool } from "pg"
 import { privateKeyToAccount } from "viem/accounts"
+import { getPool } from "@/lib/dbPool"
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
+const pool = getPool()
 
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || ""
 const ARCSCAN        = "https://testnet.arcscan.app/api/v2"

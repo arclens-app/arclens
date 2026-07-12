@@ -1,10 +1,10 @@
 ﻿import { NextRequest, NextResponse } from "next/server"
-import { Pool } from "pg"
 import { getProvider } from "@/lib/arc"
 import { rateLimit, getIp } from "@/lib/ratelimit"
 import { getSession } from "@/lib/session"
+import { getPool } from "@/lib/dbPool"
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
+const pool = getPool()
 
 // Ensure unique constraint exists — safe to run on every cold start
 pool.query("CREATE UNIQUE INDEX IF NOT EXISTS tester_reputation_wallet_unique ON tester_reputation (wallet)").catch(() => {})

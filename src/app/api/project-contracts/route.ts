@@ -14,13 +14,13 @@
 // indexer starts picking up the project on the next cron tick.
 
 import { NextRequest, NextResponse } from "next/server"
-import { Pool } from "pg"
 import { ethers } from "ethers"
 import crypto from "crypto"
 import { enforce } from "@/lib/ratelimit"
 import { getSession } from "@/lib/session"
 import { ARC_RPC_HTTP } from "@/lib/constants"
 import { canonicalEventSignature, dataArgTypes } from "@/lib/tvl"
+import { getPool } from "@/lib/dbPool"
 import {
   buildChallengeMessage,
   verifyAuthorizedSigner,
@@ -28,10 +28,7 @@ import {
   type ChallengePayload,
 } from "@/lib/deployerSig"
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
-})
+const pool = getPool()
 
 const ARCSCAN = "https://testnet.arcscan.app/api/v2"
 

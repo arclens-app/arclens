@@ -10,15 +10,12 @@
 // subgraph already aggregates the full picture; we consume it, labelled.
 
 import { NextRequest, NextResponse } from "next/server"
-import { Pool } from "pg"
+import { getPool } from "@/lib/dbPool"
 
 export const runtime = "nodejs"
 export const maxDuration = 60
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
-})
+const pool = getPool()
 
 function isAuthorized(req: NextRequest): boolean {
   const expected = process.env.CRON_SECRET

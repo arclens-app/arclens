@@ -1,10 +1,10 @@
 export const runtime = "nodejs"
 import { NextRequest, NextResponse } from "next/server"
-import { Pool } from "pg"
 import { enforce } from "@/lib/ratelimit"
 import { getSession } from "@/lib/session"
+import { getPool } from "@/lib/dbPool"
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
+const pool = getPool()
 
 // Founder submits an audit for review. Stores auditor + report URL and flags the
 // project audit_status='pending'. An admin then confirms it in the editor, which

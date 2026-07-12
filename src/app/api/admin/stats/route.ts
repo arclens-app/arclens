@@ -1,14 +1,14 @@
 export const runtime = "nodejs"
 import { NextRequest, NextResponse } from "next/server"
 import { timingSafeEqual } from "crypto"
-import { Pool } from "pg"
+import { getPool } from "@/lib/dbPool"
 
 // Site-wide stats panel for the admin dashboard — milestone tracking + the
 // numbers you'll want at hand for grant submissions (Circle, etc.). One query
 // per metric is fine here: this runs once on admin load, not per request, and
 // every metric is a simple aggregate over a small table.
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
+const pool = getPool()
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || ""
 
 function checkAuth(pw: string): boolean {

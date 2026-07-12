@@ -11,14 +11,11 @@
 // controlled with a rate limit + the admin's right to dismiss.
 
 import { NextRequest, NextResponse } from "next/server"
-import { Pool } from "pg"
 import crypto from "crypto"
 import { enforce } from "@/lib/ratelimit"
+import { getPool } from "@/lib/dbPool"
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
-})
+const pool = getPool()
 
 const REASON_MAX = 2_000
 

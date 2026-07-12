@@ -21,12 +21,9 @@
 //   amount_usd        USD value at the day's forex rate (USD-pegged stables = raw/10^decimals)
 
 import { NextRequest } from "next/server"
-import { Pool } from "pg"
+import { getPool } from "@/lib/dbPool"
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
-})
+const pool = getPool()
 
 function csvEscape(v: any): string {
   if (v == null) return ""

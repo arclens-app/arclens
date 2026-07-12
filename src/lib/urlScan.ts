@@ -1,3 +1,4 @@
+import { getPool } from "@/lib/dbPool"
 // src/lib/urlScan.ts
 //
 // URL reputation via VirusTotal v3 — the trust layer's second opinion on
@@ -15,9 +16,8 @@
 //   - No VIRUSTOTAL_API_KEY → graceful no-op: verdict "no_key" so the admin
 //     UI can say "scanning not configured" instead of lying.
 
-import { Pool } from "pg"
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
+const pool = getPool()
 
 export interface UrlScan {
   url: string

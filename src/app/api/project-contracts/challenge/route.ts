@@ -19,7 +19,6 @@
 //      the signature against the on-chain deployer.
 
 import { NextRequest, NextResponse } from "next/server"
-import { Pool } from "pg"
 import crypto from "crypto"
 import { ethers } from "ethers"
 import { enforce } from "@/lib/ratelimit"
@@ -27,6 +26,7 @@ import { getSession } from "@/lib/session"
 import { ARC_RPC_HTTP } from "@/lib/constants"
 import { dataArgTypes } from "@/lib/tvl"
 import { buildChallengeMessage, type ChallengePayload } from "@/lib/deployerSig"
+import { getPool } from "@/lib/dbPool"
 
 const ARCSCAN = "https://testnet.arcscan.app/api/v2"
 
@@ -51,10 +51,7 @@ async function fetchDeployer(addr: string): Promise<string | null> {
   return null
 }
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
-})
+const pool = getPool()
 
 const CHALLENGE_TTL_MS = 10 * 60 * 1000   // 10 minutes
 

@@ -19,10 +19,11 @@
 //     cron never throws — one bad project should not stall the whole pipeline.
 
 import { NextRequest, NextResponse } from "next/server"
-import { Pool, PoolClient } from "pg"
+import { PoolClient } from "pg"
 import { ethers } from "ethers"
 
 import { ARC_RPC_HTTP } from "@/lib/constants"
+import { getPool } from "@/lib/dbPool"
 import {
   TRANSFER_TOPIC,
   ERC20_BALANCE_ABI,
@@ -41,10 +42,7 @@ import {
 export const runtime = "nodejs"
 export const maxDuration = 300 // Fluid Compute budget; we'll usually finish in seconds
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
-})
+const pool = getPool()
 
 // Arc's public RPC caps at ~100 req/sec. We run getBlock requests through
 // this gate so a busy log window can't burst past that. Each tick across all

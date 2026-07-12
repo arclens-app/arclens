@@ -1,9 +1,9 @@
 ﻿import { NextRequest, NextResponse, after } from "next/server"
 import { scanUrl } from "@/lib/urlScan"
-import { Pool } from "pg"
 import { rateLimit, getIp } from "@/lib/ratelimit"
+import { getPool } from "@/lib/dbPool"
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
+const pool = getPool()
 
 // GET /api/trials — list active campaigns + stats
 export async function GET(req: NextRequest) {

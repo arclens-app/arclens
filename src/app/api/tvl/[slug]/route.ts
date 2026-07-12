@@ -11,12 +11,9 @@
 // shape is friendlier for plotting than the list endpoint.
 
 import { NextRequest, NextResponse } from "next/server"
-import { Pool } from "pg"
+import { getPool } from "@/lib/dbPool"
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
-})
+const pool = getPool()
 
 function usdFromE6(raw: string | null | undefined): number | null {
   if (raw == null) return null

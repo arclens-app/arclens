@@ -18,7 +18,7 @@
 // All four surface here. No silent miscounts.
 
 import { NextRequest, NextResponse } from "next/server"
-import { Pool, PoolClient } from "pg"
+import { PoolClient } from "pg"
 import { ethers } from "ethers"
 import { ARC_RPC_HTTP } from "@/lib/constants"
 import {
@@ -28,14 +28,12 @@ import {
   type StablecoinRow,
   type ForexMap,
 } from "@/lib/tvl"
+import { getPool } from "@/lib/dbPool"
 
 export const runtime = "nodejs"
 export const maxDuration = 300
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
-})
+const pool = getPool()
 
 function isAuthorized(req: NextRequest): boolean {
   const expected = process.env.CRON_SECRET

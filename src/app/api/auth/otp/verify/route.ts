@@ -1,11 +1,11 @@
 export const runtime = "nodejs"
 import { NextRequest, NextResponse } from "next/server"
-import { Pool } from "pg"
 import crypto from "crypto"
 import { enforce } from "@/lib/ratelimit"
 import { attachSessionCookie, attachOtpProof } from "@/lib/session"
+import { getPool } from "@/lib/dbPool"
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
+const pool = getPool()
 const BASE = "https://api.circle.com"
 
 const PEPPER = process.env.OTP_PEPPER || "arclens-otp-pepper-v1"

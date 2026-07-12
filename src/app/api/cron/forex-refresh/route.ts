@@ -21,12 +21,9 @@
 // stablecoin — no point fetching JPY when no JPY stablecoin exists yet.
 
 import { NextRequest, NextResponse } from "next/server"
-import { Pool } from "pg"
+import { getPool } from "@/lib/dbPool"
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
-})
+const pool = getPool()
 
 const ECB_URL = "https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml"
 

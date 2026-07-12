@@ -8,14 +8,11 @@
 // rest of /api/admin — constant-time compared.
 
 import { NextRequest, NextResponse } from "next/server"
-import { Pool } from "pg"
 import { timingSafeEqual } from "crypto"
 import { attestOnChain, subjectFor } from "@/lib/registry"
+import { getPool } from "@/lib/dbPool"
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
-})
+const pool = getPool()
 
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || ""
 

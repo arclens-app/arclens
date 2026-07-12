@@ -12,13 +12,10 @@
 //          stops counting it on the next tick.
 
 import { NextRequest, NextResponse } from "next/server"
-import { Pool } from "pg"
 import { getSession } from "@/lib/session"
+import { getPool } from "@/lib/dbPool"
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
-})
+const pool = getPool()
 
 export async function PATCH(
   req: NextRequest,

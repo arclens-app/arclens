@@ -1,7 +1,7 @@
 ﻿import { MetadataRoute } from "next"
-import { Pool } from "pg"
+import { getPool } from "@/lib/dbPool"
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
+const pool = getPool()
 
 const BASE = "https://arclenz.xyz"
 

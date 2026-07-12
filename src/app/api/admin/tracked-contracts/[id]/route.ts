@@ -14,15 +14,12 @@
 // config and the cached values self-correct via the existing rollup query.
 
 import { NextRequest, NextResponse } from "next/server"
-import { Pool } from "pg"
 import { timingSafeEqual } from "crypto"
 import { ethers } from "ethers"
 import { canonicalEventSignature, dataArgTypes } from "@/lib/tvl"
+import { getPool } from "@/lib/dbPool"
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
-})
+const pool = getPool()
 
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || ""
 

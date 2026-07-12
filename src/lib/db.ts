@@ -38,22 +38,8 @@
 //     updated_at TIMESTAMPTZ DEFAULT NOW()
 //   );
 
-import { Pool } from "pg"
-
-// Singleton connection pool
-let _pool: Pool | null = null
-
-function getPool(): Pool {
-  if (!_pool) {
-    _pool = new Pool({
-      connectionString: process.env.DATABASE_URL,
-      max: 10,
-      idleTimeoutMillis: 30_000,
-      ssl: { rejectUnauthorized: false },
-    })
-  }
-  return _pool
-}
+// Shared app-wide pool — see src/lib/dbPool.ts (do not construct pools here).
+import { getPool } from "./dbPool"
 
 // â”€â”€â”€ TYPES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 

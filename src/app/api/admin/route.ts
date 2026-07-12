@@ -1,14 +1,14 @@
 ﻿// `after` aliased to runAfter — several handlers below use a local `const after`
 // for the post-update DB row, which would shadow (and TDZ-break) the import.
 import { NextRequest, NextResponse, after as runAfter } from "next/server"
-import { Pool } from "pg"
 import { Resend } from "resend"
 import { timingSafeEqual } from "crypto"
 import { enforce } from "@/lib/ratelimit"
 import { attestOnChain, subjectFor } from "@/lib/registry"
 import { loadPhishingList, hostOf, checkWebsite, analyzeContract, assessProject } from "@/lib/trustEngine"
+import { getPool } from "@/lib/dbPool"
 
-const pool   = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
+const pool = getPool()
 
 // Lazy Resend init. The SDK constructor throws "Missing API key" on empty
 // string in newer versions, which would crash the entire route at module load

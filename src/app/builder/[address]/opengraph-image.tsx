@@ -2,16 +2,16 @@
 // + what they've shipped, on the ArcLens brand canvas. Same template as the
 // per-project card (tiny ArcLens mark; the builder is the hero).
 import { ImageResponse } from "next/og"
-import { Pool } from "pg"
 import { readFile } from "fs/promises"
 import { fileURLToPath } from "url"
+import { getPool } from "@/lib/dbPool"
 
 export const runtime = "nodejs"
 export const alt = "Builder on ArcLens"
 export const size = { width: 1200, height: 630 }
 export const contentType = "image/png"
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
+const pool = getPool()
 const BASE = process.env.NEXT_PUBLIC_BASE_URL || "https://arclenz.xyz"
 
 export default async function Image({ params }: { params: Promise<{ address: string }> }) {

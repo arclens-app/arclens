@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
-import { Pool } from "pg"
+import { getPool } from "@/lib/dbPool"
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL })
+const pool = getPool()
 const BASE = process.env.NEXT_PUBLIC_BASE_URL || "https://arclenz.xyz"
 
 export async function generateMetadata(

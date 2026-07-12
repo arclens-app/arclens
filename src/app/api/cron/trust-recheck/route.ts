@@ -11,11 +11,11 @@ export const runtime = "nodejs"
 export const maxDuration = 300
 
 import { NextRequest, NextResponse } from "next/server"
-import { Pool } from "pg"
 import { loadPhishingList, hostOf, checkWebsite, analyzeContract, assessProject, type ContractRow } from "@/lib/trustEngine"
 import { attestOnChain, revokeOnChain, subjectFor } from "@/lib/registry"
+import { getPool } from "@/lib/dbPool"
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
+const pool = getPool()
 
 function isAuthorized(req: NextRequest): boolean {
   const expected = process.env.CRON_SECRET

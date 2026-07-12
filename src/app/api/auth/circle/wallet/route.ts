@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
-import { Pool } from "pg"
 import { enforce } from "@/lib/ratelimit"
 import { readOtpProof, attachSessionCookie } from "@/lib/session"
+import { getPool } from "@/lib/dbPool"
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
+const pool = getPool()
 const BASE = "https://api.circle.com"
 
 function apiHeaders(userToken?: string) {

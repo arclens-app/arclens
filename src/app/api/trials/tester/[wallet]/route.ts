@@ -1,9 +1,9 @@
 ﻿import { NextRequest, NextResponse } from "next/server"
-import { Pool } from "pg"
 import { enforce } from "@/lib/ratelimit"
 import { getSession } from "@/lib/session"
+import { getPool } from "@/lib/dbPool"
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
+const pool = getPool()
 
 // PATCH /api/trials/tester/[wallet] — update pfp_url
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ wallet: string }> }) {

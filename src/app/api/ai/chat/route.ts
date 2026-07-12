@@ -9,20 +9,17 @@
 // Either way, the conversation is logged to ai_conversations.
 
 import { NextRequest, NextResponse } from "next/server"
-import { Pool } from "pg"
 import { getSession } from "@/lib/session"
 import { buildContext, logKnowledgeGap, rememberProjects, backfillEmbeddings, projectSlugsInText, getGeminiKey, type AiContext } from "@/lib/aiContext"
 import { buildTools } from "@/lib/aiTools"
 import { payoutForAnswer, type PayoutTrace } from "@/lib/lensPay"
 import { enforce, rateLimit, getIp } from "@/lib/ratelimit"
+import { getPool } from "@/lib/dbPool"
 
 export const runtime = "nodejs"
 export const maxDuration = 60
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
-})
+const pool = getPool()
 
 interface ChatBody {
   messages: Array<{ role: "user" | "assistant"; content: string }>

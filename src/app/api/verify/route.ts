@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server"
-import { Pool } from "pg"
 import crypto from "crypto"
 import { ethers } from "ethers"
 import { enforce } from "@/lib/ratelimit"
@@ -7,8 +6,9 @@ import { getSession } from "@/lib/session"
 import { ARC_RPC_HTTP } from "@/lib/constants"
 import { verifyDeployerSignature } from "@/lib/deployerSig"
 import { buildVerifyMessage } from "./challenge/route"
+import { getPool } from "@/lib/dbPool"
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
+const pool = getPool()
 
 const PROTECTED_NAMES = ["usdc","circle","arc bridge","arclens","uniswap","aave","compound","metamask"]
 const ARCSCAN        = "https://testnet.arcscan.app/api/v2"

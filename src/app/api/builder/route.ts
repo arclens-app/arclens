@@ -1,11 +1,11 @@
 export const runtime = "nodejs"
 import { NextRequest, NextResponse } from "next/server"
-import { Pool } from "pg"
 import { verifyMessage } from "viem"
 import { enforce } from "@/lib/ratelimit"
 import { getSession } from "@/lib/session"
+import { getPool } from "@/lib/dbPool"
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
+const pool = getPool()
 
 // Anti-spam minimums — server-side, so no client bypass
 const MIN_NAME_LEN   = 2

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
-import { Pool } from "pg"
+import { getPool } from "@/lib/dbPool"
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
+const pool = getPool()
 
 // Self-heal: the view-record INSERT below uses ON CONFLICT (project_id, device_id,
 // week_num), which REQUIRES this unique index. If the index is ever missing the

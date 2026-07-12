@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
-import { Pool } from "pg"
+import { getPool } from "@/lib/dbPool"
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
+const pool = getPool()
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || ""
 
 const ARC_PROJECTS = [

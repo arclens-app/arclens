@@ -1,8 +1,8 @@
 ﻿import { NextRequest, NextResponse, after } from "next/server"
-import { Pool } from "pg"
 import { scanUrl } from "@/lib/urlScan"
+import { getPool } from "@/lib/dbPool"
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
+const pool = getPool()
 
 export async function GET() {
   try {

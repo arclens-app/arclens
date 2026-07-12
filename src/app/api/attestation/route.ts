@@ -1,10 +1,10 @@
 export const runtime = "nodejs"
 import { NextRequest, NextResponse } from "next/server"
-import { Pool } from "pg"
 import { subjectFor, readAttestation } from "@/lib/registry"
 import { ARC_CHAIN_ID } from "@/lib/constants"
+import { getPool } from "@/lib/dbPool"
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
+const pool = getPool()
 
 // Public read of ArcLens's on-chain attestation. Anyone (wallet, app, agent) can
 // also read the contract directly via RPC — this is just a pre-decoded convenience.
