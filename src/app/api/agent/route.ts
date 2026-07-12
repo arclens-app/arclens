@@ -53,7 +53,7 @@ const MANIFEST = {
     discover: { description: "Find Arc projects, optionally trusted-only.", params: { category: "optional", trusted_only: "optional bool", limit: "1-20 (default 8)" } },
     project:  { description: "A project's live metrics + trust standing.", params: { name: "project name or slug" } },
     metrics:  { description: "Verified metrics history for a project — TVL series, daily volume & revenue, all-time totals.", params: { name: "project name or slug", days: "history window 7-90 (default 30)" } },
-    risk:     { description: "Deep risk verdict — trust tier, contract analysis (upgradeability, admin keys, verified source), website reputation across 90+ security engines.", params: { name: "project name or slug" } },
+    risk:     { description: "Deep risk verdict — trust tier, contract analysis (upgradeability, admin keys, verified source), multi-engine website reputation.", params: { name: "project name or slug" } },
   },
 }
 
