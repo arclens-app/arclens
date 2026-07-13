@@ -11,10 +11,11 @@
 
 export const runtime = "nodejs"
 import { NextRequest, NextResponse } from "next/server"
-import { enforce, getIp } from "@/lib/ratelimit"
-import { verifyPremiumPayment, recordPremiumCall, premiumPriceE6, premiumPriceUsd, payoutForAnswer, agentPayoutBudgetE6 } from "@/lib/lensPay"
+import { enforce, getIp, rateLimit } from "@/lib/ratelimit"
+import { verifyPremiumPayment, recordPremiumCall, premiumPriceE6, premiumPriceUsd, payoutForAnswer, agentPayoutBudgetE6, askPriceE6, askPriceUsd, askPayoutBudgetE6 } from "@/lib/lensPay"
 import { gatewayConfigured, verifyAndSettle, paymentRequiredHeader, paymentResponseHeader } from "@/lib/gateway"
 import { passesVetting } from "@/lib/trustEngine"
+import { getGeminiKey, searchKnowledgeBase, projectSlugsInText } from "@/lib/aiContext"
 import { getPool } from "@/lib/dbPool"
 
 const pool = getPool()
@@ -54,6 +55,7 @@ const MANIFEST = {
     project:  { description: "A project's live metrics + trust standing.", params: { name: "project name or slug" } },
     metrics:  { description: "Verified metrics history for a project — TVL series, daily volume & revenue, all-time totals.", params: { name: "project name or slug", days: "history window 7-90 (default 30)" } },
     risk:     { description: "Deep risk verdict — trust tier, contract analysis (upgradeability, admin keys, verified source), multi-engine website reputation.", params: { name: "project name or slug" } },
+    ask:      { description: "A full Lens AI answer to any question about Arc — grounded in live on-chain data, the trust graph, and the knowledge base. Priced higher than the structured lookups.", params: { question: "your question (max 500 chars)" }, price: askPriceUsd, price_e6: askPriceE6 },
   },
 }
 
@@ -68,9 +70,35 @@ export async function POST(req: NextRequest) {
   let body: any
   try { body = await req.json() } catch { return NextResponse.json({ error: "Bad JSON" }, { status: 400 }) }
   const action = String(body?.action || "").toLowerCase()
-  if (!["trust", "discover", "project", "metrics", "risk"].includes(action)) {
+  if (!["trust", "discover", "project", "metrics", "risk", "ask"].includes(action)) {
     return NextResponse.json({ error: "Unknown action — see manifest.", ...MANIFEST }, { status: 400 })
   }
+
+  // ask preconditions BEFORE the payment gate — an agent must never be charged
+  // for an answer we already know we can't produce. Also a tighter rate bucket:
+  // every ask spends real LLM tokens, so it gets 6/min instead of 30/min.
+  let askQuestion = ""
+  if (action === "ask") {
+    askQuestion = String(body?.question || body?.q || "").trim().slice(0, 500)
+    if (!askQuestion) return NextResponse.json({ error: "question required (max 500 chars)" }, { status: 400 })
+    if (!getGeminiKey()) return NextResponse.json({ error: "ask is temporarily unavailable" }, { status: 503 })
+    const askBlocked = await enforce(req, "agent-ask", { limit: 6, windowMs: 60_000 })
+    if (askBlocked) return askBlocked
+    // Global daily ceiling — per-IP limits fall to IP rotation, but every ask
+    // spends real LLM tokens. This caps the absolute worst-case daily spend
+    // no matter who's calling. Tune via LENS_ASK_DAILY_MAX.
+    const daily = await rateLimit("agent-ask:global", Number(process.env.LENS_ASK_DAILY_MAX || 300), 86_400_000)
+    if (!daily.allowed) {
+      return NextResponse.json(
+        { error: "ask is at capacity for today — try again later", code: "daily_capacity" },
+        { status: 429, headers: { "Retry-After": String(Math.ceil(daily.resetIn / 1000)) } },
+      )
+    }
+  }
+
+  // Per-action pricing: ask costs more than the structured lookups.
+  const priceE6  = action === "ask" ? askPriceE6 : premiumPriceE6
+  const priceUsd = action === "ask" ? askPriceUsd : premiumPriceUsd
 
   // x402 — pay per call. Real Circle Gateway settlement when a standard
   // `payment-signature` header is present (and SELLER_ADDRESS configured);
@@ -79,7 +107,7 @@ export async function POST(req: NextRequest) {
   let paid = false
   let settledTx: string | null = null
   if (sig && gatewayConfigured()) {
-    const st = await verifyAndSettle(sig, premiumPriceE6)
+    const st = await verifyAndSettle(sig, priceE6)
     paid = st.ok
     settledTx = st.tx ?? null
     if (!paid) console.error("[agent] gateway verify/settle failed:", st.reason)
@@ -93,10 +121,10 @@ export async function POST(req: NextRequest) {
       {
         status: 402,
         headers: {
-          "x-payment-price": premiumPriceUsd,
+          "x-payment-price": priceUsd,
           "x-payment-token": "USDC",
           "x-payment-network": "Arc",
-          "PAYMENT-REQUIRED": paymentRequiredHeader(premiumPriceE6, "/api/agent"),
+          "PAYMENT-REQUIRED": paymentRequiredHeader(priceE6, "/api/agent"),
         },
       },
     )
@@ -224,6 +252,41 @@ export async function POST(req: NextRequest) {
           assessed_at: profile.computed_at ?? null,
         }
       }
+    } else if (action === "ask") {
+      // One-shot Lens answer: same tools + knowledge base as the /lens chat,
+      // but generateText (no streaming) with hard token/step caps so the real
+      // LLM spend stays safely under the call price.
+      const [{ generateText, stepCountIs }, { createGoogleGenerativeAI }, { buildTools }] = await Promise.all([
+        import("ai"),
+        import("@ai-sdk/google"),
+        import("@/lib/aiTools"),
+      ])
+      const kb = await searchKnowledgeBase(askQuestion, 5).catch(() => [])
+      const kbBlock = kb.length
+        ? "\nCurated facts that may help (cite naturally, never invent):\n" + kb.map((h: any) => `- ${h.fact ?? h.text ?? JSON.stringify(h)}`).join("\n")
+        : ""
+      const google = createGoogleGenerativeAI({ apiKey: getGeminiKey() })
+      const res = await generateText({
+        model: google("gemini-2.5-flash"),
+        system:
+          "You are Lens AI, ArcLens's trust & ecosystem oracle for Arc (Circle's stablecoin L1), answering a PAID API call from another agent. " +
+          "Answer from your tools and the curated facts only — never guess or invent projects, numbers, or addresses. " +
+          "Be direct and complete in at most 180 words of plain text (no markdown, no links). " +
+          "Name the Arc projects your answer relies on so they can be credited. " +
+          "If the data genuinely doesn't answer the question, say so plainly." + kbBlock,
+        prompt: askQuestion,
+        tools: buildTools(),
+        stopWhen: stepCountIs(4),
+        maxOutputTokens: 500,
+      })
+      const answer = (res.text || "").trim()
+      if (!answer) {
+        result = { question: askQuestion, answer: "Lens couldn't produce a grounded answer for this — the underlying data didn't cover it.", cited: [] }
+      } else {
+        const cited = await projectSlugsInText(answer).catch(() => [] as string[])
+        for (const s of cited) slugs.push(s)
+        result = { question: askQuestion, answer, cited }
+      }
     } else {
       const lim = Math.min(Math.max(Number(body?.limit) || 8, 1), 20)
       const params: any[] = []
@@ -249,8 +312,8 @@ export async function POST(req: NextRequest) {
   let payout: any = null
   // budgetE6 caps the total builder payout for this paid call below what the
   // agent paid, so Lens AI stays net-positive on every agent-to-agent call.
-  try { if (slugs.length) payout = await payoutForAnswer({ conversationId: null, askerId: agentId, askerWallet: null, slugs, budgetE6: agentPayoutBudgetE6 }) } catch {}
-  recordPremiumCall(agentId, premiumPriceE6, settledTx).catch(() => {})
+  try { if (slugs.length) payout = await payoutForAnswer({ conversationId: null, askerId: agentId, askerWallet: null, slugs, budgetE6: action === "ask" ? askPayoutBudgetE6 : agentPayoutBudgetE6 }) } catch {}
+  recordPremiumCall(agentId, priceE6, settledTx).catch(() => {})
 
   return NextResponse.json(
     {

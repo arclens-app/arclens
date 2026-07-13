@@ -1,3 +1,4 @@
+import { getPool } from "@/lib/dbPool"
 // src/lib/lensPay.ts
 //
 // The Lens AI nanopayment engine — the heart of the Lepton hackathon build.
@@ -28,9 +29,8 @@
 //   • Graceful     — with no Circle creds it runs in SIMULATION mode (same
 //                    decisions, logged, no money) so the UX ships before funding.
 
-import { Pool } from "pg"
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
+const pool = getPool()
 
 // ── Tunables (env-overridable) ──────────────────────────────────────────────
 // Amounts are micro-USDC (e6), matching the rest of ArcLens. $0.001 = 1000.
@@ -87,6 +87,16 @@ export const premiumPriceUsd = `$${(PREMIUM_PRICE_E6 / 1e6).toFixed(4)}`
 // has no inbound payment and stays subsidised (no budget passed).
 const AGENT_PAYOUT_SHARE = Math.min(Math.max(Number(process.env.LENS_AGENT_PAYOUT_SHARE || 0.6), 0), 0.95)
 export const agentPayoutBudgetE6 = Math.max(0, Math.floor(PREMIUM_PRICE_E6 * AGENT_PAYOUT_SHARE))
+
+// ── Ask: full Lens answers via the agent API ─────────────────────────────────
+// Priced above the simple lookups because every call spends REAL LLM tokens
+// (Gemini bills in dollars even while the inbound USDC is testnet). Default
+// $0.02: worst-case LLM cost ≈ $0.006 + builder share 60% ($0.012) still nets
+// positive. Tune via LENS_ASK_PRICE_E6.
+const ASK_PRICE_E6 = Number(process.env.LENS_ASK_PRICE_E6 || 20000) // $0.02/call
+export const askPriceE6 = ASK_PRICE_E6
+export const askPriceUsd = `$${(ASK_PRICE_E6 / 1e6).toFixed(4)}`
+export const askPayoutBudgetE6 = Math.max(0, Math.floor(ASK_PRICE_E6 * AGENT_PAYOUT_SHARE))
 // Don't bother paying dust — if the remaining call budget is below this, skip.
 const MIN_PAYOUT_E6 = Number(process.env.LENS_MIN_PAYOUT_E6 || 100) // $0.0001
 
