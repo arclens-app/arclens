@@ -274,46 +274,10 @@ export default function DashboardPage() {
     } finally { setDashRatingLoading(false) }
   }
 
-  // Let a founder export their full tester list + submissions as a CSV. Built
-  // from data already loaded in the dashboard — no extra request. Includes the
-  // review answers and proofs (as JSON) so founders can work with the feedback
-  // offline / in a spreadsheet.
-  function downloadTestersCsv(camp: any, completions: any[]) {
-    const esc = (v: any) => {
-      const s = v == null ? "" : String(v)
-      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
-    }
-    const headers = [
-      "tester_wallet", "status", "rating", "quality_score", "xp_earned",
-      "reward_delivered", "contract_verified", "submitted_at",
-      "review_answers", "per_question_ratings", "task_proofs",
-    ]
-    const j = (v: any) => (v && typeof v === "object" ? JSON.stringify(v) : (v ?? ""))
-    const rows = (completions || []).map((c: any) => [
-      c.tester_wallet,
-      c.status,
-      c.builder_rating ?? "",
-      c.quality_score ?? "",
-      c.xp_earned ?? "",
-      c.reward_delivered ? "yes" : "no",
-      c.contract_verified ? "yes" : "no",
-      c.created_at ? new Date(c.created_at).toISOString() : "",
-      j(c.review_answers),
-      j(c.per_question_ratings),
-      j(c.task_proofs),
-    ])
-    const csv = [headers, ...rows].map(r => r.map(esc).join(",")).join("\n")
-    // Prepend a BOM so Excel reads UTF-8 wallets/feedback correctly.
-    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" })
-    const slug = String(camp?.slug || camp?.title || "campaign").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")
-    const a = document.createElement("a")
-    a.href = URL.createObjectURL(blob)
-    a.download = `${slug}-testers.csv`
-    document.body.appendChild(a)
-    a.click()
-    a.remove()
-    URL.revokeObjectURL(a.href)
-  }
+  // CSV export now lives at /api/trials/[id]/feedback.csv — one canonical
+  // exporter (question-per-column, injection-guarded, creator-gated) shared by
+  // this dashboard and the campaign page. The old client-side version dumped
+  // answers as JSON blobs in single cells, which founders couldn't read.
 
   async function fundCampaign(campaign: any) {
     if (!connectedWallet || !(window as any).ethereum) return
@@ -780,12 +744,13 @@ export default function DashboardPage() {
                             ))}
                           </div>
                           {completions.length > 0 && (
-                            <button onClick={() => downloadTestersCsv(camp, completions)}
-                              onMouseEnter={e => { e.currentTarget.style.borderColor = "#8aaeff"; e.currentTarget.style.color = t1 }}
+                            <a href={`/api/trials/${camp.slug || camp.id}/feedback.csv?wallet=${encodeURIComponent(connectedWallet || "")}`}
+                              download
+                              onMouseEnter={e => { e.currentTarget.style.borderColor = "#00d990"; e.currentTarget.style.color = t1 }}
                               onMouseLeave={e => { e.currentTarget.style.borderColor = bdr; e.currentTarget.style.color = t2 }}
-                              style={{ marginTop: "14px", height: "32px", padding: "0 14px", background: "transparent", color: t2, fontSize: "11px", fontFamily: mono, border: "1px solid " + bdr, borderRadius: "7px", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "6px", transition: "all .13s" }}>
-                              ↓ Export testers ({completions.length}) as CSV
-                            </button>
+                              style={{ marginTop: "14px", height: "32px", padding: "0 14px", background: "transparent", color: t2, fontSize: "11px", fontFamily: mono, border: "1px solid " + bdr, borderRadius: "7px", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "6px", transition: "all .13s", textDecoration: "none" }}>
+                              ↓ Download feedback ({completions.length}) as CSV
+                            </a>
                           )}
                         </div>
 

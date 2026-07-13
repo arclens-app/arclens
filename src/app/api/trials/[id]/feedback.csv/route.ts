@@ -86,7 +86,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     }
 
     const filename = `${camp.slug || camp.id}-feedback.csv`
-    return new NextResponse(lines.join("\r\n") + "\r\n", {
+    // BOM so Excel parses UTF-8 (wallets, non-ASCII feedback) correctly.
+    return new NextResponse("﻿" + lines.join("\r\n") + "\r\n", {
       headers: {
         "Content-Type": "text/csv; charset=utf-8",
         "Content-Disposition": `attachment; filename="${filename}"`,

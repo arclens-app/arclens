@@ -31,7 +31,7 @@ interface Event {
   link: string|null; created_at: string
 }
 interface AdminCampaign {
-  id: number; title: string; tagline: string|null; type: string
+  id: number; slug: string|null; title: string; tagline: string|null; type: string
   description: string; tasks: {id:string;title:string;description:string;proof_type?:string;contract_address?:string|null}[]
   review_questions: {id:string;label:string;min_words:number;required:boolean}[]
   reward_type: string; reward_description: string|null; reward_usdc_amount: number|null
@@ -1537,7 +1537,7 @@ export default function AdminPage() {
                                 </div>
                               </div>
                               <div style={{ display:"flex", gap:"8px", flexShrink:0, flexWrap:"wrap", justifyContent:"flex-end" }}>
-                                <a href={`/trials/${c.id}`} target="_blank" rel="noopener noreferrer"
+                                <a href={`/trials/${c.slug || c.id}`} target="_blank" rel="noopener noreferrer"
                                   style={{ height:"30px", padding:"0 14px", display:"inline-flex", alignItems:"center", background:"rgba(26,86,255,0.1)", color:"#8aaeff", fontSize:"11px", fontWeight:600, border:"1px solid rgba(26,86,255,0.3)", borderRadius:"5px", textDecoration:"none", fontFamily:"'Geist',sans-serif", whiteSpace:"nowrap" }}>
                                   Preview as tester ↗
                                 </a>

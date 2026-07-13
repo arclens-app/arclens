@@ -1388,7 +1388,7 @@ export default function CampaignDetailPage() {
 
             {/* ── Owner: export feedback as CSV ── */}
             {isOwner && completions.length > 0 && (
-              <a href={`/api/trials/${campaign.id}/feedback.csv?wallet=${encodeURIComponent(wallet || "")}`}
+              <a href={`/api/trials/${campaign.slug || campaign.id}/feedback.csv?wallet=${encodeURIComponent(wallet || "")}`}
                 download
                 style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "13px 18px",
                   background: "var(--surf,#0a0e1a)", border: "1px solid var(--bdr,rgba(255,255,255,0.06))", borderRadius: 10,

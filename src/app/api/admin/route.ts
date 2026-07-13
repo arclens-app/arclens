@@ -415,7 +415,7 @@ export async function GET(req: NextRequest) {
       let pendingCampaigns: unknown[] = []
       try {
         const pc = await pool.query(
-          `SELECT c.id, c.title, c.tagline, c.type, c.description, c.tasks, c.review_questions,
+          `SELECT c.id, c.slug, c.title, c.tagline, c.type, c.description, c.tasks, c.review_questions,
                   c.reward_type, c.reward_description, c.reward_usdc_amount,
                   c.contract_address, c.app_url, c.min_rank, c.is_fcfs,
                   c.creator_wallet, c.project_name, c.project_logo, c.campaign_logo,
