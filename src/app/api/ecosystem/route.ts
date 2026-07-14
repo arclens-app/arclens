@@ -1,6 +1,7 @@
 ﻿import { NextRequest, NextResponse, after } from "next/server"
 import { scanUrl } from "@/lib/urlScan"
 import { getPool } from "@/lib/dbPool"
+import { validateEmail, validateWebsite, hostFromUrl, domainResolves } from "@/lib/submissionGuards"
 
 const pool = getPool()
 
@@ -90,7 +91,36 @@ export async function POST(req: NextRequest) {
 
   if (!name?.trim())    return NextResponse.json({ error: "Project name required" }, { status: 400 })
   if (!tagline?.trim()) return NextResponse.json({ error: "Tagline required" }, { status: 400 })
-  if (!email?.trim())   return NextResponse.json({ error: "Email is required so we can notify you" }, { status: 400 })
+
+  // ── Intake validation ─────────────────────────────────────────────────────
+  // Reject junk before it reaches the admin queue: bad emails, reserved/
+  // unregisterable domains (.invalid/.example/etc), and a project with neither
+  // a resolving website nor a contract. Complements the reputation scan.
+  const emailCheck = validateEmail(email)
+  if (emailCheck.ok === false) return NextResponse.json({ error: emailCheck.error }, { status: 400 })
+
+  const siteCheck = validateWebsite(website)
+  if (siteCheck.ok === false) return NextResponse.json({ error: siteCheck.error }, { status: 400 })
+
+  // At least ONE verifiable link — but generously: a real website, a contract,
+  // OR a social (Twitter/GitHub). Early projects often have only a Twitter, and
+  // we don't want to turn them away — we just refuse the truly empty submission
+  // that names no way to check the team is real (the audit-probe case).
+  const hasContract = typeof contract === "string" && /^0x[a-fA-F0-9]{40}$/.test(contract.trim())
+  const hasWebsite  = !!(website && website.trim())
+  const hasSocial   = !!((twitter && twitter.trim()) || (github && github.trim()))
+  if (!hasContract && !hasWebsite && !hasSocial) {
+    return NextResponse.json({ error: "Add at least one link so we can verify your project — a website, contract address, Twitter, or GitHub." }, { status: 400 })
+  }
+
+  // If a website was given, confirm the domain actually resolves (fail-open on
+  // DNS outage). Stops fabricated-but-well-formed domains like the audit probe.
+  if (hasWebsite) {
+    const host = hostFromUrl(website)
+    if (host && !(await domainResolves(host))) {
+      return NextResponse.json({ error: "That website domain doesn't resolve — check the URL and try again" }, { status: 400 })
+    }
+  }
 
   // Generate slug from name
   const slug = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")
