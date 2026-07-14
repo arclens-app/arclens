@@ -9,14 +9,11 @@
 // math (and never invents). When there's no data yet, tools say so explicitly
 // so the model reports "none yet" truthfully.
 
-import { Pool } from "pg"
 import { tool, jsonSchema } from "ai"
 import { getPayoutStats, getBuilderBoard } from "@/lib/lensPay"
+import { getPool } from "@/lib/dbPool"
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
-})
+const pool = getPool()
 
 // e6 micro-USDC → "$7.4M" / "$12.3K" / "$842"
 function fmtUsd(e6: string | null): string {

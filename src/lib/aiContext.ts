@@ -3,13 +3,10 @@
 // asking from, and WHAT relevant data + knowledge applies. No LLM calls here —
 // the chat route consumes this and passes it as the system prompt context.
 
-import { Pool } from "pg"
 import type { SessionData } from "@/lib/session"
+import { getPool } from "@/lib/dbPool"
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
-})
+const pool = getPool()
 
 export type AiRole = "founder" | "tester" | "admin" | "visitor"
 

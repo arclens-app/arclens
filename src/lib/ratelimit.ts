@@ -9,10 +9,10 @@
  * through. Better to let traffic flow than to take real users offline because
  * of a limiter outage.
  */
-import { Pool } from "pg"
 import { NextResponse } from "next/server"
+import { getPool } from "@/lib/dbPool"
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
+const pool = getPool()
 
 const tableReady = pool.query(`
   CREATE TABLE IF NOT EXISTS rate_limits (
