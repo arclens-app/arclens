@@ -10,6 +10,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { id as keccakId } from "ethers"
+import SubgraphPanel from "./SubgraphPanel"
 
 // Common Swap-event presets so founders don't have to type the full Solidity
 // signature from memory. Picking one auto-fills the signature + a sensible
@@ -87,6 +88,9 @@ interface Props {
 
 export default function TvlTrackingPanel({ slug, token, connectedWallet, theme }: Props) {
   const { mono, bdr, surf, surf2, t1, t2, t3, green } = theme
+  // Two ways to get metrics on your page — verified on-chain, or self-reported
+  // from your own subgraph. One home, presented as the choice it is.
+  const [method, setMethod] = useState<"verified" | "subgraph">("verified")
 
   const [contracts, setContracts] = useState<ProjectContract[]>([])
   const [loading, setLoading] = useState(true)
@@ -416,13 +420,28 @@ export default function TvlTrackingPanel({ slug, token, connectedWallet, theme }
 
   return (
     <div style={{ background: surf, border: "1px solid " + bdr, borderRadius: "12px", padding: "24px 26px" }}>
-      <div style={{ fontSize: "14px", fontWeight: 600, color: t1, marginBottom: "4px" }}>
+      <div style={{ fontSize: "14px", fontWeight: 600, color: t1, marginBottom: "10px" }}>
         TVL &amp; Revenue tracking
       </div>
+      {/* Method toggle — two ways to the same goal, one home */}
+      <div style={{ display: "flex", gap: 6, marginBottom: 18 }}>
+        {([["verified", "Verified · on-chain"], ["subgraph", "Self-reported · subgraph"]] as const).map(([m, lab]) => (
+          <button key={m} onClick={() => setMethod(m)}
+            style={{ height: 30, padding: "0 14px", borderRadius: 7, cursor: "pointer", fontSize: 11.5, fontFamily: mono,
+              background: method === m ? "rgba(26,86,255,0.12)" : "transparent",
+              color: method === m ? "#8aaeff" : t2,
+              border: "1px solid " + (method === m ? "rgba(26,86,255,0.35)" : bdr),
+              fontWeight: method === m ? 600 : 400 }}>
+            {lab}
+          </button>
+        ))}
+      </div>
+
+      {method === "verified" && (<>
       <div style={{ fontSize: "11px", fontFamily: mono, color: t3, marginBottom: "12px", lineHeight: 1.6 }}>
         Register the contracts that hold user deposits (TVL) or collect fees (Revenue).
         We verify your ownership by matching the contract&apos;s on-chain deployer to your signed-in wallet —
-        the same gate used for contract claims. Numbers appear on /ecosystem within 5 minutes.
+        the same gate used for contract claims. Numbers appear on /ecosystem within 5 minutes, with the green verified badge.
       </div>
       <div style={{ fontSize: "11px", fontFamily: mono, color: "#a8c2ff", background: "rgba(26,86,255,0.06)", border: "1px solid rgba(26,86,255,0.18)", borderRadius: "7px", padding: "9px 12px", marginBottom: "22px", lineHeight: 1.6 }}>
         Verification is a one-time off-chain signature that proves you control the contract. It gives ArcLens no control over it — ownership stays entirely yours.
@@ -1114,6 +1133,11 @@ export default function TvlTrackingPanel({ slug, token, connectedWallet, theme }
             ))}
           </div>
         </details>
+      )}
+      </>)}
+
+      {method === "subgraph" && (
+        <SubgraphPanel slug={slug} token={token} theme={{ mono, bdr, surf, surf2, t1, t2, t3, green }} />
       )}
     </div>
   )
