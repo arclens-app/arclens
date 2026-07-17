@@ -234,7 +234,7 @@ export async function GET(
 
     return NextResponse.json(
       { project: { ...project, txCount, owner_wallet: undefined, founder_profile: founderProfile }, related: related.rows, leaderboard, campaignsRun, usingXp, tvl },
-      { headers: { "Cache-Control": "public, s-maxage=30, stale-while-revalidate=60" } }
+      { headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600" } }
     )
   } catch (err) {
     console.error("[Ecosystem GET id]", err)

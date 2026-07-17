@@ -8,10 +8,17 @@ const pool = getPool()
 export async function GET() {
   try {
     const result = await pool.query(
-      `SELECT id, name, tagline, description, category, logo_url,
+      `SELECT id, name, tagline,
+              -- Cards show only the first ~120 chars; ship 121 (enough for the
+              -- "…" check) instead of the full 300, and ship only the one
+              -- trust_profile field the list uses (hard_risk) instead of the
+              -- whole analysis blob. Together this ~halves the list payload —
+              -- the biggest single source of DB egress. Detail page keeps both.
+              LEFT(description, 121) AS description, category, logo_url,
               website, twitter, github, discord, contract,
               featured, color, launched_at, slug, badge,
-              trust_level, recognition, trust_profile, established,
+              trust_level, recognition, established,
+              json_build_object('hard_risk', COALESCE((trust_profile->>'hard_risk')::bool, false)) AS trust_profile,
               city, country, lat, lng,
               COALESCE(view_count, 0) as view_count,
               created_at,
@@ -72,7 +79,9 @@ export async function GET() {
     }
 
     return NextResponse.json({ projects: projectsRows, trending }, {
-      headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600" },
+      // Directory isn't real-time — 15-min CDN cache means far fewer DB
+      // revalidations (egress reduction) with no visible staleness.
+      headers: { "Cache-Control": "public, s-maxage=900, stale-while-revalidate=1800" },
     })
   } catch {
     return NextResponse.json({ projects: [], trending: [] })

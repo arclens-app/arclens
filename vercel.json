@@ -3,7 +3,7 @@
   "crons": [
     {
       "path": "/api/cron/tvl-revenue",
-      "schedule": "*/5 * * * *"
+      "schedule": "*/15 * * * *"
     },
     {
       "path": "/api/cron/tvl-drift",
