@@ -4,6 +4,7 @@ import { useParams, useRouter } from "next/navigation"
 import ArcLayout from "@/components/ArcLayout"
 import { WalletAvatar } from "@/components/WalletAvatar"
 import { useArcStore } from "@/store/arc"
+import { getTypeMeta } from "@/lib/campaignTypes"
 
 interface Reputation {
   wallet: string
@@ -42,16 +43,6 @@ const RANK_REQ = [
   { campaigns: 40, avg: 4.5 },
 ]
 
-const TYPE_META: Record<string, { abbr: string; color: string; label: string }> = {
-  beta_test:     { abbr: "BT", color: "#1a56ff", label: "Beta Test" },
-  stress_test:   { abbr: "ST", color: "#e08810", label: "Stress Test" },
-  edge_case:     { abbr: "EC", color: "#a855f7", label: "Edge Cases" },
-  ux_review:     { abbr: "UX", color: "#00b87a", label: "UX Review" },
-  onboarding:    { abbr: "OB", color: "#06b6d4", label: "Onboarding" },
-  integration:   { abbr: "IT", color: "#6366f1", label: "Integration" },
-  builder_audit: { abbr: "BA", color: "#ec4899", label: "Builder Audit" },
-  payment_flow:  { abbr: "PF", color: "#00d990", label: "Payment Flow" },
-}
 
 function truncateWallet(w: string) {
   if (w.length < 16) return w
@@ -332,7 +323,7 @@ export default function TesterProfilePage() {
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 {history.map((item, idx) => {
-                  const tm     = TYPE_META[item.type] || TYPE_META.beta_test
+                  const tm     = getTypeMeta(item.type)
                   const logo   = imgSrc(item.project_logo)
                   return (
                     <div key={`${item.campaign_id}-${idx}`} style={{ background: "#0a0e1a", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12, padding: "14px 16px", display: "flex", alignItems: "center", gap: 14 }}>

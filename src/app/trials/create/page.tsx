@@ -7,27 +7,12 @@ import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, us
 import type { DragEndEvent } from "@dnd-kit/core"
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
+import { CAMPAIGN_TYPES as TYPES, CONTRACT_REQUIRED, CONTRACT_HIDDEN, CAMPAIGN_TEMPLATES as TEMPLATES, matchesDefaultTemplate } from "@/lib/campaignTypes"
 
 type ProofType = "none" | "x_link" | "tx_hash" | "url" | "screenshot"
 interface Task { id: string; title: string; description: string; contract_address?: string; proof_type?: ProofType }
 interface ReviewQuestion { id: string; label: string; placeholder: string; min_words: number; required: boolean }
 interface Project { id: number; name: string; logo_url: string | null }
-
-// Types that require a deployed contract address
-const CONTRACT_REQUIRED = new Set(["beta_test", "stress_test", "edge_case", "integration", "builder_audit", "payment_flow"])
-// Types where contract address is not applicable (UI/product only)
-const CONTRACT_HIDDEN = new Set(["ux_review", "onboarding"])
-
-const TYPES = [
-  { id: "beta_test",     abbr: "BT", label: "Beta Test",          color: "#1a56ff", tag: "Most popular",  desc: "Walk real users through your core contract flow end-to-end on Arc Testnet" },
-  { id: "payment_flow",  abbr: "PF", label: "Payment Flow Test",  color: "#00d990", tag: "Arc native",    desc: "Verify USDC transfers, settlement logic, and multi-step payment sequences" },
-  { id: "stress_test",   abbr: "ST", label: "Stress Test",        color: "#e08810", tag: "Concurrency",   desc: "Test rapid consecutive transactions and concurrent state changes on-chain" },
-  { id: "edge_case",     abbr: "EC", label: "Edge Case Hunt",     color: "#a855f7", tag: "Deep testing",  desc: "Find the inputs and sequences that break your financial contract logic" },
-  { id: "ux_review",     abbr: "UX", label: "UX Review",          color: "#00b87a", tag: "Product feel",  desc: "Capture first impressions, friction points, and clarity gaps in your UI" },
-  { id: "onboarding",    abbr: "OB", label: "Onboarding Test",    color: "#06b6d4", tag: "Retention",     desc: "Test the new user journey from zero — no docs, no prior knowledge" },
-  { id: "integration",   abbr: "IT", label: "Integration Test",   color: "#6366f1", tag: "Ecosystem",     desc: "Verify your protocol interoperates correctly with other Arc contracts" },
-  { id: "builder_audit", abbr: "BA", label: "Builder Audit",      color: "#ec4899", tag: "Developer",     desc: "Invite builders to review your contract code, architecture, and security" },
-]
 
 const REWARDS = [
   { id: "usdc",             label: "USDC",             color: "#00d990", desc: "Paid on-chain via Arc App Kit" },
@@ -38,97 +23,6 @@ const REWARDS = [
   { id: "credit",           label: "Public Credit",    color: "#c08828", desc: "Named in launch and posts" },
   { id: "other",            label: "Custom",           color: "#6b7da8", desc: "Define your own reward" },
 ]
-
-const TEMPLATES: Record<string, { tasks: Task[]; questions: ReviewQuestion[] }> = {
-  beta_test: {
-    tasks: [
-      { id: "t1", title: "Connect your wallet to the app", description: "Use MetaMask or Rabby on Arc Testnet" },
-      { id: "t2", title: "Complete the core action", description: "Execute the main function as a first-time user would" },
-      { id: "t3", title: "Verify the outcome", description: "Confirm the result is visible and matches what was promised" },
-    ],
-    questions: [
-      { id: "q1", label: "What worked exactly as expected?", placeholder: "Be specific — which steps, screens, or outcomes felt smooth?", min_words: 30, required: true },
-      { id: "q2", label: "What confused or slowed you down?", placeholder: "Any step where you hesitated, got an error, or weren't sure what to do.", min_words: 30, required: true },
-      { id: "q3", label: "If you were the founder, what would you fix first?", placeholder: "One concrete change that would most improve the experience.", min_words: 20, required: true },
-    ],
-  },
-  stress_test: {
-    tasks: [
-      { id: "t1", title: "Execute 5 transactions in quick succession", description: "Send 5 separate transactions within 2 minutes — Arc finalizes in under 1 second so pace them fast" },
-      { id: "t2", title: "Try minimum and maximum input values", description: "Attempt the core action at both extremes of the valid input range" },
-      { id: "t3", title: "Submit a transaction while a prior one is still confirming", description: "Test concurrent state — does the contract handle overlapping nonces correctly?" },
-    ],
-    questions: [
-      { id: "q1", label: "Did any transactions fail, revert, or produce unexpected output?", placeholder: "Which attempt, what error appeared, and at what input value?", min_words: 30, required: true },
-      { id: "q2", label: "How did the contract handle rapid sequential input?", placeholder: "Nonce issues, race conditions, state inconsistencies? Describe exactly what you observed.", min_words: 30, required: true },
-    ],
-  },
-  edge_case: {
-    tasks: [
-      { id: "t1", title: "Try a zero-value or minimum input", description: "Attempt the core action with the smallest theoretically valid input" },
-      { id: "t2", title: "Interrupt a multi-step flow mid-way", description: "Start a process, leave, return — does state persist correctly?" },
-      { id: "t3", title: "Try an out-of-order sequence", description: "Attempt a later step before earlier ones are complete" },
-    ],
-    questions: [
-      { id: "q1", label: "What broke, reverted, or gave unexpected output?", placeholder: "Exact input, expected behavior, and what actually happened.", min_words: 40, required: true },
-      { id: "q2", label: "Were error messages helpful and accurate?", placeholder: "Did the app explain what went wrong? Were the messages actionable?", min_words: 25, required: true },
-    ],
-  },
-  ux_review: {
-    tasks: [
-      { id: "t1", title: "Explore the app freely for 10–15 minutes", description: "Use it as a real user — don't follow a script" },
-    ],
-    questions: [
-      { id: "q1", label: "First impression — what stood out in the first 60 seconds?", placeholder: "Exactly what caught your attention, positive or negative.", min_words: 25, required: true },
-      { id: "q2", label: "Where did you feel friction or confusion?", placeholder: "Any moment you weren't sure what to do, or something behaved unexpectedly.", min_words: 25, required: true },
-      { id: "q3", label: "Would you use this with real funds on mainnet?", placeholder: "Be honest. What would need to change? What already earns your trust?", min_words: 20, required: true },
-    ],
-  },
-  onboarding: {
-    tasks: [
-      { id: "t1", title: "Come in as a complete newcomer", description: "Read only the homepage — no docs, no prior knowledge. Try the first action." },
-      { id: "t2", title: "Complete your first on-chain action", description: "Without asking for help, do what the product is clearly designed for" },
-    ],
-    questions: [
-      { id: "q1", label: "Could you figure out what to do without help?", placeholder: "What you understood, what was unclear, and where you had to guess.", min_words: 30, required: true },
-      { id: "q2", label: "What would have made onboarding faster?", placeholder: "A tooltip, a clearer label, a shorter required step — be specific.", min_words: 25, required: true },
-    ],
-  },
-  integration: {
-    tasks: [
-      { id: "t1", title: "Acquire USDC or tokens from another Arc protocol", description: "Use a listed Arc protocol (lending, AMM, etc.) to get the assets needed for this test" },
-      { id: "t2", title: "Execute the cross-contract interaction", description: "Use those assets to interact with this campaign's target contract" },
-      { id: "t3", title: "Verify final state across both protocols", description: "Confirm balances, allowances, and events are consistent on both sides" },
-    ],
-    questions: [
-      { id: "q1", label: "Did the cross-protocol flow complete correctly end-to-end?", placeholder: "Each step, any failures, and whether the final on-chain state was correct.", min_words: 35, required: true },
-      { id: "q2", label: "Where did the integration feel fragile or break down?", placeholder: "Approval issues, unexpected reverts, USDC allowance problems, confusing handoffs?", min_words: 25, required: true },
-    ],
-  },
-  payment_flow: {
-    tasks: [
-      { id: "t1", title: "Initiate a USDC transfer or payment through the contract", description: "Execute the primary payment function — send, deposit, or settle as the protocol intends" },
-      { id: "t2", title: "Verify the recipient balance and on-chain state", description: "Confirm the correct amount landed, events were emitted, and state updated as expected" },
-      { id: "t3", title: "Test a reversal, cancellation, or dispute path (if applicable)", description: "Try to reverse, cancel, or dispute the payment — does the contract handle it correctly?" },
-    ],
-    questions: [
-      { id: "q1", label: "Did the USDC flow complete correctly and settle to the right address?", placeholder: "Exact amounts, wallet addresses involved, and whether the final balance matched.", min_words: 30, required: true },
-      { id: "q2", label: "Were there any stuck states, reverts, or incorrect balances?", placeholder: "Any step where funds appeared lost, locked, or not where they should be.", min_words: 30, required: true },
-      { id: "q3", label: "How did the contract handle edge amounts (zero, max, odd decimals)?", placeholder: "Did very small or very large USDC amounts behave correctly? What broke?", min_words: 20, required: true },
-    ],
-  },
-  builder_audit: {
-    tasks: [
-      { id: "t1", title: "Read the source code or architecture docs", description: "Review the provided contract source, README, or architecture overview" },
-      { id: "t2", title: "Run the test suite locally", description: "Clone the repo, run tests, note coverage gaps or failing cases" },
-      { id: "t3", title: "Execute the most complex function on testnet", description: "Verify behavior matches spec under real conditions" },
-    ],
-    questions: [
-      { id: "q1", label: "List any logic errors, attack vectors, or inefficiencies you found", placeholder: "Function name, severity, suggested fix. Be as specific as possible.", min_words: 50, required: true },
-      { id: "q2", label: "What aspects of the architecture are well designed?", placeholder: "What would you reuse or highlight in a peer review?", min_words: 25, required: true },
-    ],
-  },
-}
 
 function uid() { return Math.random().toString(36).slice(2, 8) }
 
@@ -348,9 +242,7 @@ export default function CreateCampaignPage() {
   // Templates are starting points — testers see these exact instructions, so
   // untouched placeholders ("Complete the core action" of what?) are unusable.
   function isUneditedTemplate(): boolean {
-    const tpl = TEMPLATES[type]?.tasks
-    if (!tpl || tasks.length !== tpl.length) return false
-    return tasks.every((t, i) => t.title.trim() === tpl[i].title && (t.description || "").trim() === tpl[i].description)
+    return matchesDefaultTemplate(type, tasks)
   }
 
   function addTask() { setTasks(p => [...p, { id: uid(), title: "", description: "", contract_address: "" }]) }
@@ -380,16 +272,12 @@ export default function CreateCampaignPage() {
 
   async function submit() {
     setError("")
-    if (!projectId)          { setError("Select a project to link this campaign to"); return }
-    if (!title.trim())       { setError("Title is required"); return }
-    if (!description.trim()) { setError("Description is required"); return }
-    if (tasks.some(t => !t.title.trim()))     { setError("All tasks must have a title"); return }
+    // Specific, high-value guidance first — the template case needs its own message.
     if (isUneditedTemplate()) { setError("Your steps are still the untouched template. Testers see these exact instructions — rewrite each one for your app (name the real actions, screens, and outcomes)."); return }
-    if (!campaignLogo)       { setError("Upload a campaign banner — custom 16:9 art is required. Campaigns without a dedicated banner are not approved."); return }
-    if (questions.some(q => !q.label.trim())) { setError("All questions must have a label"); return }
-    if (rewardType === "usdc" && !rewardUsdcAmount) { setError("Enter the USDC amount per tester"); return }
-    if (rewardType === "usdc" && !totalSlots)        { setError("Set a slot count for USDC campaigns"); return }
-    if (CONTRACT_REQUIRED.has(type) && !contractAddress.trim() && !externalVerify) { setError("A contract address is required for this campaign type — or enable external verification if you handle on-chain checks yourself"); return }
+    // Everything still missing, shown ALL AT ONCE — no whack-a-mole. The readiness
+    // checklist next to Submit already surfaces these live.
+    if (missing.length) { setError("Almost there — finish these before submitting:  " + missing.map(m => m.label).join("  ·  ")); return }
+    // Finer format/consistency checks that only apply once the basics are filled.
     if (contractAddress && !/^0x[a-fA-F0-9]{40}$/.test(contractAddress.trim())) { setError("Contract address must be a valid 0x address"); return }
     // XP validation. Must be parseable + per-question sum must match max when Mode B.
     if (xpEnabled) {
@@ -548,6 +436,19 @@ export default function CreateCampaignPage() {
     </ArcLayout>
   )
 
+  // Live readiness — every required piece, computed from current state. Powers
+  // the checklist next to Submit and the all-at-once validation (no whack-a-mole).
+  const readiness: { label: string; ok: boolean }[] = [
+    { label: "Project linked",      ok: !!projectId },
+    { label: "Title & description", ok: !!title.trim() && !!description.trim() },
+    { label: "Tester steps",        ok: tasks.length > 0 && tasks.every(t => t.title.trim()) && !isUneditedTemplate() },
+    { label: "Review questions",    ok: questions.length > 0 && questions.every(q => q.label.trim()) },
+    ...(CONTRACT_REQUIRED.has(type) ? [{ label: "Contract address", ok: !!contractAddress.trim() || externalVerify }] : []),
+    { label: "Reward set",          ok: rewardType !== "usdc" || (!!rewardUsdcAmount && !!totalSlots) },
+    { label: "Campaign banner",     ok: !!campaignLogo },
+  ]
+  const missing = readiness.filter(r => !r.ok)
+
   return (
     <ArcLayout active="trials">
       <div style={{ padding: "36px 28px 80px", maxWidth: 1240, margin: "0 auto" }}>
@@ -603,13 +504,32 @@ export default function CreateCampaignPage() {
               // Two most common picks visible by default. Everything else is one
               // click away. If the founder has an advanced type already selected
               // (e.g. from a saved draft), expand automatically so they see it.
-              const PRIMARY  = new Set(["beta_test", "ux_review"])
+              const PRIMARY  = new Set(["beta_test", "ux_review", "adoption"])
+              const customType = TYPES.find(t => t.id === "custom")!
               const primary  = TYPES.filter(t => PRIMARY.has(t.id))
-              const advanced = TYPES.filter(t => !PRIMARY.has(t.id))
+              const advanced = TYPES.filter(t => !PRIMARY.has(t.id) && t.id !== "custom")
               const hasAdvancedSelected = !PRIMARY.has(type)
               const expanded = showAdvancedTypes || hasAdvancedSelected
+              const customActive = type === "custom"
               return (
                 <>
+                  {/* Custom — set apart from the templates: a blank slate, not a preset */}
+                  <button type="button" onClick={() => applyTemplate("custom")}
+                    style={{ width: "100%", textAlign: "left", borderRadius: 10, cursor: "pointer", marginBottom: 12,
+                      background: customActive ? `${customType.color}0f` : "transparent",
+                      border: `1px dashed ${customActive ? customType.color + "80" : bdr}`,
+                      padding: "13px 16px", display: "flex", alignItems: "center", gap: 14, transition: "all 0.1s" }}>
+                    <div style={{ width: 34, height: 34, borderRadius: 8, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
+                      fontSize: 20, fontWeight: 700, color: customActive ? customType.color : t3,
+                      background: customActive ? `${customType.color}18` : surf2, border: `1px solid ${customActive ? customType.color + "40" : bdr}` }}>+</div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: customActive ? t1 : t2 }}>Build your own from scratch</div>
+                      <div style={{ fontSize: 11, color: t3, lineHeight: 1.5, marginTop: 2 }}>{customType.desc}</div>
+                    </div>
+                    <span style={{ fontSize: 8, fontFamily: mono, color: customActive ? customType.color : t3, letterSpacing: "0.06em", textTransform: "uppercase", flexShrink: 0 }}>Custom</span>
+                  </button>
+
+                  <div style={{ fontSize: 10, fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 10 }}>Or start from a template</div>
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10, marginBottom: 12 }}>
                     {primary.map(ct => {
                       const active = type === ct.id
@@ -1248,6 +1168,18 @@ export default function CreateCampaignPage() {
             <div ref={errorRef} style={{ fontSize: 13, color: "#e03348", padding: "12px 16px", background: "rgba(224,51,72,0.08)", borderRadius: 8, border: "1px solid rgba(224,51,72,0.2)" }}>{error}</div>
           )}
 
+          {/* Live readiness checklist — see exactly what's left before clicking */}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "8px 16px", padding: "12px 16px", background: surf2, border: "1px solid " + bdr, borderRadius: 10 }}>
+            {readiness.map(r => (
+              <span key={r.label} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11.5, fontFamily: mono, color: r.ok ? "#00d990" : t3 }}>
+                <span style={{ fontSize: 12 }}>{r.ok ? "✓" : "○"}</span>{r.label}
+              </span>
+            ))}
+            <span style={{ marginLeft: "auto", fontSize: 11, fontFamily: mono, color: missing.length ? "#e0a810" : "#00d990", fontWeight: 600 }}>
+              {missing.length ? `${missing.length} left` : "Ready to submit"}
+            </span>
+          </div>
+
           <div style={{ background: surf, border: "1px solid " + bdr, borderRadius: 12, padding: "16px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
             <div>
               <div style={{ fontSize: 13, fontWeight: 600, color: t1, marginBottom: 3, letterSpacing: "-0.01em" }}>
@@ -1842,18 +1774,20 @@ const inp: React.CSSProperties = {
 }
 
 function Card({ step, title, sub, children }: { step: string; title: string; sub: string; children: React.ReactNode }) {
+  // Borderless section — one cohesive page, not stacked boxes. Anchored by the
+  // numbered badge + a hairline; separated by whitespace instead of borders.
   return (
-    <section style={{ background: "var(--surf,#0a0e1a)", border: "1px solid var(--bdr,rgba(255,255,255,0.06))", borderRadius: 14, overflow: "hidden" }}>
-      <div style={{ padding: "20px 24px 18px", borderBottom: "1px solid var(--bdr,rgba(255,255,255,0.06))", display: "flex", alignItems: "flex-start", gap: 14 }}>
+    <section style={{ borderTop: "1px solid var(--bdr,rgba(255,255,255,0.06))", paddingTop: 26 }}>
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 14, marginBottom: 20 }}>
         {step ? (
           <span style={{ fontSize: 9, fontFamily: "'DM Mono',monospace", padding: "4px 9px", borderRadius: 5, background: "rgba(26,86,255,0.08)", color: "#8aaeff", border: "1px solid rgba(26,86,255,0.18)", flexShrink: 0, marginTop: 3, letterSpacing: "0.08em", fontWeight: 600 }}>{step}</span>
         ) : null}
         <div>
-          <div style={{ fontSize: 15, fontWeight: 600, color: "var(--t1,#e8ecff)", marginBottom: 4, letterSpacing: "-0.015em", lineHeight: 1.3 }}>{title}</div>
-          <div style={{ fontSize: 12, color: "var(--t2,#6b7da8)", lineHeight: 1.6 }}>{sub}</div>
+          <div style={{ fontSize: 16, fontWeight: 650, color: "var(--t1,#e8ecff)", marginBottom: 4, letterSpacing: "-0.02em", lineHeight: 1.3 }}>{title}</div>
+          <div style={{ fontSize: 12, color: "var(--t2,#6b7da8)", lineHeight: 1.6, maxWidth: "62ch" }}>{sub}</div>
         </div>
       </div>
-      <div style={{ padding: "22px 24px 24px" }}>{children}</div>
+      <div>{children}</div>
     </section>
   )
 }

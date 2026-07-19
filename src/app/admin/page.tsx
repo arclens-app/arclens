@@ -1,6 +1,7 @@
 ﻿"use client"
 import { useEffect, useState } from "react"
 import ArcLayout from "@/components/ArcLayout"
+import { CAMPAIGN_TYPE_LABELS } from "@/lib/campaignTypes"
 import { SpotlightCard } from "@/components/Spotlight"
 
 const CATEGORIES = ["Infrastructure","DeFi","AI","Payments","NFT","Gaming","Social","Developer Tools","Bridge","Identity","Wallet","Exchange","Lending","Analytics","Other"]
@@ -620,7 +621,6 @@ export default function AdminPage() {
   const pendingEvents    = events.filter(e => !e.approved).length
   const totalPending     = pendingCount + pendingUpdates.length + pendingEvents + pendingCampaigns.length + pendingCampaignUpdates.length
   const missingLoc       = [...submissions,...projects].filter((p:any)=>!p.lat).length
-  const CAMPAIGN_TYPE_LABELS: Record<string,string> = { beta_test:"Beta Test", stress_test:"Stress Test", edge_case:"Edge Case Hunt", ux_review:"UX Review", onboarding:"Onboarding Test", integration:"Integration Test", builder_audit:"Builder Audit", payment_flow:"Payment Flow Test" }
   // Same wording testers see on the proof inputs at /trials/[id]
   const PROOF_LABELS: Record<string,string> = { x_link:"X post URL", tx_hash:"transaction hash", url:"URL", screenshot:"screenshot" }
   const REWARD_TYPE_LABELS: Record<string,string>   = { whitelist:"Whitelist", early_access:"Early Access", discord_role:"Discord Role", credit:"Public Credit", token_allocation:"Token Alloc.", usdc:"USDC", other:"Other" }

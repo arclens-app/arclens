@@ -2,6 +2,7 @@
 import { scanUrl } from "@/lib/urlScan"
 import { rateLimit, getIp } from "@/lib/ratelimit"
 import { getPool } from "@/lib/dbPool"
+import { matchesDefaultTemplate } from "@/lib/campaignTypes"
 
 const pool = getPool()
 
@@ -145,12 +146,11 @@ export async function POST(req: NextRequest) {
     if (!tasks?.length)         return NextResponse.json({ error: "At least one task required" }, { status: 400 })
     if (!review_questions?.length) return NextResponse.json({ error: "At least one review question required" }, { status: 400 })
 
-    // Reject the untouched generic beta template — steps like "Complete the
+    // Reject any type's untouched starter template — steps like "Complete the
     // core action" give testers nothing to act on and admins nothing to review.
-    // (The create form blocks this too; this guards direct API submissions.)
-    const GENERIC_TEMPLATE_TITLES = ["connect your wallet to the app", "complete the core action", "verify the outcome"]
-    const titlesNorm = (tasks as { title?: string }[]).map(t => String(t?.title || "").trim().toLowerCase())
-    if (titlesNorm.length === GENERIC_TEMPLATE_TITLES.length && GENERIC_TEMPLATE_TITLES.every(g => titlesNorm.includes(g))) {
+    // Type-aware (shared with the create form) so it covers every campaign type,
+    // not just beta. Guards direct API submissions that bypass the form.
+    if (matchesDefaultTemplate(String(type || ""), tasks as { title?: string }[])) {
       return NextResponse.json({ error: "Steps are still the untouched template — describe the actual actions testers should take in your app" }, { status: 400 })
     }
 

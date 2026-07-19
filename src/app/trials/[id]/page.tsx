@@ -8,6 +8,7 @@ import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, us
 import type { DragEndEvent } from "@dnd-kit/core"
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
+import { getTypeMeta } from "@/lib/campaignTypes"
 
 type ProofType = "none" | "x_link" | "tx_hash" | "url" | "screenshot"
 interface Task {
@@ -142,17 +143,6 @@ interface Completion {
   created_at:      string
 }
 
-const TYPE_META: Record<string, { label: string; color: string; abbr: string }> = {
-  beta_test:     { label: "Beta Test",          color: "#1a56ff", abbr: "BT" },
-  stress_test:   { label: "Stress Test",        color: "#e08810", abbr: "ST" },
-  edge_case:     { label: "Edge Case Hunt",     color: "#a855f7", abbr: "EC" },
-  ux_review:     { label: "UX Review",          color: "#00b87a", abbr: "UX" },
-  feedback:      { label: "UX Review",          color: "#00b87a", abbr: "UX" },
-  onboarding:    { label: "Onboarding Test",    color: "#06b6d4", abbr: "OB" },
-  integration:   { label: "Integration Test",   color: "#6366f1", abbr: "IT" },
-  builder_audit: { label: "Builder Audit",      color: "#ec4899", abbr: "BA" },
-  payment_flow:  { label: "Payment Flow Test",  color: "#00d990", abbr: "PF" },
-}
 
 const REWARD_META: Record<string, { label: string; color: string }> = {
   usdc:             { label: "USDC",            color: "#00d990" },
@@ -582,7 +572,7 @@ export default function CampaignDetailPage() {
     )
   }
 
-  const tm      = TYPE_META[campaign.type]        || TYPE_META.beta_test
+  const tm      = getTypeMeta(campaign.type)
   const rm      = REWARD_META[campaign.reward_type] || REWARD_META.other
   const isFull  = campaign.total_slots && campaign.filled_slots >= campaign.total_slots
   const slotsLeft = campaign.total_slots ? Math.max(0, campaign.total_slots - campaign.filled_slots) : null
@@ -1695,7 +1685,7 @@ export default function CampaignDetailPage() {
               {/* Details rows */}
               <div style={{ padding: "6px 20px" }}>
                 {[
-                  { label: "Type",      value: TYPE_META[campaign.type]?.label || campaign.type },
+                  { label: "Type",      value: getTypeMeta(campaign.type).label },
                   { label: "Slots",     value: campaign.total_slots ? `${campaign.filled_slots}/${campaign.total_slots}` : "Unlimited" },
                   { label: "Selection", value: campaign.is_fcfs ? "First come, first served" : "Builder selects" },
                   { label: "Tasks",     value: `${campaign.tasks.length} step${campaign.tasks.length !== 1 ? "s" : ""}` },

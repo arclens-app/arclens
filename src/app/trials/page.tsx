@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation"
 import ArcLayout from "@/components/ArcLayout"
 import { WalletAvatar } from "@/components/WalletAvatar"
 import { useArcStore } from "@/store/arc"
+import { TYPE_META, getTypeMeta } from "@/lib/campaignTypes"
 
 interface Campaign {
   id: number
@@ -48,21 +49,6 @@ interface Reputation {
   impact_count: number
 }
 
-const TYPE_META: Record<string, { abbr: string; label: string; color: string }> = {
-  beta_test:     { abbr: "BT", label: "Beta Test",         color: "#1a56ff" },
-  stress_test:   { abbr: "ST", label: "Stress Test",       color: "#e08810" },
-  edge_case:     { abbr: "EC", label: "Edge Case Hunt",    color: "#a855f7" },
-  ux_review:     { abbr: "UX", label: "UX Review",         color: "#00b87a" },
-  onboarding:    { abbr: "OB", label: "Onboarding Test",   color: "#06b6d4" },
-  integration:   { abbr: "IT", label: "Integration Test",  color: "#6366f1" },
-  builder_audit: { abbr: "BA", label: "Builder Audit",     color: "#ec4899" },
-  payment_flow:  { abbr: "PF", label: "Payment Flow Test", color: "#00d990" },
-}
-// Legacy DB values that map to canonical types — not shown as filter pills
-const TYPE_ALIASES: Record<string, string> = { feedback: "ux_review" }
-function getTypeMeta(type: string) {
-  return TYPE_META[type] || TYPE_META[TYPE_ALIASES[type]] || TYPE_META.beta_test
-}
 
 const REWARD_META: Record<string, { label: string; color: string }> = {
   usdc:             { label: "USDC",          color: "#00d990" },

@@ -3,6 +3,7 @@ import { useEffect, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import ArcLayout from "@/components/ArcLayout"
 import { WalletAvatar } from "@/components/WalletAvatar"
+import { getTypeMeta } from "@/lib/campaignTypes"
 
 interface Completion {
   tester_wallet:   string
@@ -32,16 +33,6 @@ interface Campaign {
   max_xp_per_completion:  number | null
 }
 
-const TYPE_COLOR: Record<string, string> = {
-  beta_test:    "#1a56ff",
-  stress_test:  "#e08810",
-  edge_case:    "#a855f7",
-  ux_review:    "#00b87a",
-  onboarding:   "#06b6d4",
-  integration:  "#6366f1",
-  builder_audit:"#ec4899",
-  payment_flow: "#00d990",
-}
 
 function rankColor(rank: number, fallback: string): string {
   if (rank === 1) return "#d4a447"
@@ -98,7 +89,7 @@ export default function CampaignLeaderboardPage() {
     )
   }
 
-  const tmColor = TYPE_COLOR[campaign.type] || "#1a56ff"
+  const tmColor = getTypeMeta(campaign.type).color
 
   // When the campaign uses XP, rank by XP earned (what testers care about and
   // what matches the project leaderboard). Otherwise rank by quality score.
