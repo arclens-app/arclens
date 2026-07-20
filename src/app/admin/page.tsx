@@ -526,6 +526,22 @@ export default function AdminPage() {
     setEstCheck(null)
   }
 
+  const [logoUploading, setLogoUploading] = useState(false)
+  async function uploadAdminLogo(file: File) {
+    if (!file.type.startsWith("image/")) { showToast(false, "Logo must be an image"); return }
+    if (file.size > 5 * 1024 * 1024)     { showToast(false, "Logo must be under 5MB"); return }
+    setLogoUploading(true)
+    try {
+      const fd = new FormData()
+      fd.append("file", file)
+      const res  = await fetch("/api/upload", { method: "POST", body: fd })
+      const data = await res.json()
+      if (data.url) setEditForm(p => ({ ...p, logo_url: data.url }))
+      else showToast(false, data.error || "Logo upload failed")
+    } catch { showToast(false, "Logo upload failed") }
+    finally { setLogoUploading(false) }
+  }
+
   async function geocodeProject(id: number, fallback?: { city: string; country: string }) {
     const inp = locInputs[id] || { city: fallback?.city || "", country: fallback?.country || "", status: "", result: "" }
     if (!inp.city.trim()) return
@@ -2374,12 +2390,30 @@ export default function AdminPage() {
               <div style={{ fontSize:"16px", fontWeight:600, color:t1 }}>Edit: {editing.name}</div>
               <button onClick={() => setEditing(null)} style={{ background:"none", border:"none", color:t2, cursor:"pointer", fontSize:"20px", lineHeight:1 }}>×</button>
             </div>
+
+            {/* Logo — direct upload, applies instantly on save (no raw URL) */}
+            <div style={{ display:"flex", alignItems:"center", gap:"14px", marginBottom:"16px", paddingBottom:"16px", borderBottom:"1px solid "+bdr }}>
+              <div style={{ width:56, height:56, borderRadius:11, background:surf2, border:"1px solid "+bdr, flexShrink:0, overflow:"hidden", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                {(editForm as any).logo_url
+                  ? <img src={String((editForm as any).logo_url).startsWith("http") ? `/api/image-proxy?url=${encodeURIComponent((editForm as any).logo_url)}` : (editForm as any).logo_url} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }} onError={e=>(e.currentTarget.style.display="none")} />
+                  : <span style={{ fontSize:20, fontWeight:700, color:t3, fontFamily:mono }}>{(editing.name||"?").slice(0,1).toUpperCase()}</span>}
+              </div>
+              <div>
+                <label style={{ display:"block", fontSize:"10px", fontFamily:mono, color:t3, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:"5px" }}>Logo</label>
+                <label style={{ display:"inline-flex", alignItems:"center", gap:8, height:32, padding:"0 14px", background:surf2, border:"1px solid "+bdr, borderRadius:7, fontSize:12, fontFamily:mono, color:logoUploading?t3:t1, cursor:logoUploading?"default":"pointer" }}>
+                  {logoUploading ? "Uploading…" : (editForm as any).logo_url ? "Change logo" : "Upload logo"}
+                  <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml,image/gif" disabled={logoUploading}
+                    onChange={e=>{ const f=e.target.files?.[0]; if(f) uploadAdminLogo(f); e.currentTarget.value="" }} style={{ display:"none" }} />
+                </label>
+              </div>
+            </div>
+
             {[
               {k:"name",l:"Name",type:"text"},{k:"tagline",l:"Tagline",type:"text"},{k:"description",l:"Description",type:"textarea"},
               {k:"website",l:"Website",type:"text"},{k:"twitter",l:"Twitter",type:"text"},{k:"github",l:"GitHub",type:"text"},
               {k:"discord",l:"Discord",type:"text"},{k:"contract",l:"Primary Contract Address",type:"text"},{k:"email",l:"Email",type:"text"},
               {k:"founder_social",l:"Founder (personal X / link)",type:"text"},
-              {k:"logo_url",l:"Logo URL",type:"text"},{k:"city",l:"City",type:"text"},{k:"country",l:"Country",type:"text"},
+              {k:"city",l:"City",type:"text"},{k:"country",l:"Country",type:"text"},
               {k:"lat",l:"Latitude",type:"text"},{k:"lng",l:"Longitude",type:"text"},
             ].map((f:any) => (
               <div key={f.k} style={{ marginBottom:"10px" }}>

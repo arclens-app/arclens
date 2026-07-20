@@ -57,7 +57,8 @@ export default function DashboardPage() {
   const [walletSaved, setWalletSaved]                   = useState(false)
 
   // Edit form
-  const [editForm, setEditForm]   = useState({ tagline: "", description: "", website: "", twitter: "", github: "", discord: "", contract: "", color: "", city: "", country: "", founder_social: "" })
+  const [editForm, setEditForm]   = useState({ tagline: "", description: "", website: "", twitter: "", github: "", discord: "", contract: "", color: "", city: "", country: "", founder_social: "", logo_url: "" })
+  const [logoUploading, setLogoUploading] = useState(false)
   const [auditForm, setAuditForm] = useState({ auditor: "", audit_url: "" })
   const [auditMsg, setAuditMsg]   = useState<{ ok: boolean; text: string } | null>(null)
   const [auditSubmitting, setAuditSubmitting] = useState(false)
@@ -160,6 +161,7 @@ export default function DashboardPage() {
           contract: data.project.contract || "", color: data.project.color || "",
           city: data.project.city || "", country: data.project.country || "",
           founder_social: data.project.founder_social || "",
+          logo_url: data.project.logo_url || "",
         })
         setExtraContracts(Array.isArray(data.project.contracts) ? data.project.contracts : [])
       } catch { setError("Failed to load dashboard") }
@@ -352,6 +354,24 @@ export default function DashboardPage() {
       if (res.ok) { setWalletSaved(true); setHasWallet(true) }
     } catch {}
     finally { setSavingWallet(false) }
+  }
+
+  // Direct logo upload — file → Vercel Blob via /api/upload → set editForm.logo_url.
+  // The founder saves it like any other field; the change goes through admin review.
+  async function uploadProjectLogo(file: File) {
+    if (!file.type.startsWith("image/")) { setSaveError("Logo must be an image (PNG, JPG, WebP, SVG)"); return }
+    if (file.size > 5 * 1024 * 1024)     { setSaveError("Logo must be under 5MB"); return }
+    setLogoUploading(true)
+    setSaveError("")
+    try {
+      const fd = new FormData()
+      fd.append("file", file)
+      const res  = await fetch("/api/upload", { method: "POST", body: fd })
+      const data = await res.json()
+      if (data.url) setEditForm(p => ({ ...p, logo_url: data.url }))
+      else setSaveError(data.error || "Logo upload failed")
+    } catch { setSaveError("Logo upload failed — try again") }
+    finally { setLogoUploading(false) }
   }
 
   async function saveEdit() {
@@ -1059,6 +1079,26 @@ export default function DashboardPage() {
             <div style={{ background: surf, border: "1px solid " + bdr, borderRadius: "12px", padding: "24px 26px" }}>
               <div style={{ fontSize: "14px", fontWeight: 600, color: t1, marginBottom: "4px" }}>Edit your listing</div>
               <div style={{ fontSize: "11px", fontFamily: mono, color: t3, marginBottom: "22px" }}>Changes go through admin review before going live</div>
+
+              {/* Logo — direct upload, no URL pasting */}
+              <div style={{ display: "flex", alignItems: "center", gap: "16px", marginBottom: "18px", paddingBottom: "18px", borderBottom: "1px solid " + bdr }}>
+                <div style={{ width: 64, height: 64, borderRadius: 12, background: surf2, border: "1px solid " + bdr, flexShrink: 0, overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  {editForm.logo_url
+                    ? <img src={editForm.logo_url.startsWith("http") ? `/api/image-proxy?url=${encodeURIComponent(editForm.logo_url)}` : editForm.logo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={e => (e.currentTarget.style.display = "none")} />
+                    : <span style={{ fontSize: 22, fontWeight: 700, color: t3, fontFamily: mono }}>{(project.name || "?").slice(0, 1).toUpperCase()}</span>}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <label style={{ display: "block", fontSize: "9.5px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "6px" }}>Project logo</label>
+                  <label style={{ display: "inline-flex", alignItems: "center", gap: 8, height: 34, padding: "0 14px", background: surf2, border: "1px solid " + bdr, borderRadius: 8, fontSize: 12, fontFamily: mono, color: logoUploading ? t3 : t1, cursor: logoUploading ? "default" : "pointer" }}>
+                    {logoUploading ? "Uploading…" : editForm.logo_url ? "Change logo" : "Upload logo"}
+                    <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml,image/gif" disabled={logoUploading}
+                      onChange={e => { const f = e.target.files?.[0]; if (f) uploadProjectLogo(f); e.currentTarget.value = "" }}
+                      style={{ display: "none" }} />
+                  </label>
+                  <div style={{ fontSize: "10px", fontFamily: mono, color: t3, marginTop: "6px", lineHeight: 1.5 }}>Square works best · PNG, JPG, WebP or SVG · under 5MB</div>
+                </div>
+              </div>
+
               <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
                 {[
                   { key: "tagline",     label: "Tagline",          ph: "One-line description" },

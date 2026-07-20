@@ -5,7 +5,7 @@ import { getPool } from "@/lib/dbPool"
 
 const pool = getPool()
 
-const ALLOWED = ["tagline", "description", "website", "twitter", "github", "discord", "contract", "color", "city", "country", "founder_social"]
+const ALLOWED = ["tagline", "description", "website", "twitter", "github", "discord", "contract", "color", "city", "country", "founder_social", "logo_url"]
 const ALLOWED_ARRAY = ["contracts"]
 
 export async function POST(req: NextRequest) {
