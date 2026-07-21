@@ -297,13 +297,15 @@ async function sendCampaignUpdateEmail(campaignId: number, campaignTitle: string
   }
 }
 
-async function sendProjectEmail(projectId: number, status: "approved" | "rejected", reason?: string) {
+async function sendProjectEmail(projectId: number, status: "approved" | "rejected", reason?: string, prefetched?: { name: string; email: string; slug: string }) {
   try {
-    const res = await pool.query(
+    // The reject path DELETEs the project row before this deferred (runAfter)
+    // email runs, so it passes the recipient details in `prefetched` — otherwise
+    // this SELECT would come back empty and the rejection email would never send.
+    const row = prefetched ?? (await pool.query(
       `SELECT name, email, slug FROM projects WHERE id = $1`,
       [projectId]
-    )
-    const row = res.rows[0]
+    )).rows[0]
     if (!row?.email) return
     if (await isUnsubscribed(row.email)) return
 
@@ -582,8 +584,14 @@ export async function POST(req: NextRequest) {
         await pool.query("DELETE FROM events WHERE id = $1", [id])
       } else {
         const reason = data?.reason?.trim() || null
-        runAfter(() => sendProjectEmail(Number(id), "rejected", reason || undefined))
+        // Capture recipient details BEFORE deleting — the deferred email runs
+        // after the response, by which point this row is gone. Passing the row
+        // in keeps the send instant (deferred) without reading a deleted row.
+        const info = (await pool.query(
+          `SELECT name, email, slug FROM projects WHERE id = $1`, [id]
+        )).rows[0]
         await pool.query("DELETE FROM projects WHERE id = $1", [id])
+        if (info?.email) runAfter(() => sendProjectEmail(Number(id), "rejected", reason || undefined, info))
       }
       return NextResponse.json({ success: true })
     }
