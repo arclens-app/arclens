@@ -365,7 +365,7 @@ export default function DashboardPage() {
     setSaveError("")
     try {
       const fd = new FormData()
-      fd.append("file", file)
+      fd.append("image", file)
       const res  = await fetch("/api/upload", { method: "POST", body: fd })
       const data = await res.json()
       if (data.url) setEditForm(p => ({ ...p, logo_url: data.url }))
