@@ -1,7 +1,7 @@
 "use client"
 import ArcLayout from "@/components/ArcLayout"
 
-const LAST_UPDATED = "May 13, 2026"
+const LAST_UPDATED = "July 22, 2026"
 
 const sections = [
   {
@@ -30,7 +30,10 @@ Wallet addresses, transaction hashes, contract addresses, and on-chain activity 
 2.4 Local device storage (never transmitted to our servers):
 • Your preferred colour theme (light/dark), stored in browser localStorage
 • Connected wallet address, stored in browser localStorage for session continuity
-• This data stays on your device and is never sent to ArcLens servers`,
+• This data stays on your device and is never sent to ArcLens servers
+
+2.5 Lens AI conversations:
+When you chat with Lens AI, our in-platform assistant, we process the messages you send to generate a response. If you are signed in, a conversation is associated with your wallet address; your wallet address is only included in the request to the AI provider when you ask about your own on-chain activity. See sections 5 and 6 for how these conversations are shared and how long they are kept.`,
   },
   {
     id: "3",
@@ -39,6 +42,7 @@ Wallet addresses, transaction hashes, contract addresses, and on-chain activity 
 • Email address: to contact you about your project listing, campaign status, or in response to a support request. We may also send important platform updates (no marketing without consent)
 • Project and campaign information: to display publicly on the platform as submitted and to operate the Arc Ecosystem Directory and Arc Trials features
 • Server logs: to protect the platform from abuse, enforce rate limits, and diagnose technical issues
+• Lens AI conversations: to generate answers to your questions and to improve the assistant's accuracy and coverage over time. Using Lens AI may also trigger a public on-chain transaction that recognises the builder whose project data informed an answer — see our Terms of Service for how that works
 • We do not use your data for advertising, profiling, or selling to third parties under any circumstances`,
   },
   {
@@ -54,6 +58,7 @@ Wallet addresses, transaction hashes, contract addresses, and on-chain activity 
     title: "Data Sharing",
     body: `We do not sell, rent, trade, or share your personal data with third parties for commercial purposes. We may share data only in the following limited circumstances:
 • Service providers: our database and hosting providers who process data on our behalf as data processors, bound by confidentiality and data processing obligations
+• AI provider: to power the Lens AI assistant, the messages you send it are processed by a third-party artificial-intelligence model provider acting as a data processor on our behalf. We share only what is necessary to generate your response
 • Legal requirements: where we are required to disclose data by law, court order, or a lawful request from a regulatory authority including the Nigeria Data Protection Commission (NDPC)
 • Platform safety: where disclosure is necessary to protect the rights, property, or safety of ArcLens, its users, or the public`,
   },
@@ -62,6 +67,7 @@ Wallet addresses, transaction hashes, contract addresses, and on-chain activity 
     title: "Data Retention",
     body: `• Email addresses and project/campaign data: retained for as long as your listing or campaign is active, and for up to 12 months following a deletion request or account removal
 • Server logs: retained for 90 days, then automatically deleted
+• Lens AI conversations: retained for up to 30 days from your last activity, then automatically deleted. Records we keep to improve the assistant are anonymised — the wallet link is removed — after 30 days. You may request deletion of your Lens AI history at any time by contacting support@arclenz.xyz
 • Blockchain data: permanently recorded on the public blockchain. ArcLens does not control blockchain records and cannot delete on-chain data on your behalf
 • Support correspondence: retained for 24 months from the date of last contact`,
   },

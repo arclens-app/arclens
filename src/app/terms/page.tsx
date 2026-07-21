@@ -1,7 +1,7 @@
 "use client"
 import ArcLayout from "@/components/ArcLayout"
 
-const LAST_UPDATED = "May 13, 2026"
+const LAST_UPDATED = "July 22, 2026"
 
 const sections = [
   {
@@ -118,11 +118,24 @@ Any dispute, controversy, or claim arising out of or relating to these Terms or 
   },
   {
     id: "13",
+    title: "Lens AI Assistant and Builder Recognition",
+    body: `Lens AI is an in-platform assistant that answers questions about Arc, ArcLens, and the projects listed on the platform.
+
+13.1 Informational only. Lens AI may be inaccurate, incomplete, or out of date. Its responses are provided for informational and educational purposes only and do not constitute financial, investment, legal, or tax advice (see section 4). You should independently verify anything you intend to rely on.
+
+13.2 Builder recognition. When an answer draws on a specific project's data, Lens AI may send a small on-chain payment to that project's verified builder as public recognition of their work. The amount and asset depend on the network in use. You are not charged for this, and asking a question does not create any payment obligation on your part.
+
+13.3 Nature of the payment. Any such payment is made by ArcLens on a discretionary, voluntary basis. It is not a fee, not a purchase of data, not a service you pay for, and it is not investment income, a security, or a guarantee of any kind. ArcLens may change, pause, or discontinue builder recognition at any time without notice.
+
+13.4 Builders receiving recognition. Any recognition payment is provided "as is". You are solely responsible for determining and meeting any tax, reporting, or regulatory obligations arising from payments you receive. ArcLens does not withhold taxes, provide tax documentation, or guarantee any amount, frequency, or continuation of payments.`,
+  },
+  {
+    id: "14",
     title: "Changes to These Terms",
     body: `ArcLens may update these Terms at any time. The "Last updated" date at the top of this page will reflect the most recent revision. We will make reasonable efforts to notify users of material changes via the platform. Your continued use of the platform after any change constitutes your acceptance of the updated Terms.`,
   },
   {
-    id: "14",
+    id: "15",
     title: "Contact",
     body: `For questions, concerns, or legal notices regarding these Terms, contact us at:\n\nsupport@arclenz.xyz`,
   },
