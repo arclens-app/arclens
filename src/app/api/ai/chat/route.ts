@@ -10,7 +10,7 @@
 
 import { NextRequest, NextResponse } from "next/server"
 import { getSession } from "@/lib/session"
-import { buildContext, logKnowledgeGap, rememberProjects, backfillEmbeddings, projectSlugsInText, getGeminiKey, type AiContext } from "@/lib/aiContext"
+import { buildContext, logKnowledgeGap, rememberProjects, backfillEmbeddings, purgeOldAiData, projectSlugsInText, getGeminiKey, type AiContext } from "@/lib/aiContext"
 import { buildTools } from "@/lib/aiTools"
 import { payoutForAnswer, type PayoutTrace } from "@/lib/lensPay"
 import { enforce, rateLimit, getIp } from "@/lib/ratelimit"
@@ -256,6 +256,11 @@ export async function POST(req: NextRequest) {
         // a manual admin re-embed. Fire-and-forget, capped inside.
         void backfillEmbeddings()
 
+        // Data-retention purge — deletes AI logs past the retention window and
+        // strips wallets from old gap/feedback rows. Fire-and-forget, internally
+        // guarded to actually run at most once/day (no cron, no added cost).
+        void purgeOldAiData()
+
         const trailer = {
           conversationId: convId,
           context: {
@@ -380,7 +385,10 @@ function buildSystemPrompt(ctx: AiContext): string {
   parts.push("")
   parts.push(`The user you're talking to is: ${ctx.role}.`)
   parts.push(`They're currently on the page: ${ctx.route}.`)
-  if (ctx.userAddr) parts.push(`Their wallet: ${ctx.userAddr}.`)
+  // Privacy / data minimization: only expose the wallet to the model when the
+  // user is actually asking about their own activity (selfQuery). For every
+  // other question the pseudonymous address never leaves our infra.
+  if (ctx.userAddr && ctx.selfQuery) parts.push(`Their wallet: ${ctx.userAddr}. (They're asking about their own on-chain activity — you may use this address with the address/transaction tools.)`)
 
   if (ctx.pageData) {
     parts.push("")

@@ -5,8 +5,44 @@
 
 import type { SessionData } from "@/lib/session"
 import { getPool } from "@/lib/dbPool"
+import { rateLimit } from "@/lib/ratelimit"
 
 const pool = getPool()
+
+// Data-retention purge (right-to-be-forgotten by default). Industry standard is
+// ~30 days for conversational AI logs (OpenAI / Anthropic API retention). We:
+//   • DELETE conversations untouched for RETENTION_DAYS (server data caught up
+//     with the 24h client-side thread reset — the DB no longer keeps chats
+//     forever), and
+//   • ANONYMISE old knowledge-gap / feedback rows: keep the question text for
+//     coverage analytics but drop the wallet link, so nothing personal lingers.
+// Opportunistic + fire-and-forget: guarded to actually run its DELETEs at most
+// once per day, like the rate-limit table cleanup — no cron, no extra cost.
+const RETENTION_DAYS = Math.max(1, Number(process.env.AI_RETENTION_DAYS || 30))
+export async function purgeOldAiData(): Promise<void> {
+  try {
+    const gate = await rateLimit("ai-data-purge", 1, 24 * 60 * 60 * 1000)
+    if (!gate.allowed) return
+    const d = RETENTION_DAYS
+    await pool.query(`DELETE FROM ai_conversations WHERE last_used_at < NOW() - ($1 || ' days')::interval`, [String(d)]).catch(() => {})
+    await pool.query(`UPDATE ai_knowledge_gaps SET user_addr = NULL WHERE user_addr IS NOT NULL AND created_at < NOW() - ($1 || ' days')::interval`, [String(d)]).catch(() => {})
+    await pool.query(`UPDATE ai_feedback SET user_addr = NULL WHERE user_addr IS NOT NULL AND created_at < NOW() - ($1 || ' days')::interval`, [String(d)]).catch(() => {})
+  } catch (e: any) {
+    console.error("[ai retention purge]", e?.message || e)
+  }
+}
+
+// Right-to-erasure: delete everything tied to one wallet on demand (the
+// /api/ai/forget endpoint). Conversations are removed outright; gap/feedback
+// rows are anonymised so aggregate coverage/quality analytics survive without
+// the personal link. Returns how many conversation rows were removed.
+export async function forgetUserAiData(addr: string): Promise<number> {
+  const lower = addr.toLowerCase()
+  const del = await pool.query(`DELETE FROM ai_conversations WHERE user_addr = $1`, [lower])
+  await pool.query(`UPDATE ai_knowledge_gaps SET user_addr = NULL WHERE user_addr = $1`, [lower]).catch(() => {})
+  await pool.query(`UPDATE ai_feedback SET user_addr = NULL WHERE user_addr = $1`, [lower]).catch(() => {})
+  return del.rowCount ?? 0
+}
 
 export type AiRole = "founder" | "tester" | "admin" | "visitor"
 
@@ -22,9 +58,27 @@ export interface AiContext {
   route:        string
   role:         AiRole
   userAddr:     string | null
+  // True only when the user's message is about THEIR OWN wallet/activity. The
+  // chat route uses this to decide whether to put the wallet address into the
+  // prompt sent to the LLM — data minimization, so a pseudonymous on-chain
+  // identifier isn't shared with a third-party provider on every unrelated
+  // question. userAddr itself stays available for server-only use (payout,
+  // persistence), which never leaves our infra.
+  selfQuery:    boolean
   pageData:     Record<string, any> | null  // route-specific live data
   kbHits:       Array<{ topic: string; fact: string; source_url: string | null }>
   recentChats:  RecentChat[]
+}
+
+// Does this message actually concern the user's own wallet/activity? Only then
+// does the LLM need the address. Requires a first-person reference AND a
+// wallet/activity noun, so "what has my wallet done" matches but "what is Tower"
+// does not.
+const SELF_REF   = /\b(my|mine|myself|i've|i have|have i|did i|do i|am i)\b/i
+const SELF_TOPIC = /(wallet|address|activit|holding|portfolio|balance|transaction|\btxn?s?\b|sent|receiv|position|stake|swap|\bown\b|\bhold\b|history|points?|reward|earn)/i
+export function isSelfQuery(q: string): boolean {
+  const s = (q || "").toLowerCase()
+  return SELF_REF.test(s) && SELF_TOPIC.test(s)
 }
 
 // Whichever Gemini key is set. The AI SDK's google() provider natively reads
@@ -267,7 +321,7 @@ export async function buildContext(args: {
     searchKnowledgeBase(args.userQuery),
     recentConversations(userAddr),
   ])
-  return { route: args.route, role, userAddr, pageData, kbHits, recentChats }
+  return { route: args.route, role, userAddr, selfQuery: isSelfQuery(args.userQuery), pageData, kbHits, recentChats }
 }
 
 /**
