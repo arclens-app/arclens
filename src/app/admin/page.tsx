@@ -134,6 +134,8 @@ export default function AdminPage() {
   const [rejectingCampaignId, setRejectingCampaignId] = useState<number|null>(null)
   const [rejectingProjectId, setRejectingProjectId]   = useState<number|null>(null)
   const [rejectProjectReason, setRejectProjectReason] = useState("")
+  const [rejectingSpotId, setRejectingSpotId]         = useState<number|null>(null)
+  const [rejectSpotReason, setRejectSpotReason]       = useState("")
   const [rejectReason, setRejectReason] = useState("")
   const [editing, setEditing]         = useState<Project|null>(null)
   const [editForm, setEditForm]       = useState<Partial<Project>>({})
@@ -2217,22 +2219,63 @@ export default function AdminPage() {
                       {spotlight.items.map((it:any) => {
                         const tone = it.status==="active" ? "#00b87a" : it.status==="pending" ? "#e08810" : t3
                         return (
-                        <div key={it.id} style={{ background:surf, border:"1px solid "+bdr, borderRadius:"10px", padding:"13px 16px", display:"flex", alignItems:"center", gap:"12px", flexWrap:"wrap" }}>
-                          <span style={pill(tone, tone+"33")}>{it.status}</span>
-                          <span style={{ fontSize:"9px", fontFamily:mono, color:t3, textTransform:"uppercase" }}>{it.kind}</span>
-                          <div style={{ flex:1, minWidth:"180px" }}>
-                            <div style={{ fontSize:"13px", fontWeight:600, color:t1 }}>{it.title}</div>
-                            {it.subtitle && <div style={{ fontSize:"11px", color:t2 }}>{it.subtitle}</div>}
-                            <div style={{ fontSize:"10px", fontFamily:mono, color:t3, marginTop:"3px" }}>
-                              {it.project_name ? `${it.project_name} · ` : ""}{it.created_by === "admin" ? "by admin" : (it.created_by === "token" ? "founder (link)" : "founder")} · {it.link_url || "no link"}
+                        <div key={it.id} style={{ background:surf, border:"1px solid "+(it.status==="pending"?"rgba(224,136,16,0.35)":bdr), borderRadius:"10px", padding:"13px 16px", display:"flex", flexDirection:"column", gap:"12px" }}>
+                          {/* Exactly how this banner will appear on the site — review before approving */}
+                          <div style={{ maxWidth:"540px" }}>
+                            <SpotlightCard static item={{ kind: it.kind, title: it.title, subtitle: it.subtitle, image_url: it.image_url, image_pos: it.image_pos, link_url: it.link_url, cta_text: it.cta_text, accent: it.accent || "#3b6bff" }} />
+                          </div>
+                          <div style={{ display:"flex", alignItems:"center", gap:"12px", flexWrap:"wrap" }}>
+                            <span style={pill(tone, tone+"33")}>{it.status}</span>
+                            <span style={{ fontSize:"9px", fontFamily:mono, color:t3, textTransform:"uppercase" }}>{it.kind}</span>
+                            <div style={{ flex:1, minWidth:"180px" }}>
+                              <div style={{ fontSize:"10px", fontFamily:mono, color:t3 }}>
+                                {it.project_name ? `${it.project_name} · ` : ""}{it.created_by === "admin" ? "by admin" : (it.created_by === "token" ? "founder (link)" : "founder")} · {it.link_url || "no link"}
+                              </div>
+                            </div>
+                            <div style={{ display:"flex", gap:"6px", flexShrink:0 }}>
+                              {it.status === "pending" && <ActionBtn onClick={() => spotlightAction("PATCH", { id: it.id, action: "approve" })} color="green">Approve</ActionBtn>}
+                              {it.status === "active"  && <ActionBtn onClick={() => spotlightAction("PATCH", { id: it.id, action: "deactivate" })} color="blue">Unpublish</ActionBtn>}
+                              {it.status === "pending" && <ActionBtn onClick={() => { setRejectingSpotId(it.id); setRejectSpotReason("") }} color="red">Reject</ActionBtn>}
+                              <ActionBtn onClick={() => spotlightAction("DELETE", undefined, it.id)} color="red">Delete</ActionBtn>
                             </div>
                           </div>
-                          <div style={{ display:"flex", gap:"6px", flexShrink:0 }}>
-                            {it.status === "pending" && <ActionBtn onClick={() => spotlightAction("PATCH", { id: it.id, action: "approve" })} color="green">Approve</ActionBtn>}
-                            {it.status === "active"  && <ActionBtn onClick={() => spotlightAction("PATCH", { id: it.id, action: "deactivate" })} color="blue">Unpublish</ActionBtn>}
-                            {it.status === "pending" && <ActionBtn onClick={() => spotlightAction("PATCH", { id: it.id, action: "reject" })} color="red">Reject</ActionBtn>}
-                            <ActionBtn onClick={() => spotlightAction("DELETE", undefined, it.id)} color="red">Delete</ActionBtn>
-                          </div>
+                          {rejectingSpotId === it.id && (
+                            <div style={{ borderTop:"1px solid rgba(224,51,72,0.15)", paddingTop:"14px", marginTop:"2px" }}>
+                              <div style={{ fontSize:"10px", fontFamily:mono, color:"#e03348", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:"8px" }}>Rejection reason (sent to the founder)</div>
+                              <select
+                                value={rejectSpotReason}
+                                onChange={e => setRejectSpotReason(e.target.value)}
+                                style={{ width:"100%", background:surf2, border:"1px solid rgba(224,51,72,0.2)", borderRadius:"7px", padding:"8px 12px", fontSize:"12px", fontFamily:mono, color:rejectSpotReason ? t1 : t3, outline:"none", marginBottom:"8px", boxSizing:"border-box" as const }}
+                              >
+                                <option value="">Select a reason or type below...</option>
+                                <option value="The banner image is low quality, blurry, or cropped awkwardly. Upload a cleaner, higher-resolution image and resubmit.">Banner image quality</option>
+                                <option value="The headline or copy is unclear, too promotional, or doesn't describe what you're spotlighting. Refine the wording and resubmit.">Headline / copy needs work</option>
+                                <option value="Your project isn't active or established enough on Arc Testnet yet to feature in the spotlight. Build some traction first, then reapply.">Not enough traction yet</option>
+                                <option value="The spotlight slot is fully booked for your requested window. Please reapply for a later window.">Slot fully booked</option>
+                                <option value="The link destination is broken or doesn't point to a relevant, working page.">Broken or irrelevant link</option>
+                                <option value="The content doesn't fit ArcLens spotlight guidelines (no unrelated promotions, token sales, or off-topic content).">Doesn't fit guidelines</option>
+                              </select>
+                              <textarea
+                                value={rejectSpotReason}
+                                onChange={e => setRejectSpotReason(e.target.value)}
+                                placeholder="Or write a custom reason..."
+                                rows={2}
+                                style={{ width:"100%", background:surf2, border:"1px solid rgba(224,51,72,0.2)", borderRadius:"7px", padding:"8px 12px", fontSize:"12px", fontFamily:mono, color:t1, outline:"none", resize:"vertical", lineHeight:1.6, boxSizing:"border-box" as const, marginBottom:"10px" }}
+                              />
+                              <div style={{ display:"flex", gap:"8px" }}>
+                                <button
+                                  onClick={async () => { const ok = await spotlightAction("PATCH", { id: it.id, action: "reject", reason: rejectSpotReason }); if (ok) { setRejectingSpotId(null); showToast(true, "Spotlight rejected — founder emailed") } }}
+                                  disabled={spotBusy}
+                                  style={{ height:"30px", padding:"0 16px", background:"rgba(224,51,72,0.12)", color:"#e03348", fontSize:"11px", border:"1px solid rgba(224,51,72,0.3)", borderRadius:"5px", cursor:"pointer", fontWeight:600, opacity:spotBusy?.6:1 }}>
+                                  Confirm Reject
+                                </button>
+                                <button onClick={() => setRejectingSpotId(null)}
+                                  style={{ height:"30px", padding:"0 14px", background:"transparent", color:t2, fontSize:"11px", border:"1px solid "+bdr, borderRadius:"5px", cursor:"pointer" }}>
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       )})}
                     </div>
