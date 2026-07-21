@@ -105,7 +105,7 @@ export default function EcosystemPage() {
   const existingNames       = useRef<Set<string>>(new Set())
   const existingContracts   = useRef<Set<string>>(new Set())
   const [trending, setTrending] = useState<TrendingProject[]>([])
-  const [sortBy, setSortBy] = useState<"all"|"trending"|"new"|"official"|"partner"|"verified"|"established"|"claimed"|"featured"|"tvl"|"revenue"|"volume">("all")
+  const [sortBy, setSortBy] = useState<"all"|"name"|"trending"|"new"|"official"|"partner"|"verified"|"established"|"claimed"|"featured"|"tvl"|"revenue"|"volume">("all")
   const [page, setPage] = useState(1)
   const [cols, setCols] = useState(4)
   const gridWrapRef = useRef<HTMLDivElement>(null)
@@ -263,6 +263,54 @@ export default function EcosystemPage() {
     }
   }
 
+  // ── Default "All" ordering: fair rotation, in domain-seriousness bands ──────
+  // Free/placeholder hosts — a team still on one of these hasn't committed to its
+  // own domain, so it rotates below teams that have. This is read automatically
+  // from the website URL (no admin data entry), so no legit project gets buried
+  // just because a field like a contract or claim wasn't filled in.
+  const FREE_HOST = /(?:^|\.)(?:vercel\.app|netlify\.app|github\.io|pages\.dev|web\.app|firebaseapp\.com|herokuapp\.com|onrender\.com|surge\.sh|glitch\.me|repl\.co|replit\.(?:app|dev)|framer\.(?:app|website|media)|webflow\.io|wixsite\.com|carrd\.co|notion\.site|gitbook\.io|fleek\.co|w3s\.link)$/i
+  const hostOf = (url?: string | null) => {
+    if (!url) return ""
+    try { return new URL(/^https?:\/\//i.test(url) ? url : `https://${url}`).hostname.replace(/^www\./, "") } catch { return "" }
+  }
+  const hasRealDomain = (p: Project) => { const h = hostOf(p.website); return !!h && !FREE_HOST.test(h) && !/^\d+\.\d+\.\d+\.\d+$/.test(h) }
+
+  // Coarse seriousness band — quality only decides which band a project rotates
+  // in; it never pins a permanent rank. Few bands = many ties = real rotation.
+  //    2 = real custom domain (a committed team)
+  //    1 = free-hosted site (vercel / netlify / github.io / …)
+  //    0 = no website yet
+  //   -1 = risk-flagged → pushed to the very bottom
+  const seriousnessBand = (p: Project) => {
+    if (p.trust_profile?.hard_risk) return -1
+    if (hasRealDomain(p)) return 2
+    if (p.website && p.website.trim()) return 1
+    return 0
+  }
+
+  // Deterministic per-project value that reshuffles once a day (stable within a
+  // UTC day). This IS the fair rotation — it runs inside every band, so equal
+  // projects take turns near the top instead of one freezing there.
+  const daySeed = Math.floor(Date.now() / 86_400_000)
+  const rotate = (id: number | string) => {
+    let h = ((Number(id) || 0) * 2654435761 + daySeed * 40503) >>> 0
+    h = (h ^ (h >>> 13)) >>> 0
+    return h
+  }
+  // Default + trust-tab ordering: admin-Featured first, then domain-seriousness
+  // band, then a FAIR DAILY ROTATION within the band, then name as a stable
+  // tiebreak. No permanent leaderboard, no rich-get-richer — every project in a
+  // band gets its turn up top. Activity/trust stay browsable via the dedicated
+  // tabs (Verified / Official / Established / TVL / Trending).
+  const defaultRank = (a: Project, b: Project) => {
+    if (!!b.featured !== !!a.featured) return (b.featured ? 1 : 0) - (a.featured ? 1 : 0)
+    const bd = seriousnessBand(b) - seriousnessBand(a)
+    if (bd !== 0) return bd
+    const rr = rotate(a.id) - rotate(b.id)
+    if (rr !== 0) return rr
+    return (a.name || "").localeCompare(b.name || "")
+  }
+
   const filtered = projects.filter(p => {
     const matchCat    = filter === "All" || (p.category || "").trim().toLowerCase() === filter.trim().toLowerCase()
     const matchSearch = !search || p.name.toLowerCase().includes(search.toLowerCase()) || p.tagline?.toLowerCase().includes(search.toLowerCase())
@@ -285,6 +333,7 @@ export default function EcosystemPage() {
       : true
     return matchCat && matchSearch && matchSort
   }).sort((a, b) => {
+    if (sortBy === "name") return (a.name || "").localeCompare(b.name || "")
     if (sortBy === "new") return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
     if (sortBy === "trending") return (b.view_count || 0) - (a.view_count || 0)
     if (sortBy === "tvl") {
@@ -302,7 +351,10 @@ export default function EcosystemPage() {
       const bv = b.volume_cum_usd_e6 ? BigInt(b.volume_cum_usd_e6) : BigInt(0)
       return bv > av ? 1 : bv < av ? -1 : 0
     }
-    return 0
+    // "all" + every trust-tier tab (official/partner/verified/established/claimed/
+    // featured): featured-first, then tier, then fair daily rotation — so tabs
+    // that used to preserve a meaningless frozen order now have a real ranking.
+    return defaultRank(a, b)
   })
 
   const totalPages  = Math.max(1, Math.ceil(filtered.length / pageSize))
@@ -609,6 +661,7 @@ export default function EcosystemPage() {
         <div style={{ display: "flex", gap: "6px", marginBottom: "14px", flexWrap: "wrap" }}>
           {([
             { key: "all",      label: "All" },
+            { key: "name",     label: "A–Z" },
             { key: "tvl",      label: "TVL" },
             { key: "volume",   label: "Volume" },
             { key: "revenue",  label: "Revenue" },
