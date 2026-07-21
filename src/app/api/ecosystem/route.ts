@@ -22,20 +22,16 @@ export async function GET() {
               city, country, lat, lng,
               COALESCE(view_count, 0) as view_count,
               created_at,
-              -- TVL / Revenue tracking (NULL when project hasn't opted in;
-              -- the UI uses NULL vs 0 to decide whether to show a number).
+              -- TVL / Revenue tracking. The directory cards + sort/filter only
+              -- read these five fields; the per-day ATH breakdowns (tvl_ath_*,
+              -- revenue_ath_day*, volume_ath_day*, tvl_last_indexed_at) are shown
+              -- only on the detail page, which fetches them via /api/ecosystem/[id].
+              -- Shipping them for all ~300 rows here was pure egress waste.
               tvl_tracking_enabled,
               tvl_usd_e6::text          AS tvl_usd_e6,
               tvl_ath_usd_e6::text      AS tvl_ath_usd_e6,
-              tvl_ath_block,
-              tvl_ath_at,
               revenue_cum_usd_e6::text  AS revenue_cum_usd_e6,
-              revenue_ath_day_usd_e6::text AS revenue_ath_day_usd_e6,
-              revenue_ath_day,
-              volume_cum_usd_e6::text   AS volume_cum_usd_e6,
-              volume_ath_day_usd_e6::text AS volume_ath_day_usd_e6,
-              volume_ath_day,
-              tvl_last_indexed_at
+              volume_cum_usd_e6::text   AS volume_cum_usd_e6
        FROM projects
        WHERE approved = true AND live = true
        ORDER BY featured DESC, COALESCE(view_count, 0) DESC, created_at DESC`
@@ -79,9 +75,12 @@ export async function GET() {
     }
 
     return NextResponse.json({ projects: projectsRows, trending }, {
-      // Directory isn't real-time — 15-min CDN cache means far fewer DB
-      // revalidations (egress reduction) with no visible staleness.
-      headers: { "Cache-Control": "public, s-maxage=900, stale-while-revalidate=1800" },
+      // Directory isn't real-time — new listings appear on approval, which is
+      // infrequent. A 1-hour CDN cache (with a 2-hour stale window so visitors
+      // are always served instantly while it revalidates in the background)
+      // cuts origin DB revalidations ~4x vs the old 15 min — the single biggest
+      // egress lever here — with no visible staleness.
+      headers: { "Cache-Control": "public, s-maxage=3600, stale-while-revalidate=7200" },
     })
   } catch {
     return NextResponse.json({ projects: [], trending: [] })

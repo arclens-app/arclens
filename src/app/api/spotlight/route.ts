@@ -53,7 +53,13 @@ export async function GET() {
         ORDER BY s.priority DESC, s.created_at DESC
         LIMIT 8`,
     )
-    return NextResponse.json({ items: r.rows })
+    return NextResponse.json({ items: r.rows }, {
+      // Spotlight items are admin-activated and rotate slowly, so a short CDN
+      // cache (5 min, with a 15-min stale window) is invisible to viewers but
+      // stops a fresh DB query on every single page render. Slight over-shoot
+      // of an item's end-time by a few minutes is harmless.
+      headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=900" },
+    })
   } catch (e: any) {
     console.error("[spotlight GET]", e?.message || e)
     return NextResponse.json({ items: [] })

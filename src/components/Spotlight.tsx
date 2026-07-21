@@ -155,7 +155,9 @@ export default function Spotlight() {
 
   useEffect(() => {
     let alive = true
-    fetch("/api/spotlight", { cache: "no-store" })
+    // Default cache mode so the CDN's short s-maxage on /api/spotlight is honored
+    // (was "no-store", which forced a fresh DB query on every render).
+    fetch("/api/spotlight")
       .then(r => r.ok ? r.json() : { items: [] })
       .then(d => {
         if (!alive) return
