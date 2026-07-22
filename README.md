@@ -62,10 +62,6 @@ Circle / Arc: Developer-Controlled Wallets · Gateway (x402) ·
 ERC-8004 agent identity · USDC & EURC settlement on Arc
 ```
 
-- **Reads** (directory, metrics, events) are CDN-cached route handlers over Postgres.
-- **The indexer** runs on scheduled crons, reconciling reported figures against on-chain state down to the transaction hash.
-- **Lens AI** builds context (role, page, retrieved knowledge, prior chats), calls live-data tools, streams the answer, then settles builder recognition on-chain.
-
 ## Stack
 
 | Layer | Tech |
