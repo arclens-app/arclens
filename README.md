@@ -107,14 +107,6 @@ Create a `.env.local` with the variables below. The app boots with the **core** 
 
 > Full list and advanced tuning (`LENS_PAY_*`, `LENS_ASK_*`) are documented in the [docs](https://docs.arclenz.xyz).
 
-## Screenshots
-
-| Ecosystem Directory | Lens AI |
-|---|---|
-| _add `/ecosystem` screenshot_ | _add Lens AI demo GIF_ |
-
-> Drop product screenshots into `public/` and reference them here.
-
 ## License
 
 Released under the [MIT License](LICENSE). © 2026 ArcLens.
