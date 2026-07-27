@@ -20,14 +20,21 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${BASE}/search`,      priority: 0.5,  changeFrequency: "weekly"  },
     { url: `${BASE}/start`,       priority: 0.6,  changeFrequency: "monthly" },
     { url: `${BASE}/node-guide`,  priority: 0.5,  changeFrequency: "monthly" },
+    { url: `${BASE}/about`,       priority: 0.6,  changeFrequency: "monthly" },
+    { url: `${BASE}/terms`,       priority: 0.3,  changeFrequency: "yearly"  },
+    { url: `${BASE}/privacy`,     priority: 0.3,  changeFrequency: "yearly"  },
   ]
 
   let projectRoutes: MetadataRoute.Sitemap = []
   let campaignRoutes: MetadataRoute.Sitemap = []
 
   try {
+    // `projects` has no updated_at column — asking for one threw, and the empty
+    // catch below hid it, so every project page silently dropped out of the
+    // sitemap. Derive lastModified from the columns that do exist.
     const projects = await pool.query(
-      `SELECT slug, id, updated_at FROM projects WHERE approved = true AND live = true ORDER BY created_at DESC`
+      `SELECT slug, id, COALESCE(trust_updated_at, created_at) AS updated_at
+         FROM projects WHERE approved = true AND live = true ORDER BY created_at DESC`
     )
     projectRoutes = projects.rows.map((p: any) => ({
       url:             `${BASE}/ecosystem/${p.slug || p.id}`,
@@ -35,7 +42,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority:        0.7,
       changeFrequency: "weekly" as const,
     }))
-  } catch { }
+  } catch (e) {
+    console.error("[sitemap] project routes failed:", e)
+  }
 
   try {
     const campaigns = await pool.query(
@@ -47,7 +56,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority:        0.7,
       changeFrequency: "daily" as const,
     }))
-  } catch { }
+  } catch (e) {
+    console.error("[sitemap] campaign routes failed:", e)
+  }
 
   return [...staticRoutes, ...projectRoutes, ...campaignRoutes]
 }
