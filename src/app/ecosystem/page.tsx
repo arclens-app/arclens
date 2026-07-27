@@ -1,5 +1,6 @@
 ﻿"use client"
 import { useEffect, useState, useRef } from "react"
+import { isBroadTag } from "@/lib/projectTags"
 import ArcLayout from "@/components/ArcLayout"
 import { TrustBadge } from "@/components/TrustBadge"
 import { trustBadge } from "@/lib/trustBadge"
@@ -27,6 +28,10 @@ interface Project {
   slug: string | null
   created_at?: string
   view_count?: number
+  // Derived server-side from the FULL description (see lib/projectTags) — the
+  // description shipped here is truncated, so these are how search reaches text
+  // the browser never receives.
+  tags?: string[]
   // TVL & revenue (NULL when the founder hasn't opted in)
   tvl_tracking_enabled?: boolean
   tvl_usd_e6?: string | null
@@ -139,8 +144,23 @@ export default function EcosystemPage() {
         setShowForm(true)
         setTimeout(() => window.scrollTo({ top: 0, behavior: "smooth" }), 50)
       }
+      // /ecosystem?q=vault — makes a search a shareable link, so a question like
+      // "do you have any USDC vaults?" can be answered with a URL.
+      const q = params.get("q")
+      if (q) setSearch(q)
     }
   }, [])
+
+  // Mirror the search into the URL without adding history entries, so back
+  // still leaves the page rather than stepping through every keystroke.
+  useEffect(() => {
+    if (!mounted || typeof window === "undefined") return
+    const params = new URLSearchParams(window.location.search)
+    if (search.trim()) params.set("q", search.trim())
+    else params.delete("q")
+    const qs = params.toString()
+    window.history.replaceState(null, "", qs ? `?${qs}` : window.location.pathname)
+  }, [search, mounted])
 
   useEffect(() => {
     if (!mounted) return
@@ -311,9 +331,40 @@ export default function EcosystemPage() {
     return (a.name || "").localeCompare(b.name || "")
   }
 
+  // Every word must appear somewhere, in any order — "usdc vault" should match a
+  // project that mentions USDC in one sentence and vaults in another. The old
+  // check looked for the whole phrase in name/tagline only, which is why
+  // searching "vault" returned nothing even though 10 projects offer them.
+  const terms = search.trim().toLowerCase().split(/\s+/).filter(Boolean)
+
+  // Where a term matched, scored so a precise hit outranks a vague one. A "Vault"
+  // tag covers 10 projects and means something; "Stablecoin" covers 130 and
+  // barely narrows anything, so it must never bury a name match.
+  function matchScore(p: Project, term: string): number {
+    if ((p.name || "").toLowerCase().includes(term))          return 100
+    if ((p.tagline || "").toLowerCase().includes(term))       return 60
+    const tags = p.tags || []
+    const tagHit = tags.find(t => t.toLowerCase().includes(term))
+    if (tagHit)                                                return isBroadTag(tagHit) ? 25 : 45
+    if ((p.category || "").toLowerCase().includes(term))       return 30
+    if ((p.description || "").toLowerCase().includes(term))    return 15
+    return 0
+  }
+
+  const searchScores = new Map<number, number>()
+
   const filtered = projects.filter(p => {
     const matchCat    = filter === "All" || (p.category || "").trim().toLowerCase() === filter.trim().toLowerCase()
-    const matchSearch = !search || p.name.toLowerCase().includes(search.toLowerCase()) || p.tagline?.toLowerCase().includes(search.toLowerCase())
+    let matchSearch = true
+    if (terms.length) {
+      let total = 0
+      for (const t of terms) {
+        const s = matchScore(p, t)
+        if (s === 0) { matchSearch = false; break }
+        total += s
+      }
+      if (matchSearch) searchScores.set(p.id, total)
+    }
     const matchSort   = sortBy === "all" ? true
       : sortBy === "trending"  ? true
       : sortBy === "new"       ? (Date.now() - new Date(p.created_at || 0).getTime() < 90 * 24 * 60 * 60 * 1000)
@@ -333,6 +384,12 @@ export default function EcosystemPage() {
       : true
     return matchCat && matchSearch && matchSort
   }).sort((a, b) => {
+    // While searching, relevance wins over every other ordering — otherwise the
+    // featured/rotation ranking pushes weak matches above exact ones.
+    if (terms.length) {
+      const d = (searchScores.get(b.id) || 0) - (searchScores.get(a.id) || 0)
+      if (d !== 0) return d
+    }
     if (sortBy === "name") return (a.name || "").localeCompare(b.name || "")
     if (sortBy === "new") return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
     if (sortBy === "trending") return (b.view_count || 0) - (a.view_count || 0)
@@ -713,11 +770,30 @@ export default function EcosystemPage() {
           <div style={{ padding: "60px", textAlign: "center", fontFamily: mono, fontSize: "11px", color: t3 }}>Loading Arc Ecosystem...</div>
         ) : filtered.length === 0 ? (
           <div style={{ padding: "60px", textAlign: "center" }}>
-            <div style={{ fontSize: "14px", fontWeight: 600, marginBottom: "6px", color: t1 }}>No projects found</div>
-            <div style={{ fontSize: "12px", color: t2, fontWeight: 300 }}>Try a different filter or be the first to submit.</div>
+            <div style={{ fontSize: "14px", fontWeight: 600, marginBottom: "6px", color: t1 }}>
+              {terms.length ? <>No projects match &ldquo;{search.trim()}&rdquo;</> : "No projects found"}
+            </div>
+            <div style={{ fontSize: "12px", color: t2, fontWeight: 300 }}>
+              {terms.length
+                ? <>Searched names, taglines, categories and descriptions{filter !== "All" ? <> within {filter}</> : null}. Try fewer words{filter !== "All" ? ", or clear the category filter" : ""}.</>
+                : "Try a different filter or be the first to submit."}
+            </div>
           </div>
         ) : (
           <>
+            {/* Say what the search actually did — a bare grid leaves people
+                unsure whether the result is complete or the search half-worked. */}
+            {terms.length > 0 && (
+              <div style={{ fontSize: "11px", fontFamily: mono, color: t3, marginBottom: "14px" }}>
+                {filtered.length} {filtered.length === 1 ? "project matches" : "projects match"} &ldquo;{search.trim()}&rdquo;
+                {filter !== "All" ? <> in {filter}</> : null}
+                {" · "}
+                <button onClick={() => setSearchAndReset("")}
+                  style={{ background: "none", border: "none", padding: 0, font: "inherit", color: t2, cursor: "pointer", textDecoration: "underline", textUnderlineOffset: "2px" }}>
+                  clear
+                </button>
+              </div>
+            )}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "12px" }}>
               {paginated.map(p => <ProjectCard key={p.id} p={p} />)}
             </div>

@@ -2,6 +2,7 @@
 import { scanUrl } from "@/lib/urlScan"
 import { getPool } from "@/lib/dbPool"
 import { validateEmail, validateWebsite, hostFromUrl, domainResolves } from "@/lib/submissionGuards"
+import { extractTags } from "@/lib/projectTags"
 
 const pool = getPool()
 
@@ -14,7 +15,13 @@ export async function GET() {
               -- trust_profile field the list uses (hard_risk) instead of the
               -- whole analysis blob. Together this ~halves the list payload —
               -- the biggest single source of DB egress. Detail page keeps both.
-              LEFT(description, 121) AS description, category, logo_url,
+              LEFT(description, 121) AS description,
+              -- Full text is read only to derive search tags below and is then
+              -- dropped before responding — the client still receives just the
+              -- 121-char excerpt. Costs one extra read per cache miss (~once an
+              -- hour) and saves shipping ~300 chars x 310 rows to every visitor.
+              description AS description_full,
+              category, logo_url,
               website, twitter, github, discord, contract,
               featured, color, launched_at, slug, badge,
               trust_level, recognition, established,
@@ -42,7 +49,17 @@ export async function GET() {
     // frozen lifetime view_count tally, which kept the same projects on top
     // forever. Falls back to all-time views when recent data is sparse so the
     // rail is never empty. No external API calls.
-    const projectsRows = result.rows
+    // Derive search tags from the full text, then drop it — the client still
+    // receives only the 121-char excerpt. Someone hunting for "USDC vaults" was
+    // finding nothing because search only ever saw name and tagline, and the
+    // word "vault" almost always lives in the description.
+    const projectsRows = result.rows.map((p: any) => {
+      const { description_full, ...rest } = p
+      return {
+        ...rest,
+        tags: extractTags(`${p.name || ""} ${p.tagline || ""} ${description_full || ""}`),
+      }
+    })
     const currentWeek  = Math.floor(Date.now() / (7 * 24 * 60 * 60 * 1000))
     let trending: any[] = []
     try {
