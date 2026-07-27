@@ -3,6 +3,12 @@ import { getPool } from "@/lib/dbPool"
 
 const pool = getPool()
 
+// Rebuild at most once a day. Without this the 310-row project query ran on
+// every crawler request, and crawlers are exactly who hits this route. A day-old
+// sitemap costs nothing (search engines re-crawl the pages themselves anyway)
+// and keeps this off the DB egress budget.
+export const revalidate = 86400
+
 const BASE = "https://arclenz.xyz"
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
