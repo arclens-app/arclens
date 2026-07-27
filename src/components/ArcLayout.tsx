@@ -927,6 +927,7 @@ export default function ArcLayout({ children, active, lockDark }: { children: Re
             <span style={{ fontSize: "11px", fontFamily: mono, color: t3 }}>© 2026 ArcLens</span>
             <div style={{ display: "flex", alignItems: "center", gap: "24px", flexWrap: "wrap" }}>
               {[
+                { label: "About",   href: "/about" },
                 { label: "Docs",    href: "https://docs.arclenz.xyz" },
                 { label: "Terms",   href: "/terms" },
                 { label: "Privacy", href: "/privacy" },
@@ -956,6 +957,12 @@ export default function ArcLayout({ children, active, lockDark }: { children: Re
                 </svg>
               </a>
             </div>
+          </div>
+          {/* Independence notice — states plainly that ArcLens is a third party.
+              Without it the "Hub for Arc" framing plus wallet flows reads as
+              brand impersonation to abuse classifiers and human reviewers. */}
+          <div style={{ maxWidth: "1200px", margin: "0 auto", padding: "0 28px 20px", fontSize: "10px", fontFamily: mono, color: t3, lineHeight: 1.8, opacity: 0.75 }}>
+            ArcLens is an independent ecosystem intelligence platform, operated separately from and not affiliated with, endorsed by, or sponsored by Circle Internet Group or the Arc network. ArcLens will never ask for your seed phrase, private key, or wallet password.
           </div>
         </footer>
 

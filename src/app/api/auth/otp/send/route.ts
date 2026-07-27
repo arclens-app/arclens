@@ -34,6 +34,7 @@ function brandedHTML(code: string): string {
     <span style="font-size:34px;font-weight:700;color:#ffffff;letter-spacing:10px;font-family:'Courier New',monospace;">${code}</span>
   </div>
   <hr style="border:none;border-top:1px solid rgba(255,255,255,0.06);margin:24px 0 16px;">
+  <p style="font-size:11px;color:#6b7da8;text-align:center;line-height:1.7;margin:0 0 8px;">ArcLens will never ask you for a seed phrase, private key, or wallet password. We only ever send you to <strong style="color:#8aaeff;">arclenz.xyz</strong>.</p>
   <p style="font-size:11px;color:#1e2a40;text-align:center;">If you didn't request this code, you can safely ignore this email. Your account stays safe.</p>
 </div>`
 }
