@@ -234,7 +234,12 @@ export async function GET(
 
     return NextResponse.json(
       { project: { ...project, txCount, owner_wallet: undefined, founder_profile: founderProfile }, related: related.rows, leaderboard, campaignsRun, usingXp, tvl },
-      { headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600" } }
+      // Each detail page costs ~a dozen queries, and search crawlers now reach
+      // all ~310 of them. Five minutes was short enough that repeat visitors and
+      // re-crawls paid the full cost again; an hour (serving stale for a day
+      // while it refreshes) cuts that without anyone noticing — this data moves
+      // on the order of days, not minutes.
+      { headers: { "Cache-Control": "public, s-maxage=3600, stale-while-revalidate=86400" } }
     )
   } catch (err) {
     console.error("[Ecosystem GET id]", err)
