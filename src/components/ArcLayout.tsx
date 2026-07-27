@@ -960,9 +960,11 @@ export default function ArcLayout({ children, active, lockDark }: { children: Re
           </div>
           {/* Independence notice — states plainly that ArcLens is a third party.
               Without it the "Hub for Arc" framing plus wallet flows reads as
-              brand impersonation to abuse classifiers and human reviewers. */}
-          <div style={{ maxWidth: "1200px", margin: "0 auto", padding: "0 28px 20px", fontSize: "10px", fontFamily: mono, color: t3, lineHeight: 1.8, opacity: 0.75 }}>
-            ArcLens is an independent ecosystem intelligence platform, operated separately from and not affiliated with, endorsed by, or sponsored by Circle Internet Group or the Arc network. ArcLens will never ask for your seed phrase, private key, or wallet password.
+              brand impersonation to abuse classifiers and human reviewers. The
+              seed-phrase warning lives on the connect modal instead, where it
+              is read at the moment of risk rather than buried down here. */}
+          <div style={{ maxWidth: "1200px", margin: "0 auto", padding: "0 28px 20px", fontSize: "10px", fontFamily: mono, color: t3, lineHeight: 1.7, opacity: 0.7 }}>
+            ArcLens is an independent platform. Not affiliated with, endorsed by, or sponsored by Circle Internet Group or the Arc network.
           </div>
         </footer>
 
@@ -1020,6 +1022,16 @@ export default function ArcLayout({ children, active, lockDark }: { children: Re
                   Continue with Email
                   <span style={{ marginLeft: "auto", fontSize: "9px", fontFamily: mono, padding: "2px 7px", borderRadius: "4px", background: "rgba(26,86,255,0.15)", color: "#8aaeff", border: "1px solid rgba(26,86,255,0.2)" }}>Circle</span>
                 </button>
+                {/* Shown at the moment of risk — one click from a wallet prompt. */}
+                <div style={{ marginTop: "6px", paddingTop: "14px", borderTop: "1px solid var(--bdr)", fontSize: "10px", fontFamily: mono, color: t3, lineHeight: 1.7 }}>
+                  By connecting, you agree to our{" "}
+                  <a href="/terms" style={{ color: t2, textDecoration: "underline", textUnderlineOffset: "2px" }}>Terms</a>
+                  {" "}and{" "}
+                  <a href="/privacy" style={{ color: t2, textDecoration: "underline", textUnderlineOffset: "2px" }}>Privacy Policy</a>.
+                  <div style={{ marginTop: "8px" }}>
+                    ArcLens never asks for your seed phrase, private key, or wallet password, and never requests a token approval or transfer.
+                  </div>
+                </div>
               </div>
             )}
 
