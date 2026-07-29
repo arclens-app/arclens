@@ -46,9 +46,18 @@ const HEADER = [
 ].join(",") + "\n"
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ slug: string }> },
 ) {
+  // This route streams every recorded event for a project — 21MB for the
+  // largest one. It is unlinked from the UI, so in practice only crawlers find
+  // it, and an unlimited public dump on a 5-minute cache was the single biggest
+  // consumer of the database egress budget. The cache below makes repeat reads
+  // free; this limiter stops anything trying to bypass it with unique URLs.
+  const { enforce } = await import("@/lib/ratelimit")
+  const blocked = await enforce(req, "events-csv", { limit: 4, windowMs: 60 * 60_000 })
+  if (blocked) return blocked
+
   const { slug } = await params
 
   // Resolve the project ID first so the streaming query doesn't have to JOIN.
@@ -146,7 +155,10 @@ export async function GET(
     headers: {
       "Content-Type": "text/csv; charset=utf-8",
       "Content-Disposition": `attachment; filename="${slug}-events.csv"`,
-      "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600",
+      // Event history is append-only and verified against the chain, so a day
+      // old is fine. At 5 minutes every crawler hit was a fresh 21MB read from
+      // Postgres; at a day, the CDN answers repeats without touching the DB.
+      "Cache-Control": "public, s-maxage=86400, stale-while-revalidate=604800",
       "Access-Control-Allow-Origin": "*",
     },
   })
