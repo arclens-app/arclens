@@ -152,6 +152,127 @@ async function sendCampaignEmail(campaignId: number, status: "approved" | "rejec
   }
 }
 
+// Reasons a live listing gets taken down. Each is a real situation that has
+// come up, worded so the founder knows exactly what to fix and that the listing
+// is recoverable — hiding used to be silent, which just looked like deletion.
+export const HIDE_REASONS: Record<string, { label: string; line: string; fix: string }> = {
+  security: {
+    label: "Security flag",
+    line:  "your website is currently flagged as malicious by one or more security vendors",
+    fix:   "Search your domain on virustotal.com to see which vendors flagged it and request a review from them directly. Flags often come from a shared host, an expired certificate, or a script a scanner does not recognise, and they clear once resolved.",
+  },
+  offline: {
+    label: "Website unreachable",
+    line:  "your website is not loading — it returns an error or does not respond",
+    fix:   "Get the site back online and reply to this email. We check before restoring.",
+  },
+  not_arc: {
+    label: "No Arc connection",
+    line:  "we could not find evidence that the project is building on Arc",
+    fix:   "Reply with a deployed contract address on Arc, or a link to your integration, and we will restore the listing.",
+  },
+  duplicate: {
+    label: "Duplicate listing",
+    line:  "this appears to duplicate another listing for the same project",
+    fix:   "If this is the listing you want to keep, reply and tell us which one to remove instead.",
+  },
+  branding: {
+    label: "Misleading branding",
+    line:  "the project name or branding could be mistaken for another company's",
+    fix:   "Reply with either proof of affiliation, or an updated name that cannot be confused with the other brand.",
+  },
+  no_domain: {
+    label: "No project domain",
+    line:  "the listing points at a free hosting subdomain rather than a project domain",
+    fix:   "Point the listing at a domain you own and reply here. A live contract with real on-chain usage also qualifies.",
+  },
+  incomplete: {
+    label: "Incomplete information",
+    line:  "the listing is missing information we need to verify the project",
+    fix:   "Update your listing from your dashboard and reply so we can review it.",
+  },
+  other: {
+    label: "Other",
+    line:  "we have temporarily removed it from the public directory",
+    fix:   "Reply to this email and we will walk through what is needed to restore it.",
+  },
+}
+
+async function sendListingHiddenEmail(projectId: number, reasonKey: string, note?: string) {
+  try {
+    const res = await pool.query(`SELECT name, email, slug FROM projects WHERE id = $1`, [projectId])
+    const row = res.rows[0]
+    if (!row?.email) return
+    if (await isUnsubscribed(row.email)) return
+
+    const r = HIDE_REASONS[reasonKey] || HIDE_REASONS.other
+    const base  = `font-family:Arial,sans-serif;max-width:560px;margin:0 auto;padding:40px 24px;background:#060c20;color:#e8ecff;`
+    const label = `font-size:11px;font-family:monospace;text-transform:uppercase;letter-spacing:0.1em;`
+    const noteHtml = note?.trim()
+      ? `<div style="padding:14px 16px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:8px;margin:0 0 24px;">
+           <div style="font-size:9px;font-family:monospace;color:#6b7da8;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:8px;">Note from the team</div>
+           <div style="font-size:13px;color:#e8ecff;line-height:1.7;">${String(note).slice(0, 500)}</div>
+         </div>` : ""
+
+    await resend.emails.send({
+      from:     "ArcLens <support@mail.arclenz.xyz>",
+      reply_to: process.env.TEAM_EMAIL || "support@arclenz.xyz",
+      to:       row.email,
+      subject:  `Your ArcLens listing has been temporarily hidden — ${row.name}`,
+      headers:  unsubHeaders(row.email),
+      text: `Your ArcLens listing has been temporarily hidden\n\n${row.name}\n\n`
+          + `We have temporarily hidden your listing from the ArcLens directory because ${r.line}.\n\n`
+          + (note?.trim() ? `Note from the team: ${note}\n\n` : "")
+          + `${r.fix}\n\n`
+          + `Nothing has been deleted. Your listing and all its data are intact, and we will restore it as soon as this is resolved.\n\n`
+          + `Reply to this email and a human will read it.\n\nArcLens - arclenz.xyz`,
+      html: `<div style="${base}">
+        <div style="margin-bottom:28px;"><span style="font-size:22px;font-weight:700;color:#e8ecff;">Arc</span><span style="font-size:22px;font-weight:700;color:#1a56ff;">Lens</span></div>
+        <div style="${label}color:#e0a020;">Listing temporarily hidden</div>
+        <h1 style="font-size:22px;font-weight:700;margin:10px 0 16px;color:#e8ecff;">${row.name}</h1>
+        <p style="font-size:14px;color:#c8d2e8;line-height:1.8;margin:0 0 20px;">We have temporarily hidden your listing from the ArcLens directory because ${r.line}.</p>
+        ${noteHtml}
+        <p style="font-size:14px;color:#c8d2e8;line-height:1.8;margin:0 0 20px;">${r.fix}</p>
+        <p style="font-size:13px;color:#6b7da8;line-height:1.8;margin:0 0 28px;">Nothing has been deleted. Your listing and all its data are intact, and we will restore it as soon as this is resolved.</p>
+        <hr style="border:none;border-top:1px solid rgba(255,255,255,0.06);margin:24px 0 16px;">
+        <p style="font-size:11px;color:#6b7da8;text-align:center;line-height:1.7;">Reply to this email and a human will read it. ${unsubFooter(row.email)}</p>
+      </div>`,
+    })
+  } catch (err) {
+    console.error("[Admin] Hide email failed:", err)
+  }
+}
+
+async function sendListingRestoredEmail(projectId: number) {
+  try {
+    const res = await pool.query(`SELECT name, email, slug FROM projects WHERE id = $1`, [projectId])
+    const row = res.rows[0]
+    if (!row?.email) return
+    if (await isUnsubscribed(row.email)) return
+    const slug = row.slug || ""
+    const base = `font-family:Arial,sans-serif;max-width:560px;margin:0 auto;padding:40px 24px;background:#060c20;color:#e8ecff;`
+    await resend.emails.send({
+      from:     "ArcLens <support@mail.arclenz.xyz>",
+      reply_to: process.env.TEAM_EMAIL || "support@arclenz.xyz",
+      to:       row.email,
+      subject:  `Your ArcLens listing is live again — ${row.name}`,
+      headers:  unsubHeaders(row.email),
+      text: `Your ArcLens listing is live again\n\n${row.name}\n\nThanks for sorting that out. Your listing is back in the directory:\n${BASE_URL}/ecosystem/${slug}\n\nArcLens - arclenz.xyz`,
+      html: `<div style="${base}">
+        <div style="margin-bottom:28px;"><span style="font-size:22px;font-weight:700;color:#e8ecff;">Arc</span><span style="font-size:22px;font-weight:700;color:#1a56ff;">Lens</span></div>
+        <div style="font-size:11px;font-family:monospace;text-transform:uppercase;letter-spacing:0.1em;color:#00b87a;">Listing restored</div>
+        <h1 style="font-size:22px;font-weight:700;margin:10px 0 16px;color:#e8ecff;">${row.name}</h1>
+        <p style="font-size:14px;color:#c8d2e8;line-height:1.8;margin:0 0 24px;">Thanks for sorting that out. Your listing is back in the directory.</p>
+        <a href="${BASE_URL}/ecosystem/${slug}" style="display:inline-block;padding:14px 28px;background:#1a56ff;color:#fff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;">View your listing →</a>
+        <hr style="border:none;border-top:1px solid rgba(255,255,255,0.06);margin:28px 0 16px;">
+        <p style="font-size:11px;color:#6b7da8;text-align:center;line-height:1.7;">${unsubFooter(row.email)}</p>
+      </div>`,
+    })
+  } catch (err) {
+    console.error("[Admin] Restore email failed:", err)
+  }
+}
+
 async function sendProjectUpdateEmail(
   projectId: number,
   status: "approved" | "rejected",
@@ -813,6 +934,28 @@ export async function POST(req: NextRequest) {
       if (!r.rows.length) return NextResponse.json({ error: "Project not found" }, { status: 404 })
       return NextResponse.json({ success: true, recognition: val })
     }
+    // Take a live listing down, or put it back. Reversible by design: the row is
+    // untouched, only `live` flips, so nothing a founder submitted is lost. Both
+    // notify the founder — hiding used to be silent, which reads as deletion.
+    if (action === "hide-listing") {
+      const reason = String(data?.reason || "other")
+      if (!HIDE_REASONS[reason]) return NextResponse.json({ error: "Unknown reason" }, { status: 400 })
+      const r = await pool.query(
+        "UPDATE projects SET live = false WHERE (id::text = $1 OR slug = $1) AND approved = true RETURNING id, name",
+        [String(id)])
+      if (!r.rows.length) return NextResponse.json({ error: "Project not found" }, { status: 404 })
+      if (data?.notify !== false) await sendListingHiddenEmail(r.rows[0].id, reason, data?.note)
+      return NextResponse.json({ success: true, name: r.rows[0].name, live: false })
+    }
+    if (action === "restore-listing") {
+      const r = await pool.query(
+        "UPDATE projects SET live = true WHERE (id::text = $1 OR slug = $1) AND approved = true RETURNING id, name",
+        [String(id)])
+      if (!r.rows.length) return NextResponse.json({ error: "Project not found" }, { status: 404 })
+      if (data?.notify !== false) await sendListingRestoredEmail(r.rows[0].id)
+      return NextResponse.json({ success: true, name: r.rows[0].name, live: true })
+    }
+
     // Advisory: run the safety checks live for one project and return the facts
     // so an admin can decide the trust level with them in front of them. Read-only.
     if (action === "assess-project") {

@@ -97,6 +97,7 @@ export default function AdminPage() {
     economy:    { xpAwarded: number; usdcPaid: number }
     growth30d:  { projects: number; completions: number }
     momentum7d: { completions: number; activeTesters: number }
+    traffic?:   { visitorsToday: number; visitors7d: number; visitors30d: number; pageViews30d: number; topPages: Array<{ path: string; visitors: number }> }
     generated_at: string
   }>(null)
   const [contracts, setContracts]     = useState<Contract[]>([])
@@ -155,6 +156,13 @@ export default function AdminPage() {
   const [eventLogoPreview, setEventLogoPreview] = useState<string|null>(null)
   const [eventLogoUploading, setEventLogoUploading] = useState(false)
   const [search, setSearch] = useState("")
+  // Projects tab: show all, only live, or only hidden (taken-down) listings.
+  const [liveFilter, setLiveFilter] = useState<"all"|"live"|"hidden">("all")
+  // Hide dialog: which project, why, and an optional note for the founder.
+  const [hideFor, setHideFor]       = useState<any>(null)
+  const [hideReason, setHideReason] = useState("security")
+  const [hideNote, setHideNote]     = useState("")
+  const [hideNotify, setHideNotify] = useState(true)
 
   const mono  = "'DM Mono', monospace"
   const surf  = "var(--surf, #0a0e1a)"
@@ -435,7 +443,7 @@ export default function AdminPage() {
         if (data.refund_failed) {
           showToast(false, "Rejected — but the USDC refund FAILED. Refund the founder manually.")
         } else {
-        showToast(true, action === "approve" ? "Approved" : action === "approve-all-updates" ? "All changes applied" : action === "reject-all-updates" ? "Changes rejected" : action === "approve-update" ? "Update applied" : action === "reject-update" ? "Update rejected" : action === "approve-campaign-update" ? "Campaign update applied" : action === "reject-campaign-update" ? "Campaign update rejected" : action === "delete" || action === "reject" ? "Removed" : "Done")
+        showToast(true, action === "approve" ? "Approved" : action === "approve-all-updates" ? "All changes applied" : action === "reject-all-updates" ? "Changes rejected" : action === "approve-update" ? "Update applied" : action === "reject-update" ? "Update rejected" : action === "approve-campaign-update" ? "Campaign update applied" : action === "reject-campaign-update" ? "Campaign update rejected" : action === "hide-listing" ? "Listing hidden — founder notified" : action === "restore-listing" ? "Listing restored" : action === "delete" || action === "reject" ? "Removed" : "Done")
         }
         loadAll()
       } else {
@@ -818,6 +826,31 @@ export default function AdminPage() {
                   <div style={{ fontSize: 11, fontFamily: mono, color: t2, textTransform: "uppercase", letterSpacing: "0.08em" }}>Site Stats · Milestone Tracker</div>
                   <div style={{ fontSize: 9, fontFamily: mono, color: t3 }}>generated {new Date(siteStats.generated_at).toLocaleString()}</div>
                 </div>
+
+                {siteStats.traffic && (
+                  <>
+                    <div style={{ fontSize: 9, fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 7 }}>Traffic · site visitors (cookieless)</div>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 8, marginBottom: 14 }}>
+                      <Tile label="Visitors today"   value={fmt(siteStats.traffic.visitorsToday)} color={siteStats.traffic.visitorsToday > 0 ? "#00b87a" : "#eef2ff"} />
+                      <Tile label="Visitors (7d)"    value={fmt(siteStats.traffic.visitors7d)} color="#8aaeff" />
+                      <Tile label="Visitors (30d)"   value={fmt(siteStats.traffic.visitors30d)} color="#8aaeff" />
+                      <Tile label="Page views (30d)" value={fmt(siteStats.traffic.pageViews30d)} />
+                    </div>
+                    {siteStats.traffic.topPages.length > 0 && (
+                      <div style={{ marginBottom: 14 }}>
+                        <div style={{ fontSize: 9, fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 7 }}>Top pages · unique visitors (30d)</div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                          {siteStats.traffic.topPages.map(tp => (
+                            <div key={tp.path} style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 11, fontFamily: mono, color: t2, padding: "5px 10px", background: surf2, borderRadius: 6 }}>
+                              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tp.path}</span>
+                              <span style={{ color: t1, fontWeight: 600, flexShrink: 0 }}>{fmt(tp.visitors)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
 
                 <div style={{ fontSize: 9, fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 7 }}>Users · wallets engaged</div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 8, marginBottom: 14 }}>
@@ -1213,9 +1246,31 @@ export default function AdminPage() {
                     placeholder="Search by name..."
                     style={{ height:"36px", background:surf2, border:"1px solid "+bdr, borderRadius:"8px", padding:"0 12px", fontSize:"12px", fontFamily:mono, color:t1, outline:"none", width:"100%", boxSizing:"border-box" as const }}
                   />
+                  {/* Hidden listings (live = false) stay in this list but were only
+                      distinguishable by the ABSENCE of a Live pill, which is invisible
+                      across 300+ rows. This filter makes taken-down listings findable
+                      so they can be reviewed and restored. */}
+                  <div style={{ display:"flex", gap:"6px" }}>
+                    {([["all","All"],["live","Live"],["hidden","Hidden"]] as const).map(([k,l]) => {
+                      const n = k === "all" ? projects.length
+                              : k === "live" ? projects.filter((p:any)=>p.live).length
+                              : projects.filter((p:any)=>!p.live).length
+                      const on = liveFilter === k
+                      return (
+                        <button key={k} onClick={() => setLiveFilter(k)}
+                          style={{ height:"28px", padding:"0 12px", background: on ? "#1a56ff" : "transparent", color: on ? "#fff" : t2,
+                                   fontSize:"11px", fontFamily:mono, border:"1px solid "+(on ? "#1a56ff" : bdr), borderRadius:"99px", cursor:"pointer" }}>
+                          {l} · {n}
+                        </button>
+                      )
+                    })}
+                  </div>
                   {projects.length === 0 ? (
                     <div style={{ padding:"48px", textAlign:"center", fontFamily:mono, fontSize:"11px", color:t3 }}>No approved projects yet</div>
-                  ) : projects.filter((p:any) => p.name?.toLowerCase().includes(search.toLowerCase())).map((p: any) => (
+                  ) : projects
+                      .filter((p:any) => p.name?.toLowerCase().includes(search.toLowerCase()))
+                      .filter((p:any) => liveFilter === "all" ? true : liveFilter === "live" ? p.live : !p.live)
+                      .map((p: any) => (
                     <div key={p.id} style={{ background:surf, border:"1px solid "+bdr, borderRadius:"10px", padding:"14px 18px", display:"flex", alignItems:"center", gap:"14px" }}>
                       <div style={{ width:"38px", height:"38px", borderRadius:"8px", background:"rgba(26,86,255,0.06)", border:"1px solid "+bdr, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", overflow:"hidden" }}>
                         {p.logo_url
@@ -1228,7 +1283,9 @@ export default function AdminPage() {
                           <span style={{ fontSize:"13px", fontWeight:600, color:t1 }}>{p.name}</span>
                           {p.badge && <span style={pill("#8aaeff","rgba(26,86,255,0.2)")}>{p.badge}</span>}
                           {p.featured && <span style={pill("#c08828","rgba(192,136,40,0.2)")}>Featured</span>}
-                          {p.live && <span style={pill("#00b87a","rgba(0,184,122,0.2)")}>Live</span>}
+                          {p.live
+                            ? <span style={pill("#00b87a","rgba(0,184,122,0.2)")}>Live</span>
+                            : <span style={pill("#e05a5a","rgba(224,90,90,0.2)")}>Hidden</span>}
                         </div>
                         <div style={{ fontSize:"11px", color:t2, display:"flex", alignItems:"center", gap:"8px", flexWrap:"wrap" }}>
                           <span>{p.category} · {p.website || "No website"}</span>
@@ -1237,6 +1294,14 @@ export default function AdminPage() {
                       </div>
                       <div style={{ display:"flex", gap:"6px", flexShrink:0 }}>
                         <ActionBtn onClick={() => startEdit(p)} color="blue">Edit</ActionBtn>
+                        {p.live
+                          ? <ActionBtn onClick={() => setHideFor(p)} disabled={acting} color="red">Hide</ActionBtn>
+                          : <>
+                              <ActionBtn onClick={() => act(p.id, "restore-listing")} disabled={acting} color="green">Restore</ActionBtn>
+                              {/* Already hidden but never told why — re-runs the hide action,
+                                  which is a no-op on state and sends the explanation email. */}
+                              <ActionBtn onClick={() => setHideFor(p)} disabled={acting} color="blue">Notify</ActionBtn>
+                            </>}
                         <ActionBtn onClick={() => confirmDelete(p.id, "projects")} disabled={acting} color="red">Delete</ActionBtn>
                       </div>
                     </div>
@@ -2426,6 +2491,72 @@ export default function AdminPage() {
       </div>
 
       {/* ── EDIT MODAL ── */}
+      {/* Hide dialog — pick why, optionally add a note, and the founder gets an
+          email explaining what to fix and that the listing is recoverable. */}
+      {hideFor && (
+        <div onClick={() => setHideFor(null)}
+          style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.72)", zIndex:200, display:"flex", alignItems:"center", justifyContent:"center", backdropFilter:"blur(4px)" }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ width:"100%", maxWidth:"520px", margin:"0 16px", background:surf, border:"1px solid "+bdr, borderRadius:"14px", padding:"26px", maxHeight:"86vh", overflowY:"auto" }}>
+            <div style={{ fontSize:"16px", fontWeight:600, color:t1, marginBottom:"4px" }}>Hide: {hideFor.name}</div>
+            <div style={{ fontSize:"11px", fontFamily:mono, color:t3, marginBottom:"20px" }}>
+              Removes it from the public directory. Nothing is deleted — restore any time.
+            </div>
+
+            <div style={{ fontSize:"11px", fontFamily:mono, color:t3, textTransform:"uppercase", letterSpacing:"0.1em", marginBottom:"10px" }}>Reason</div>
+            <div style={{ display:"flex", flexDirection:"column", gap:"6px", marginBottom:"18px" }}>
+              {[
+                ["security",   "Security flag",          "Website flagged malicious by security vendors"],
+                ["offline",    "Website unreachable",    "Site errors or does not respond"],
+                ["not_arc",    "No Arc connection",      "No evidence the project builds on Arc"],
+                ["branding",   "Misleading branding",    "Name could be mistaken for another company"],
+                ["duplicate",  "Duplicate listing",      "Same project already listed"],
+                ["no_domain",  "No project domain",      "Points at free hosting, not an owned domain"],
+                ["incomplete", "Incomplete information", "Missing details needed to verify"],
+                ["other",      "Other",                  "Use the note below to explain"],
+              ].map(([k, l, d]) => (
+                <label key={k} style={{ display:"flex", alignItems:"flex-start", gap:"10px", cursor:"pointer", padding:"9px 11px",
+                          background: hideReason === k ? "rgba(26,86,255,0.08)" : "transparent",
+                          border:"1px solid "+(hideReason === k ? "rgba(26,86,255,0.35)" : bdr), borderRadius:"8px" }}>
+                  <input type="radio" name="hidereason" checked={hideReason === k} onChange={() => setHideReason(k)} style={{ marginTop:"2px" }} />
+                  <span>
+                    <span style={{ fontSize:"12px", fontWeight:600, color:t1, display:"block" }}>{l}</span>
+                    <span style={{ fontSize:"11px", color:t3 }}>{d}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+
+            <div style={{ fontSize:"11px", fontFamily:mono, color:t3, textTransform:"uppercase", letterSpacing:"0.1em", marginBottom:"8px" }}>Note to founder (optional)</div>
+            <textarea value={hideNote} onChange={e => setHideNote(e.target.value)} rows={3}
+              placeholder="Anything specific they should know…"
+              style={{ width:"100%", background:surf2, border:"1px solid "+bdr, borderRadius:"8px", padding:"10px 12px", fontSize:"12px", color:t1, outline:"none", boxSizing:"border-box" as const, fontFamily:"'Geist',sans-serif", resize:"vertical" as const, marginBottom:"14px" }} />
+
+            <label style={{ display:"flex", alignItems:"center", gap:"8px", cursor:"pointer", fontSize:"12px", color:t2, marginBottom:"20px" }}>
+              <input type="checkbox" checked={hideNotify} onChange={e => setHideNotify(e.target.checked)} />
+              Email the founder
+            </label>
+
+            <div style={{ display:"flex", gap:"10px" }}>
+              <button disabled={acting}
+                onClick={async () => {
+                  const p = hideFor
+                  setHideFor(null)
+                  await act(p.id, "hide-listing", "projects", { reason: hideReason, note: hideNote, notify: hideNotify })
+                  setHideNote("")
+                }}
+                style={{ flex:1, height:"40px", background:"#c04545", color:"#fff", fontSize:"13px", fontWeight:600, border:"none", borderRadius:"8px", cursor:"pointer", fontFamily:"'Geist',sans-serif" }}>
+                Hide listing
+              </button>
+              <button onClick={() => setHideFor(null)}
+                style={{ height:"40px", padding:"0 20px", background:"transparent", color:t2, fontSize:"13px", border:"1px solid "+bdr, borderRadius:"8px", cursor:"pointer", fontFamily:"'Geist',sans-serif" }}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {editing && (
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.75)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:1000, padding:"20px" }}>
           <div style={{ background:"var(--surf,#0a0e1a)", border:"1px solid var(--bdr,rgba(255,255,255,0.06))", borderRadius:"16px", padding:"28px", width:"100%", maxWidth:"560px", maxHeight:"90vh", overflowY:"auto" }}>
