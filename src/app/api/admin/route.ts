@@ -243,7 +243,7 @@ async function sendListingHiddenEmail(projectId: number, reasonKey: string, note
   }
 }
 
-async function sendListingRestoredEmail(projectId: number) {
+async function sendListingRestoredEmail(projectId: number, note?: string) {
   try {
     const res = await pool.query(`SELECT name, email, slug FROM projects WHERE id = $1`, [projectId])
     const row = res.rows[0]
@@ -251,18 +251,27 @@ async function sendListingRestoredEmail(projectId: number) {
     if (await isUnsubscribed(row.email)) return
     const slug = row.slug || ""
     const base = `font-family:Arial,sans-serif;max-width:560px;margin:0 auto;padding:40px 24px;background:#060c20;color:#e8ecff;`
+    const noteHtml = note?.trim()
+      ? `<div style="padding:14px 16px;background:rgba(0,184,122,0.05);border:1px solid rgba(0,184,122,0.15);border-radius:8px;margin:0 0 24px;">
+           <div style="font-size:9px;font-family:monospace;color:#00b87a;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:8px;">Note from the team</div>
+           <div style="font-size:13px;color:#e8ecff;line-height:1.7;">${String(note).slice(0, 500)}</div>
+         </div>` : ""
     await resend.emails.send({
       from:     "ArcLens <support@mail.arclenz.xyz>",
       reply_to: process.env.TEAM_EMAIL || "support@arclenz.xyz",
       to:       row.email,
       subject:  `Your ArcLens listing is live again — ${row.name}`,
       headers:  unsubHeaders(row.email),
-      text: `Your ArcLens listing is live again\n\n${row.name}\n\nThanks for sorting that out. Your listing is back in the directory:\n${BASE_URL}/ecosystem/${slug}\n\nArcLens - arclenz.xyz`,
+      text: `Your ArcLens listing is live again\n\n${row.name}\n\n`
+          + `Thanks for sorting that out. Your listing is back in the directory:\n${BASE_URL}/ecosystem/${slug}\n\n`
+          + (note?.trim() ? `Note from the team: ${note}\n\n` : "")
+          + `ArcLens - arclenz.xyz`,
       html: `<div style="${base}">
         <div style="margin-bottom:28px;"><span style="font-size:22px;font-weight:700;color:#e8ecff;">Arc</span><span style="font-size:22px;font-weight:700;color:#1a56ff;">Lens</span></div>
         <div style="font-size:11px;font-family:monospace;text-transform:uppercase;letter-spacing:0.1em;color:#00b87a;">Listing restored</div>
         <h1 style="font-size:22px;font-weight:700;margin:10px 0 16px;color:#e8ecff;">${row.name}</h1>
-        <p style="font-size:14px;color:#c8d2e8;line-height:1.8;margin:0 0 24px;">Thanks for sorting that out. Your listing is back in the directory.</p>
+        <p style="font-size:14px;color:#c8d2e8;line-height:1.8;margin:0 0 20px;">Thanks for sorting that out. Your listing is back in the directory.</p>
+        ${noteHtml}
         <a href="${BASE_URL}/ecosystem/${slug}" style="display:inline-block;padding:14px 28px;background:#1a56ff;color:#fff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;">View your listing →</a>
         <hr style="border:none;border-top:1px solid rgba(255,255,255,0.06);margin:28px 0 16px;">
         <p style="font-size:11px;color:#6b7da8;text-align:center;line-height:1.7;">${unsubFooter(row.email)}</p>
@@ -952,7 +961,7 @@ export async function POST(req: NextRequest) {
         "UPDATE projects SET live = true WHERE (id::text = $1 OR slug = $1) AND approved = true RETURNING id, name",
         [String(id)])
       if (!r.rows.length) return NextResponse.json({ error: "Project not found" }, { status: 404 })
-      if (data?.notify !== false) await sendListingRestoredEmail(r.rows[0].id)
+      if (data?.notify !== false) await sendListingRestoredEmail(r.rows[0].id, data?.note)
       return NextResponse.json({ success: true, name: r.rows[0].name, live: true })
     }
 

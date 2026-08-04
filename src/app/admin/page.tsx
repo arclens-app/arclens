@@ -163,6 +163,10 @@ export default function AdminPage() {
   const [hideReason, setHideReason] = useState("security")
   const [hideNote, setHideNote]     = useState("")
   const [hideNotify, setHideNotify] = useState(true)
+  // Restore dialog — same control as hide: optional note, and the choice not to email.
+  const [restoreFor, setRestoreFor]       = useState<any>(null)
+  const [restoreNote, setRestoreNote]     = useState("")
+  const [restoreNotify, setRestoreNotify] = useState(true)
 
   const mono  = "'DM Mono', monospace"
   const surf  = "var(--surf, #0a0e1a)"
@@ -1297,7 +1301,7 @@ export default function AdminPage() {
                         {p.live
                           ? <ActionBtn onClick={() => setHideFor(p)} disabled={acting} color="red">Hide</ActionBtn>
                           : <>
-                              <ActionBtn onClick={() => act(p.id, "restore-listing")} disabled={acting} color="green">Restore</ActionBtn>
+                              <ActionBtn onClick={() => setRestoreFor(p)} disabled={acting} color="green">Restore</ActionBtn>
                               {/* Already hidden but never told why — re-runs the hide action,
                                   which is a no-op on state and sends the explanation email. */}
                               <ActionBtn onClick={() => setHideFor(p)} disabled={acting} color="blue">Notify</ActionBtn>
@@ -2491,6 +2495,48 @@ export default function AdminPage() {
       </div>
 
       {/* ── EDIT MODAL ── */}
+      {/* Restore dialog — deliberately mirrors the hide dialog so the two halves
+          of the same decision feel like one tool. */}
+      {restoreFor && (
+        <div onClick={() => setRestoreFor(null)}
+          style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.72)", zIndex:200, display:"flex", alignItems:"center", justifyContent:"center", backdropFilter:"blur(4px)" }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ width:"100%", maxWidth:"520px", margin:"0 16px", background:surf, border:"1px solid "+bdr, borderRadius:"14px", padding:"26px" }}>
+            <div style={{ fontSize:"16px", fontWeight:600, color:t1, marginBottom:"4px" }}>Restore: {restoreFor.name}</div>
+            <div style={{ fontSize:"11px", fontFamily:mono, color:t3, marginBottom:"20px" }}>
+              Puts it back in the public directory straight away.
+            </div>
+
+            <div style={{ fontSize:"11px", fontFamily:mono, color:t3, textTransform:"uppercase", letterSpacing:"0.1em", marginBottom:"8px" }}>Note to founder (optional)</div>
+            <textarea value={restoreNote} onChange={e => setRestoreNote(e.target.value)} rows={3}
+              placeholder="e.g. Thanks for getting the flag cleared."
+              style={{ width:"100%", background:surf2, border:"1px solid "+bdr, borderRadius:"8px", padding:"10px 12px", fontSize:"12px", color:t1, outline:"none", boxSizing:"border-box" as const, fontFamily:"'Geist',sans-serif", resize:"vertical" as const, marginBottom:"14px" }} />
+
+            <label style={{ display:"flex", alignItems:"center", gap:"8px", cursor:"pointer", fontSize:"12px", color:t2, marginBottom:"20px" }}>
+              <input type="checkbox" checked={restoreNotify} onChange={e => setRestoreNotify(e.target.checked)} />
+              Email the founder
+            </label>
+
+            <div style={{ display:"flex", gap:"10px" }}>
+              <button disabled={acting}
+                onClick={async () => {
+                  const p = restoreFor
+                  setRestoreFor(null)
+                  await act(p.id, "restore-listing", "projects", { note: restoreNote, notify: restoreNotify })
+                  setRestoreNote("")
+                }}
+                style={{ flex:1, height:"40px", background:"#00976a", color:"#fff", fontSize:"13px", fontWeight:600, border:"none", borderRadius:"8px", cursor:"pointer", fontFamily:"'Geist',sans-serif" }}>
+                Restore listing
+              </button>
+              <button onClick={() => setRestoreFor(null)}
+                style={{ height:"40px", padding:"0 20px", background:"transparent", color:t2, fontSize:"13px", border:"1px solid "+bdr, borderRadius:"8px", cursor:"pointer", fontFamily:"'Geist',sans-serif" }}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Hide dialog — pick why, optionally add a note, and the founder gets an
           email explaining what to fix and that the listing is recoverable. */}
       {hideFor && (
