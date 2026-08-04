@@ -39,6 +39,27 @@ function brandedHTML(code: string): string {
 </div>`
 }
 
+// Plain-text alternative. The HTML-only version was 27% text by weight, which
+// filters read as markup-heavy and score down. Sending both parts is also what
+// a legitimate transactional sender does.
+function plainText(code: string): string {
+  return `Your ArcLens sign-in code
+
+Use this code to finish signing in to ArcLens:
+
+    ${code}
+
+It expires in 10 minutes. Never share this code with anyone.
+
+ArcLens will never ask you for a seed phrase, private key, or wallet
+password. We only ever send you to arclenz.xyz
+
+If you didn't request this code, you can safely ignore this email.
+Your account stays safe.
+
+ArcLens - arclenz.xyz`
+}
+
 export async function POST(req: NextRequest) {
   try {
     // Global IP rate limit — defends against Resend bill spikes from spam
@@ -86,10 +107,11 @@ export async function POST(req: NextRequest) {
 
     const emailPromise = resend.emails.send({
       from:     "ArcLens <support@mail.arclenz.xyz>",
-      reply_to: process.env.TEAM_EMAIL || "arclensdev@gmail.com",
+      reply_to: process.env.TEAM_EMAIL || "support@arclenz.xyz",
       to:       lower,
       subject:  "Your ArcLens sign-in code",
       html:     brandedHTML(code),
+      text:     plainText(code),
     })
 
     const [, emailResult] = await Promise.all([dbPromise, emailPromise])

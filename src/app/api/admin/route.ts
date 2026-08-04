@@ -107,7 +107,7 @@ async function sendCampaignEmail(campaignId: number, status: "approved" | "rejec
     if (status === "approved") {
       await resend.emails.send({
         from:     "ArcLens <support@mail.arclenz.xyz>",
-        reply_to: process.env.TEAM_EMAIL || "arclensdev@gmail.com",
+        reply_to: process.env.TEAM_EMAIL || "support@arclenz.xyz",
         to:       row.email,
         subject:  `Your campaign is live — ${row.title}`,
         headers:  unsubHeaders(row.email),
@@ -127,7 +127,7 @@ async function sendCampaignEmail(campaignId: number, status: "approved" | "rejec
     } else {
       await resend.emails.send({
         from:     "ArcLens <support@mail.arclenz.xyz>",
-        reply_to: process.env.TEAM_EMAIL || "arclensdev@gmail.com",
+        reply_to: process.env.TEAM_EMAIL || "support@arclenz.xyz",
         to:       row.email,
         subject:  `Campaign not approved — ${row.title}`,
         headers:  unsubHeaders(row.email),
@@ -190,7 +190,7 @@ async function sendProjectUpdateEmail(
 
       await resend.emails.send({
         from:     "ArcLens <support@mail.arclenz.xyz>",
-        reply_to: process.env.TEAM_EMAIL || "arclensdev@gmail.com",
+        reply_to: process.env.TEAM_EMAIL || "support@arclenz.xyz",
         to:       row.email,
         subject:  `Listing updates live — ${row.name}`,
         headers:  unsubHeaders(row.email),
@@ -209,7 +209,7 @@ async function sendProjectUpdateEmail(
     } else {
       await resend.emails.send({
         from:     "ArcLens <support@mail.arclenz.xyz>",
-        reply_to: process.env.TEAM_EMAIL || "arclensdev@gmail.com",
+        reply_to: process.env.TEAM_EMAIL || "support@arclenz.xyz",
         to:       row.email,
         subject:  `Listing update not approved — ${row.name}`,
         headers:  unsubHeaders(row.email),
@@ -254,7 +254,7 @@ async function sendCampaignUpdateEmail(campaignId: number, campaignTitle: string
     if (status === "approved") {
       await resend.emails.send({
         from:     "ArcLens <support@mail.arclenz.xyz>",
-        reply_to: process.env.TEAM_EMAIL || "arclensdev@gmail.com",
+        reply_to: process.env.TEAM_EMAIL || "support@arclenz.xyz",
         to:       row.email,
         subject:  `Campaign update approved — ${campaignTitle}`,
         headers:  unsubHeaders(row.email),
@@ -272,7 +272,7 @@ async function sendCampaignUpdateEmail(campaignId: number, campaignTitle: string
     } else {
       await resend.emails.send({
         from:     "ArcLens <support@mail.arclenz.xyz>",
-        reply_to: process.env.TEAM_EMAIL || "arclensdev@gmail.com",
+        reply_to: process.env.TEAM_EMAIL || "support@arclenz.xyz",
         to:       row.email,
         subject:  `Campaign update not approved — ${campaignTitle}`,
         headers:  unsubHeaders(row.email),
@@ -317,7 +317,7 @@ async function sendProjectEmail(projectId: number, status: "approved" | "rejecte
     if (status === "approved") {
       await resend.emails.send({
         from:     "ArcLens <support@mail.arclenz.xyz>",
-        reply_to: process.env.TEAM_EMAIL || "arclensdev@gmail.com",
+        reply_to: process.env.TEAM_EMAIL || "support@arclenz.xyz",
         to:       row.email,
         subject:  `Your ArcLens listing is live — ${row.name}`,
         headers:  unsubHeaders(row.email),
@@ -345,7 +345,7 @@ async function sendProjectEmail(projectId: number, status: "approved" | "rejecte
 
       await resend.emails.send({
         from:     "ArcLens <support@mail.arclenz.xyz>",
-        reply_to: process.env.TEAM_EMAIL || "arclensdev@gmail.com",
+        reply_to: process.env.TEAM_EMAIL || "support@arclenz.xyz",
         to:       row.email,
         subject:  `Your ArcLens listing submission — ${row.name}`,
         headers:  unsubHeaders(row.email),

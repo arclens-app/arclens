@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
       const resend = new Resend(process.env.RESEND_API_KEY || "")
       await resend.emails.send({
         from:     "ArcLens <support@mail.arclenz.xyz>",
-        reply_to: process.env.TEAM_EMAIL || "arclensdev@gmail.com",
+        reply_to: process.env.TEAM_EMAIL || "support@arclenz.xyz",
         to:       email.trim(),
         subject:  `Your ArcLens dashboard for ${project.name}`,
         headers: {

@@ -12,7 +12,7 @@ const pool = getPool()
 
 export const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_APP_URL || "https://arclenz.xyz"
 export const FROM_ADDRESS = "ArcLens <support@mail.arclenz.xyz>"
-export const REPLY_TO = process.env.TEAM_EMAIL || "arclensdev@gmail.com"
+export const REPLY_TO = process.env.TEAM_EMAIL || "support@arclenz.xyz"
 
 // Build the client per-call so a missing key can't crash the route at module
 // load — calls no-op gracefully when Resend isn't available (e.g. local dev).
