@@ -20,6 +20,10 @@
     {
       "path": "/api/cron/subgraph-metrics",
       "schedule": "0 4 * * *"
+    },
+    {
+      "path": "/api/cron/rescan-urls",
+      "schedule": "20 */6 * * *"
     }
   ]
 }

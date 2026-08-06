@@ -116,6 +116,42 @@ export async function scanUrl(rawUrl: string | null | undefined): Promise<void> 
  * Re-scan stale or unresolved entries in small batches — called from the
  * trust-recheck cron. VT free tier allows 4 req/min, so default batch is 4.
  */
+/**
+ * One rotation step for the scheduled scanner.
+ *
+ * VirusTotal's free tier allows 4 requests/minute and 500/day, so this can
+ * never sweep everything at once. Instead it takes the most overdue handful
+ * each run and rotates through the whole directory over time:
+ *
+ *   1. live listings whose website has never been scanned  (biggest blind spot)
+ *   2. scans stuck on queued/error, or older than 7 days
+ *
+ * At a batch of 4 every 15 minutes that is ~384 checks/day, comfortably under
+ * the daily cap and leaving headroom for manual rescans from the admin panel.
+ */
+export async function scanNextBatch(batch = 4): Promise<{ scanned: number; source: string }> {
+  const key = process.env.VIRUSTOTAL_API_KEY
+  if (!key) return { scanned: 0, source: "no_key" }
+  await ensureTable()
+
+  const fresh = await pool.query(
+    `SELECT p.website AS url
+       FROM projects p
+      WHERE p.approved AND p.live AND p.website IS NOT NULL AND p.website <> ''
+        AND NOT EXISTS (SELECT 1 FROM url_scans s WHERE s.url = p.website)
+      ORDER BY p.created_at DESC
+      LIMIT $1`,
+    [batch],
+  )
+  if (fresh.rows.length) {
+    for (const row of fresh.rows) await scanUrl(row.url)
+    return { scanned: fresh.rows.length, source: "never_scanned" }
+  }
+
+  const n = await rescanStale(batch)
+  return { scanned: n, source: "stale" }
+}
+
 export async function rescanStale(batch = 4): Promise<number> {
   const key = process.env.VIRUSTOTAL_API_KEY
   if (!key) return 0

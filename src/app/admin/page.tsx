@@ -157,7 +157,7 @@ export default function AdminPage() {
   const [eventLogoUploading, setEventLogoUploading] = useState(false)
   const [search, setSearch] = useState("")
   // Projects tab: show all, only live, or only hidden (taken-down) listings.
-  const [liveFilter, setLiveFilter] = useState<"all"|"live"|"hidden">("all")
+  const [liveFilter, setLiveFilter] = useState<"all"|"live"|"hidden"|"flagged">("all")
   // Hide dialog: which project, why, and an optional note for the founder.
   const [hideFor, setHideFor]       = useState<any>(null)
   const [hideReason, setHideReason] = useState("security")
@@ -480,6 +480,25 @@ export default function AdminPage() {
 
   // Reputation chip + re-check button for a founder-submitted URL. Reads the
   // cached VirusTotal verdict (exact URL or trailing-slash variant).
+  // A listing counts as flagged when VirusTotal reports any malicious or
+  // suspicious engine for its website. Matches urlRepChip's lookup so the
+  // filter count and the red chip can never disagree.
+  function scanFor(url: string | null | undefined) {
+    if (!url) return null
+    return urlScans[url] || urlScans[url.replace(/\/$/, "")] || urlScans[url + "/"] || null
+  }
+  function isFlagged(url: string | null | undefined): boolean {
+    return scanFor(url)?.verdict === "flagged"
+  }
+  // Malicious verdicts weigh far more than suspicious ones — a single engine
+  // calling something suspicious is noise (Kraken and Ledger both score 1),
+  // while 10+ malicious is unambiguous. Weighting keeps the real problems on top.
+  function flagScore(url: string | null | undefined): number {
+    const s = scanFor(url)
+    if (!s || s.verdict !== "flagged") return -1
+    return (s.malicious || 0) * 10 + (s.suspicious || 0)
+  }
+
   function urlRepChip(url: string | null | undefined) {
     if (!url) return null
     const scan = urlScans[url] || urlScans[url.replace(/\/$/, "")] || urlScans[url + "/"]
@@ -1254,16 +1273,23 @@ export default function AdminPage() {
                       distinguishable by the ABSENCE of a Live pill, which is invisible
                       across 300+ rows. This filter makes taken-down listings findable
                       so they can be reviewed and restored. */}
-                  <div style={{ display:"flex", gap:"6px" }}>
-                    {([["all","All"],["live","Live"],["hidden","Hidden"]] as const).map(([k,l]) => {
-                      const n = k === "all" ? projects.length
-                              : k === "live" ? projects.filter((p:any)=>p.live).length
-                              : projects.filter((p:any)=>!p.live).length
-                      const on = liveFilter === k
+                  <div style={{ display:"flex", gap:"6px", flexWrap:"wrap" }}>
+                    {([["all","All"],["live","Live"],["hidden","Hidden"],["flagged","Flagged"]] as const).map(([k,l]) => {
+                      const n = k === "all"     ? projects.length
+                              : k === "live"    ? projects.filter((p:any)=>p.live).length
+                              : k === "hidden"  ? projects.filter((p:any)=>!p.live).length
+                              :                   projects.filter((p:any)=>isFlagged(p.website)).length
+                      const on   = liveFilter === k
+                      // Flagged is a warning, not a neutral filter — colour it so a
+                      // non-zero count is noticeable without opening the tab.
+                      const warn = k === "flagged" && n > 0
+                      const bg   = on ? (warn ? "#c04545" : "#1a56ff") : "transparent"
+                      const fg   = on ? "#fff" : (warn ? "#e05a5a" : t2)
+                      const bc   = on ? bg : (warn ? "rgba(224,90,90,0.4)" : bdr)
                       return (
                         <button key={k} onClick={() => setLiveFilter(k)}
-                          style={{ height:"28px", padding:"0 12px", background: on ? "#1a56ff" : "transparent", color: on ? "#fff" : t2,
-                                   fontSize:"11px", fontFamily:mono, border:"1px solid "+(on ? "#1a56ff" : bdr), borderRadius:"99px", cursor:"pointer" }}>
+                          style={{ height:"28px", padding:"0 12px", background:bg, color:fg,
+                                   fontSize:"11px", fontFamily:mono, border:"1px solid "+bc, borderRadius:"99px", cursor:"pointer" }}>
                           {l} · {n}
                         </button>
                       )
@@ -1273,7 +1299,14 @@ export default function AdminPage() {
                     <div style={{ padding:"48px", textAlign:"center", fontFamily:mono, fontSize:"11px", color:t3 }}>No approved projects yet</div>
                   ) : projects
                       .filter((p:any) => p.name?.toLowerCase().includes(search.toLowerCase()))
-                      .filter((p:any) => liveFilter === "all" ? true : liveFilter === "live" ? p.live : !p.live)
+                      .filter((p:any) => liveFilter === "all"    ? true
+                                       : liveFilter === "live"   ? p.live
+                                       : liveFilter === "hidden" ? !p.live
+                                       :                           isFlagged(p.website))
+                      // Worst offenders first when reviewing flags; newest first otherwise.
+                      .sort((a:any, b:any) => liveFilter === "flagged"
+                        ? flagScore(b.website) - flagScore(a.website)
+                        : new Date(b.created_at||0).getTime() - new Date(a.created_at||0).getTime())
                       .map((p: any) => (
                     <div key={p.id} style={{ background:surf, border:"1px solid "+bdr, borderRadius:"10px", padding:"14px 18px", display:"flex", alignItems:"center", gap:"14px" }}>
                       <div style={{ width:"38px", height:"38px", borderRadius:"8px", background:"rgba(26,86,255,0.06)", border:"1px solid "+bdr, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", overflow:"hidden" }}>
@@ -1293,6 +1326,13 @@ export default function AdminPage() {
                         </div>
                         <div style={{ fontSize:"11px", color:t2, display:"flex", alignItems:"center", gap:"8px", flexWrap:"wrap" }}>
                           <span>{p.category} · {p.website || "No website"}</span>
+                          {p.created_at && (
+                            <span style={{ fontFamily:mono, color:t3 }} title={new Date(p.created_at).toLocaleString()}>
+                              {new Date(p.created_at).toLocaleDateString(undefined,{ day:"2-digit", month:"short", year:"numeric" })}
+                              {", "}
+                              {new Date(p.created_at).toLocaleTimeString(undefined,{ hour:"2-digit", minute:"2-digit" })}
+                            </span>
+                          )}
                           {p.website && urlRepChip(p.website)}
                         </div>
                       </div>
