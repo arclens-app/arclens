@@ -1,7 +1,7 @@
 "use client"
 import ArcLayout from "@/components/ArcLayout"
 
-const LAST_UPDATED = "July 22, 2026"
+const LAST_UPDATED = "August 6, 2026"
 
 const sections = [
   {
@@ -61,10 +61,31 @@ ArcLens is independently operated and is not affiliated with, endorsed by, or op
 • The project does not infringe any third-party intellectual property rights
 • You will not submit false, competing, or fraudulent project listings
 
-ArcLens reserves the right to approve, reject, edit, or remove any submission at its sole discretion without prior notice. Submission of a project does not guarantee approval or continued listing.`,
+ArcLens reserves the right to approve, reject, edit, or remove any submission at its sole discretion without prior notice. Submission of a project does not guarantee approval or continued listing.
+
+Listing requirements. Projects must provide a website on a domain the project owns. Free hosting subdomains are not accepted for new submissions. ArcLens may require additional verification, including a deployed contract address, before a listing is approved or promoted within the trust ladder.`,
   },
   {
     id: "7",
+    title: "Third-Party Projects and Listings",
+    body: `The Arc Ecosystem Directory lists projects operated by independent third parties. ArcLens does not build, control, audit, host, or operate any listed project, and has no access to their contracts, websites, funds, or systems.
+
+7.1 A listing is not an endorsement. Inclusion in the directory does not mean ArcLens recommends a project, vouches for its team, or considers it safe to use. It means the project submitted itself and passed the checks described in these Terms.
+
+7.2 Trust badges are point-in-time signals, not guarantees. Our trust ladder reflects automated and manual checks performed at a particular moment — contract ownership, domain verification, reputation scanning, and similar. A project's code, website, ownership, or intentions can change at any time after a check is performed. A badge is not a security audit, a warranty of safety, or a guarantee that a project will behave honestly.
+
+7.3 You interact with listed projects at your own risk. Any connection of a wallet, signing of a transaction, approval of a token allowance, transfer of funds, or provision of personal information to a listed project is a transaction between you and that project. ArcLens is not a party to it.
+
+7.4 No liability for third-party conduct. To the maximum extent permitted by applicable law, ArcLens is not liable for any loss or damage arising from your use of, or reliance on, any listed project — including loss of funds, theft, fraud, rug pulls, smart contract exploits or failures, phishing, compromised or expired domains, misleading claims by a project, or a project ceasing to operate.
+
+7.5 Outbound links. Links to third-party websites are provided for convenience. ArcLens does not control their content and is not responsible for it. Third-party sites may change, expire, or be compromised after we last checked them.
+
+7.6 Verify before you act. Always confirm a project's contract address and official domain through the project's own channels before interacting. ArcLens will never ask you for a seed phrase, private key, or wallet password, and never requests token approvals or transfers.
+
+7.7 Reporting. If you believe a listed project is fraudulent, compromised, or impersonating another party, contact support@arclenz.xyz. We remove or hide listings we consider unsafe, but we cannot detect every issue and do not undertake to monitor listed projects continuously.`,
+  },
+  {
+    id: "8",
     title: "USDC Payments and Transfers",
     body: `Where ArcLens facilitates USDC transfers between users — including campaign rewards, community tips, and other peer-to-peer payments:
 • All transfers occur directly between user wallets on the Arc network
@@ -74,7 +95,7 @@ ArcLens reserves the right to approve, reject, edit, or remove any submission at
 • ArcLens is not liable for funds sent to incorrect addresses or lost due to user error`,
   },
   {
-    id: "8",
+    id: "9",
     title: "Acceptable Use",
     body: `You agree not to use ArcLens to:
 • Abuse, scrape, crawl, or overload the platform's APIs, infrastructure, or database
@@ -87,7 +108,7 @@ ArcLens reserves the right to approve, reject, edit, or remove any submission at
 ArcLens reserves the right to suspend or permanently restrict access to any user who violates these terms.`,
   },
   {
-    id: "9",
+    id: "10",
     title: "Intellectual Property",
     body: `9.1 ArcLens owns all rights, title, and interest in the platform, its design, codebase, and original content, including all trademarks and branding.
 
@@ -96,28 +117,28 @@ ArcLens reserves the right to suspend or permanently restrict access to any user
 9.3 On-chain blockchain data (transactions, addresses, contract code) is public information and not subject to copyright protection.`,
   },
   {
-    id: "10",
+    id: "11",
     title: "Disclaimers",
     body: `THE PLATFORM IS PROVIDED "AS IS" AND "AS AVAILABLE" WITHOUT WARRANTIES OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, ACCURACY, OR NON-INFRINGEMENT.
 
 ARCLENS DOES NOT WARRANT THAT THE PLATFORM WILL BE UNINTERRUPTED, ERROR-FREE, OR FREE OF HARMFUL COMPONENTS. BLOCKCHAIN DATA IS SOURCED FROM THIRD-PARTY NODES AND ARCLENS MAKES NO REPRESENTATIONS AS TO ITS ACCURACY OR COMPLETENESS.`,
   },
   {
-    id: "11",
+    id: "12",
     title: "Limitation of Liability",
     body: `TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, ARCLENS AND ITS OPERATORS SHALL NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES ARISING FROM OR RELATED TO YOUR USE OF THE PLATFORM, INCLUDING BUT NOT LIMITED TO LOSS OF FUNDS, LOSS OF DATA, LOSS OF PROFITS, OR BUSINESS INTERRUPTION, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.
 
 IN NO EVENT SHALL ARCLENS'S TOTAL LIABILITY TO YOU EXCEED THE GREATER OF (A) THE AMOUNT YOU PAID TO USE THE PLATFORM IN THE 12 MONTHS PRECEDING THE CLAIM, OR (B) USD $100.`,
   },
   {
-    id: "12",
+    id: "13",
     title: "Governing Law and Dispute Resolution",
     body: `These Terms are governed by and construed in accordance with the laws of the British Virgin Islands, without regard to its conflict of law principles.
 
 Any dispute, controversy, or claim arising out of or relating to these Terms or the platform shall be resolved by binding arbitration administered under the LCIA Arbitration Rules, with proceedings conducted in English. The seat of arbitration shall be the British Virgin Islands. Nothing in this clause prevents either party from seeking emergency injunctive relief from a court of competent jurisdiction.`,
   },
   {
-    id: "13",
+    id: "14",
     title: "Lens AI Assistant and Builder Recognition",
     body: `Lens AI is an in-platform assistant that answers questions about Arc, ArcLens, and the projects listed on the platform.
 
@@ -130,12 +151,12 @@ Any dispute, controversy, or claim arising out of or relating to these Terms or 
 13.4 Builders receiving recognition. Any recognition payment is provided "as is". You are solely responsible for determining and meeting any tax, reporting, or regulatory obligations arising from payments you receive. ArcLens does not withhold taxes, provide tax documentation, or guarantee any amount, frequency, or continuation of payments.`,
   },
   {
-    id: "14",
+    id: "15",
     title: "Changes to These Terms",
     body: `ArcLens may update these Terms at any time. The "Last updated" date at the top of this page will reflect the most recent revision. We will make reasonable efforts to notify users of material changes via the platform. Your continued use of the platform after any change constitutes your acceptance of the updated Terms.`,
   },
   {
-    id: "15",
+    id: "16",
     title: "Contact",
     body: `For questions, concerns, or legal notices regarding these Terms, contact us at:\n\nsupport@arclenz.xyz`,
   },

@@ -18,6 +18,33 @@ const DISPOSABLE_EMAIL_DOMAINS = new Set([
   "getnada.com", "sharklasers.com", "maildrop.cc", "dispostable.com",
 ])
 
+// Free hosting subdomains. A project on one of these has spent nothing and
+// committed to nothing, which is the profile of the launchpad/memecoin flood —
+// and no user should be connecting a wallet on someone else's subdomain.
+// A domain costs ~$10, so this filters effort, which is exactly the intent.
+//
+// Matched on the registrable domain, so `foo.vercel.app` is blocked while
+// `vercel.com` itself would not be.
+const FREE_HOSTS = new Set([
+  "vercel.app", "vercel.sh", "netlify.app", "netlify.com", "netlify.live",
+  "github.io", "pages.dev", "workers.dev", "onrender.com", "herokuapp.com",
+  "web.app", "firebaseapp.com", "replit.app", "repl.co", "glitch.me",
+  "surge.sh", "fly.dev", "railway.app", "up.railway.app", "streamlit.app",
+  "framer.website", "framer.app", "carrd.co", "notion.site", "gitbook.io",
+  "wixsite.com", "webflow.io", "bubbleapps.io", "softr.app", "durable.co",
+  "w3spaces.com", "000webhostapp.com", "weeblysite.com", "myshopify.com",
+  "substack.com", "medium.com", "linktr.ee", "beacons.ai", "bio.link",
+])
+
+/** The free-host suffix a hostname sits under, or null if it's a real domain. */
+export function freeHostOf(host: string): string | null {
+  const h = host.toLowerCase().replace(/^www\./, "")
+  for (const f of FREE_HOSTS) {
+    if (h === f || h.endsWith("." + f)) return f
+  }
+  return null
+}
+
 function tldOf(host: string): string {
   const parts = host.toLowerCase().split(".").filter(Boolean)
   return parts.length ? parts[parts.length - 1] : ""
@@ -38,6 +65,13 @@ export function validateWebsite(raw: string | null | undefined): { ok: true } | 
   if (!host) return { ok: false, error: "Website must be a valid http(s) URL" }
   if (RESERVED_TLDS.has(tldOf(host))) return { ok: false, error: "Website domain is not a real, registrable domain" }
   if (!host.includes(".")) return { ok: false, error: "Website domain looks incomplete" }
+  const free = freeHostOf(host)
+  if (free) {
+    return {
+      ok: false,
+      error: `ArcLens requires a project-owned domain. Free hosting subdomains like ${free} aren't accepted — point your site at a domain you own and submit again.`,
+    }
+  }
   return { ok: true }
 }
 
