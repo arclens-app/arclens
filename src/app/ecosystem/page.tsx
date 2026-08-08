@@ -103,6 +103,12 @@ export default function EcosystemPage() {
   const [submitted, setSubmitted]     = useState(false)
   const [isUpdate, setIsUpdate]       = useState(false)
   const [submitError, setSubmitError] = useState("")
+  // Email-ownership step, and the reference issued once it passes.
+  const [awaitingCode, setAwaitingCode] = useState(false)
+  const [codeInput, setCodeInput]       = useState("")
+  const [codeError, setCodeError]       = useState("")
+  const [resendAt, setResendAt]         = useState(0)
+  const [reference, setReference]       = useState("")
   const [nameWarn, setNameWarn]       = useState("")
   const [similarNames, setSimilarNames] = useState<string[]>([])
   const [contractErr, setContractErr] = useState("")
@@ -231,7 +237,11 @@ export default function EcosystemPage() {
     }
   }
 
-  async function submitProject() {
+  // Two-phase submit. The first call validates and emails a 6-digit code
+  // without writing anything; the second carries the code back and commits.
+  // `verifyCode` is passed explicitly rather than read from state so the
+  // resend button can re-run phase one without sending a stale code.
+  async function submitProject(verifyCode?: string) {
     if (!form.name.trim())    { setSubmitError("Project name is required"); return }
     if (!form.tagline.trim()) { setSubmitError("Tagline is required"); return }
     if (!form.email.trim())   { setSubmitError("Contact email is required"); return }
@@ -242,12 +252,27 @@ export default function EcosystemPage() {
       const res  = await fetch("/api/ecosystem", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, logo_url: logoUrl, contracts: extraContracts.map(c=>c.trim()).filter(Boolean) }),
+        body: JSON.stringify({ ...form, logo_url: logoUrl, contracts: extraContracts.map(c=>c.trim()).filter(Boolean), code: verifyCode || undefined }),
       })
       const data = await res.json()
-      if (data.success) { setSubmitted(true); setIsUpdate(data.updated || false) }
-      else setSubmitError(data.error || "Submission failed")
-    } catch { setSubmitError("Network error — try again") }
+      if (data.needsVerification) {
+        setAwaitingCode(true)
+        setCodeError("")
+        setResendAt(Date.now() + 60_000)
+      } else if (data.success) {
+        setSubmitted(true)
+        setIsUpdate(data.updated || false)
+        setReference(data.reference || "")
+        setAwaitingCode(false)
+      } else if (awaitingCode) {
+        setCodeError(data.error || "Submission failed")
+      } else {
+        setSubmitError(data.error || "Submission failed")
+      }
+    } catch {
+      if (awaitingCode) setCodeError("Network error — try again")
+      else setSubmitError("Network error — try again")
+    }
     finally { setSubmitting(false) }
   }
 
@@ -586,10 +611,62 @@ export default function EcosystemPage() {
             </div>
 
             {submitted ? (
-              <div style={{ padding: "48px", textAlign: "center" }}>
-                <div style={{ fontSize: "36px", marginBottom: "14px" }}>{isUpdate ? "✏️" : "🎉"}</div>
-                <div style={{ fontSize: "16px", fontWeight: 600, marginBottom: "6px", color: t1 }}>{isUpdate ? "Update submitted!" : "Submission received!"}</div>
-                <div style={{ fontSize: "13px", color: t2, fontWeight: 300 }}>Your project will appear after review.</div>
+              <div style={{ padding: "44px 28px", textAlign: "center" }}>
+                <div style={{ fontSize: "32px", marginBottom: "12px" }}>{isUpdate ? "✏️" : "🎉"}</div>
+                <div style={{ fontSize: "17px", fontWeight: 600, marginBottom: "6px", color: t1 }}>{isUpdate ? "Update received" : "Submission received"}</div>
+                <div style={{ fontSize: "13px", color: t2, fontWeight: 300, marginBottom: reference ? "26px" : 0 }}>
+                  Every submission is reviewed by a person before it goes live.
+                </div>
+                {reference && (
+                  <>
+                    {/* The reference is the whole point of this screen — a founder
+                        can quote it back instead of describing their project again. */}
+                    <div style={{ fontSize: "9.5px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.14em", marginBottom: "8px" }}>Your reference</div>
+                    <div style={{ fontSize: "26px", fontFamily: mono, fontWeight: 700, letterSpacing: "2px", color: "#8aaeff", marginBottom: "10px" }}>{reference}</div>
+                    <div style={{ fontSize: "12px", color: t2, fontWeight: 300, lineHeight: 1.7, maxWidth: "380px", margin: "0 auto" }}>
+                      Keep this. Quote it in any email about this submission and we can find it instantly.
+                      We&apos;ll write to <span style={{ color: t1 }}>{form.email}</span> once it&apos;s been reviewed.
+                    </div>
+                  </>
+                )}
+              </div>
+            ) : awaitingCode ? (
+              <div style={{ padding: "44px 28px", textAlign: "center" }}>
+                <div style={{ fontSize: "9.5px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.14em", marginBottom: "10px" }}>Confirm your email</div>
+                <div style={{ fontSize: "17px", fontWeight: 600, color: t1, marginBottom: "8px" }}>Enter the 6-digit code</div>
+                <div style={{ fontSize: "13px", color: t2, fontWeight: 300, lineHeight: 1.7, marginBottom: "24px", maxWidth: "400px", marginLeft: "auto", marginRight: "auto" }}>
+                  We sent it to <span style={{ color: t1 }}>{form.email}</span>. Nothing has been submitted yet — this just confirms we can reach you about it.
+                </div>
+                <input
+                  value={codeInput}
+                  onChange={e => { setCodeInput(e.target.value.replace(/\D/g, "").slice(0, 6)); setCodeError("") }}
+                  onKeyDown={e => { if (e.key === "Enter" && codeInput.length === 6) submitProject(codeInput) }}
+                  inputMode="numeric" autoFocus placeholder="000000"
+                  style={{ width: "190px", height: "52px", textAlign: "center", fontSize: "24px", fontFamily: mono, letterSpacing: "8px",
+                           background: "rgba(255,255,255,0.03)", border: "1px solid " + (codeError ? "rgba(224,51,72,0.5)" : border),
+                           borderRadius: "10px", color: t1, outline: "none", marginBottom: "12px" }} />
+                {codeError && <div style={{ fontSize: "12px", color: "#e03348", marginBottom: "12px" }}>{codeError}</div>}
+                <div style={{ display: "flex", gap: "10px", justifyContent: "center", marginTop: "8px" }}>
+                  <button onClick={() => submitProject(codeInput)} disabled={submitting || codeInput.length !== 6}
+                    style={{ height: "42px", padding: "0 26px", background: codeInput.length === 6 ? "#1a56ff" : "rgba(26,86,255,0.25)",
+                             color: "#fff", fontSize: "13px", fontWeight: 600, border: "none", borderRadius: "9px",
+                             cursor: codeInput.length === 6 && !submitting ? "pointer" : "not-allowed" }}>
+                    {submitting ? "Confirming…" : "Confirm submission"}
+                  </button>
+                  <button onClick={() => { setAwaitingCode(false); setCodeInput(""); setCodeError("") }} disabled={submitting}
+                    style={{ height: "42px", padding: "0 18px", background: "transparent", color: t2, fontSize: "13px",
+                             border: "1px solid " + border, borderRadius: "9px", cursor: "pointer" }}>
+                    Back
+                  </button>
+                </div>
+                <button
+                  onClick={() => { setCodeInput(""); submitProject() }}
+                  disabled={submitting || Date.now() < resendAt}
+                  style={{ marginTop: "18px", background: "none", border: "none", padding: 0, fontSize: "12px", fontFamily: mono,
+                           color: Date.now() < resendAt ? t3 : "#8aaeff", cursor: Date.now() < resendAt ? "default" : "pointer",
+                           textDecoration: Date.now() < resendAt ? "none" : "underline", textUnderlineOffset: "2px" }}>
+                  Didn&apos;t get it? Send another code
+                </button>
               </div>
             ) : (
               <div style={{ padding: "20px" }}>
@@ -692,10 +769,15 @@ export default function EcosystemPage() {
                   </div>
                 )}
 
-                <button onClick={submitProject} disabled={submitting || uploading}
+                {/* Arrow function, not a bare reference — React would otherwise
+                    pass the click event in as the verification code. */}
+                <button onClick={() => submitProject()} disabled={submitting || uploading}
                   style={{ width: "100%", height: "42px", background: "#1a56ff", color: "#fff", fontSize: "13px", fontWeight: 600, border: "none", borderRadius: "8px", cursor: (submitting || uploading) ? "not-allowed" : "pointer", fontFamily: "'Geist', sans-serif", opacity: (submitting || uploading) ? .7 : 1 }}>
-                  {submitting ? "Submitting..." : "Submit Project"}
+                  {submitting ? "Sending code..." : "Continue"}
                 </button>
+                <div style={{ fontSize: "11px", color: t3, textAlign: "center", marginTop: "10px", lineHeight: 1.6 }}>
+                  We&apos;ll email a 6-digit code to confirm your address before anything is submitted.
+                </div>
               </div>
             )}
           </div>

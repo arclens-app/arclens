@@ -3,8 +3,39 @@ import { scanUrl } from "@/lib/urlScan"
 import { getPool } from "@/lib/dbPool"
 import { validateEmail, validateWebsite, hostFromUrl, domainResolves } from "@/lib/submissionGuards"
 import { extractTags } from "@/lib/projectTags"
+import { sendSubmissionCode, verifySubmissionCode } from "@/lib/submissionOtp"
 
 const pool = getPool()
+
+// Every accepted submission gets a reference the founder can quote back to us.
+// Alphabet excludes I, O, 0 and 1 so a code read off a screen and typed into an
+// email can't come back as something different.
+const REF_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
+
+let refColumnReady: Promise<unknown> | null = null
+function ensureRefColumn() {
+  if (!refColumnReady) {
+    refColumnReady = pool
+      .query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS submission_ref TEXT`)
+      .then(() => pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS projects_submission_ref_idx ON projects (submission_ref) WHERE submission_ref IS NOT NULL`))
+      .catch(e => { refColumnReady = null; throw e })
+  }
+  return refColumnReady
+}
+
+async function newSubmissionRef(): Promise<string> {
+  await ensureRefColumn()
+  for (let attempt = 0; attempt < 6; attempt++) {
+    let body = ""
+    for (let i = 0; i < 5; i++) body += REF_ALPHABET[Math.floor(Math.random() * REF_ALPHABET.length)]
+    const ref = `ARC-${body}`
+    const clash = await pool.query("SELECT 1 FROM projects WHERE submission_ref = $1 LIMIT 1", [ref])
+    if (!clash.rows.length) return ref
+  }
+  // Astronomically unlikely; fall back to something guaranteed unique rather
+  // than failing an otherwise valid submission.
+  return `ARC-${Date.now().toString(36).toUpperCase().slice(-5)}`
+}
 
 export async function GET() {
   try {
@@ -106,7 +137,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   const body = await req.json()
-  const { name, tagline, description, category, website, twitter, github, discord, contract, contracts: extraContracts, logo_url, email, city, country, founder } = body
+  const { name, tagline, description, category, website, twitter, github, discord, contract, contracts: extraContracts, logo_url, email, city, country, founder, code } = body
   const founderSocial = typeof founder === "string" ? founder.trim() || null : null
   const contractsArr = Array.isArray(extraContracts) ? extraContracts.map((c: string) => c.trim()).filter(Boolean) : []
   // Cap tagline + description so cards/listings stay neat (the form enforces
@@ -147,6 +178,22 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // ── Email ownership ───────────────────────────────────────────────────────
+  // Everything above is free to check, so a doomed submission never costs an
+  // email. From here the address has to prove itself: the first POST sends a
+  // code and writes nothing, the second carries the code back and commits.
+  // Without this, every later approval or rejection email could be going to a
+  // typo'd or invented inbox — which is how a sender quietly ends up mailing
+  // spam traps.
+  const submitterEmail = email.trim().toLowerCase()
+  if (!code || !String(code).trim()) {
+    const sent = await sendSubmissionCode(submitterEmail, name)
+    if (sent.ok === false) return NextResponse.json({ error: sent.error }, { status: sent.status })
+    return NextResponse.json({ needsVerification: true, email: submitterEmail })
+  }
+  const codeCheck = await verifySubmissionCode(submitterEmail, String(code).trim())
+  if (codeCheck.ok === false) return NextResponse.json({ error: codeCheck.error }, { status: codeCheck.status })
+
   // Generate slug from name
   const slug = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")
 
@@ -174,8 +221,19 @@ export async function POST(req: NextRequest) {
              logo_url||null, website?.trim()||null, twitter?.trim()||null,
              github?.trim()||null, discord?.trim()||null, contract.trim().toLowerCase(), founderSocial]
           )
+          // Re-issue a reference so a resubmission is trackable too, but keep
+          // the original if this project already has one.
+          await ensureRefColumn()
+          const prevRef = (await pool.query(
+            "SELECT submission_ref FROM projects WHERE contract = $1", [contract.trim().toLowerCase()],
+          )).rows[0]?.submission_ref
+          const ref = prevRef || await newSubmissionRef()
+          if (!prevRef) {
+            await pool.query("UPDATE projects SET submission_ref = $1 WHERE contract = $2",
+              [ref, contract.trim().toLowerCase()])
+          }
           if (website?.trim()) after(() => scanUrl(website))
-          return NextResponse.json({ success: true, updated: true })
+          return NextResponse.json({ success: true, updated: true, reference: ref })
         } else {
           return NextResponse.json({ error: "A project with this contract address already exists. Use the same email you registered with to update it." }, { status: 409 })
         }
@@ -198,19 +256,20 @@ export async function POST(req: NextRequest) {
     }
     const finalSlug = slug
 
+    const reference = await newSubmissionRef()
     await pool.query(
-      `INSERT INTO projects (name, tagline, description, category, logo_url, website, twitter, github, discord, contract, contracts, email, city, country, founder_social, approved, live, slug)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,false,false,$16)`,
+      `INSERT INTO projects (name, tagline, description, category, logo_url, website, twitter, github, discord, contract, contracts, email, city, country, founder_social, approved, live, slug, submission_ref)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,false,false,$16,$17)`,
       [name.trim(), cleanTagline, cleanDesc, category||"DeFi",
        logo_url||null, website?.trim()||null, twitter?.trim()||null,
        github?.trim()||null, discord?.trim()||null,
        contract?.trim()?.toLowerCase()||null, contractsArr, email.trim(),
-       city?.trim()||null, country?.trim()||null, founderSocial, finalSlug]
+       city?.trim()||null, country?.trim()||null, founderSocial, finalSlug, reference]
     )
     // Reputation-scan the submitted website (VirusTotal) after responding —
     // the verdict lands in url_scans and shows in the admin review panel.
     if (website?.trim()) after(() => scanUrl(website))
-    return NextResponse.json({ success: true, updated: false })
+    return NextResponse.json({ success: true, updated: false, reference })
   } catch (err) {
     console.error("[Ecosystem POST]", err)
     return NextResponse.json({ error: "Server error" }, { status: 500 })
