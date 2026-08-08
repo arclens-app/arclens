@@ -483,6 +483,17 @@ export default function AdminPage() {
   // A listing counts as flagged when VirusTotal reports any malicious or
   // suspicious engine for its website. Matches urlRepChip's lookup so the
   // filter count and the red chip can never disagree.
+  // A founder emailing about a submission quotes their reference, so pasting
+  // ARC-XXXXX into the search box has to find it. Hyphen-insensitive, since
+  // people retype these from memory.
+  function matchesSearch(p: any, q: string): boolean {
+    const s = q.trim().toLowerCase()
+    if (!s) return true
+    if (p.name?.toLowerCase().includes(s)) return true
+    const ref = (p.submission_ref || "").toLowerCase()
+    return !!ref && (ref.includes(s) || ref.replace(/-/g, "").includes(s.replace(/-/g, "")))
+  }
+
   function scanFor(url: string | null | undefined) {
     if (!url) return null
     return urlScans[url] || urlScans[url.replace(/\/$/, "")] || urlScans[url + "/"] || null
@@ -1029,10 +1040,10 @@ export default function AdminPage() {
                     <div style={{ display:"flex", flexDirection:"column", gap:"10px" }}>
                       <input
                         value={search} onChange={e => setSearch(e.target.value)}
-                        placeholder="Search by name..."
+                        placeholder="Search by name or reference (ARC-XXXXX)..."
                         style={{ height:"36px", background:surf2, border:"1px solid "+bdr, borderRadius:"8px", padding:"0 12px", fontSize:"12px", fontFamily:mono, color:t1, outline:"none", width:"100%", boxSizing:"border-box" as const }}
                       />
-                      {submissions.filter((s:any) => s.name?.toLowerCase().includes(search.toLowerCase())).map((s: any) => (
+                      {submissions.filter((s:any) => matchesSearch(s, search)).map((s: any) => (
                         <div key={s.id}>
                         <div style={{ background:surf, border:"1px solid "+bdr, borderRadius:"12px", padding:"18px 22px", display:"flex", alignItems:"center", gap:"16px" }}>
                           <div style={{ width:"44px", height:"44px", borderRadius:"10px", background:"rgba(26,86,255,0.08)", border:"1px solid rgba(26,86,255,0.15)", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", overflow:"hidden" }}>
@@ -1048,9 +1059,10 @@ export default function AdminPage() {
                               <span style={pill(t3, bdr)}>{s.category}</span>
                               <span style={pill(t3, bdr)}>{s.email || "No email"}</span>
                               {s.website && <span style={pill(t3, bdr)}>{s.website.replace(/^https?:\/\//, "").replace(/\/$/, "")}</span>}
+                              {s.submission_ref && <span style={pill("#8aaeff","rgba(26,86,255,0.3)")}>{s.submission_ref}</span>}
                               {s.website && urlRepChip(s.website)}
                               {s.contract && <span style={pill(t3, bdr)}>{s.contract.slice(0,6)}…{s.contract.slice(-4)}</span>}
-                              <span style={pill(t3, bdr)}>{new Date(s.created_at).toLocaleDateString()}</span>
+                              <span style={pill(t3, bdr)}>{new Date(s.created_at).toLocaleString(undefined,{ day:"2-digit", month:"short", hour:"2-digit", minute:"2-digit" })}</span>
                             </div>
                             {s.founder_social
                               ? <div style={{ fontSize:"11px", fontFamily:mono, color:"#8aaeff", marginTop:"6px" }}>Founder: {s.founder_social}</div>
@@ -1266,7 +1278,7 @@ export default function AdminPage() {
                 <div style={{ display:"flex", flexDirection:"column", gap:"8px" }}>
                   <input
                     value={search} onChange={e => setSearch(e.target.value)}
-                    placeholder="Search by name..."
+                    placeholder="Search by name or reference (ARC-XXXXX)..."
                     style={{ height:"36px", background:surf2, border:"1px solid "+bdr, borderRadius:"8px", padding:"0 12px", fontSize:"12px", fontFamily:mono, color:t1, outline:"none", width:"100%", boxSizing:"border-box" as const }}
                   />
                   {/* Hidden listings (live = false) stay in this list but were only
@@ -1298,7 +1310,7 @@ export default function AdminPage() {
                   {projects.length === 0 ? (
                     <div style={{ padding:"48px", textAlign:"center", fontFamily:mono, fontSize:"11px", color:t3 }}>No approved projects yet</div>
                   ) : projects
-                      .filter((p:any) => p.name?.toLowerCase().includes(search.toLowerCase()))
+                      .filter((p:any) => matchesSearch(p, search))
                       .filter((p:any) => liveFilter === "all"    ? true
                                        : liveFilter === "live"   ? p.live
                                        : liveFilter === "hidden" ? !p.live
@@ -1318,6 +1330,7 @@ export default function AdminPage() {
                       <div style={{ flex:1, minWidth:0 }}>
                         <div style={{ display:"flex", alignItems:"center", gap:"6px", marginBottom:"2px" }}>
                           <span style={{ fontSize:"13px", fontWeight:600, color:t1 }}>{p.name}</span>
+                          {p.submission_ref && <span style={{ ...pill("#8aaeff","rgba(26,86,255,0.3)"), fontFamily:mono }}>{p.submission_ref}</span>}
                           {p.badge && <span style={pill("#8aaeff","rgba(26,86,255,0.2)")}>{p.badge}</span>}
                           {p.featured && <span style={pill("#c08828","rgba(192,136,40,0.2)")}>Featured</span>}
                           {p.live
