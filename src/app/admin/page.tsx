@@ -1084,6 +1084,7 @@ export default function AdminPage() {
                               style={{ width:"100%", background:surf2, border:"1px solid rgba(224,51,72,0.2)", borderRadius:"7px", padding:"8px 12px", fontSize:"12px", fontFamily:mono, color:rejectProjectReason ? t1 : t3, outline:"none", marginBottom:"8px", boxSizing:"border-box" as const }}
                             >
                               <option value="">Select a reason or type below...</option>
+                              <option value="ArcLens requires a website on a domain your project owns. Free hosting subdomains (vercel.app, netlify.app, github.io and similar) are not accepted. Point your site at a domain you own and resubmit.">No project-owned domain</option>
                               <option value="Project does not appear to be deployed or active on Arc Testnet.">Not deployed or active on Arc Testnet</option>
                               <option value="Your website was flagged as suspicious or malicious by one or more security scanners. Resolve the flag with the scanning vendors (or move to a clean domain), then resubmit — we cannot list projects whose sites security tools warn users about.">Website flagged by security scanners</option>
                               <option value="Insufficient project information — missing website, description, or verifiable links.">Insufficient information</option>
