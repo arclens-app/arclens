@@ -4,6 +4,7 @@ import { isBroadTag } from "@/lib/projectTags"
 import ArcLayout from "@/components/ArcLayout"
 import { TrustBadge } from "@/components/TrustBadge"
 import { trustBadge } from "@/lib/trustBadge"
+import { safeExternalUrl } from "@/lib/submissionGuards"
 import Spotlight from "@/components/Spotlight"
 
 interface Project {
@@ -540,7 +541,7 @@ export default function EcosystemPage() {
         )}
 
         <div style={{ padding: "10px 12px", borderTop: "1px solid " + border, display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
-          {p.website  && <a href={p.website}  target="_blank" rel="nofollow ugc noopener noreferrer" style={{ fontSize: "10px", fontFamily: mono, padding: "3px 9px", borderRadius: "5px", border: "1px solid " + border, color: t2, textDecoration: "none" }}>Website</a>}
+          {safeExternalUrl(p.website)  && <a href={safeExternalUrl(p.website)!}  target="_blank" rel="nofollow ugc noopener noreferrer" style={{ fontSize: "10px", fontFamily: mono, padding: "3px 9px", borderRadius: "5px", border: "1px solid " + border, color: t2, textDecoration: "none" }}>Website</a>}
           {twitterUrl && <a href={twitterUrl} target="_blank" rel="nofollow ugc noopener noreferrer" style={{ fontSize: "10px", fontFamily: mono, padding: "3px 9px", borderRadius: "5px", border: "1px solid " + border, color: t2, textDecoration: "none" }}>𝕏</a>}
           {p.github   && <a href={p.github}   target="_blank" rel="nofollow ugc noopener noreferrer" style={{ fontSize: "10px", fontFamily: mono, padding: "3px 9px", borderRadius: "5px", border: "1px solid " + border, color: t2, textDecoration: "none" }}>GitHub</a>}
           {p.discord  && <a href={p.discord}  target="_blank" rel="nofollow ugc noopener noreferrer" style={{ fontSize: "10px", fontFamily: mono, padding: "3px 9px", borderRadius: "5px", border: "1px solid " + border, color: t2, textDecoration: "none" }}>Discord</a>}

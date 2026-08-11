@@ -58,6 +58,33 @@ export function hostFromUrl(raw: string): string | null {
   } catch { return null }
 }
 
+/**
+ * A stored website made safe to put in an `href`.
+ *
+ * Listings that predate this module's validation hold bare hostnames
+ * ("arctrivia.vercel.app"). A browser reads a scheme-less href as a RELATIVE
+ * path, so those render as arclenz.xyz/arctrivia.vercel.app and 404 — the
+ * founder's own link, dead, on their own listing. Assume https when no scheme
+ * is present; return null for anything that still won't parse so callers can
+ * omit the link rather than render a broken one.
+ */
+export function safeExternalUrl(raw: string | null | undefined): string | null {
+  const s = (raw || "").trim()
+  if (!s) return null
+  // Repair typo'd schemes first ("http:/x", "http//x"). Testing only for a
+  // well-formed "://" treats those as bare hostnames and yields
+  // https://http:/x — a host of "http". Requiring a ':' or '/' after the
+  // scheme letters keeps a real host like "httpsomething.com" intact.
+  let v = s.replace(/^(https?)[:/]+/i, (_m, p: string) => `${p.toLowerCase()}://`)
+  if (!/^https?:\/\//i.test(v)) v = `https://${v}`
+  try {
+    const u = new URL(v)
+    if (u.protocol !== "http:" && u.protocol !== "https:") return null
+    if (!u.hostname.includes(".")) return null // "https://http:/x" class of junk
+    return u.toString()
+  } catch { return null }
+}
+
 /** A URL is acceptable when it parses, is http(s), and isn't a reserved TLD. */
 export function validateWebsite(raw: string | null | undefined): { ok: true } | { ok: false; error: string } {
   if (!raw || !raw.trim()) return { ok: true } // website is optional at this layer

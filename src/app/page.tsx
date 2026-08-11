@@ -1,5 +1,6 @@
 "use client"
 import { useEffect, useState, useRef } from "react"
+import { safeExternalUrl } from "@/lib/submissionGuards"
 import ArcLayout from "@/components/ArcLayout"
 
 interface Project {
@@ -603,7 +604,7 @@ export default function HomePage() {
                   </div>
                   {/* Links */}
                   <div style={{ display: "flex", flexDirection: "column", gap: "8px", flexShrink: 0 }}>
-                    {p.website && <a href={p.website} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} style={{ fontSize: "11px", fontFamily: mono, color: link, textDecoration: "none", opacity: 0.7, whiteSpace: "nowrap" }}>Website ↗</a>}
+                    {safeExternalUrl(p.website) && <a href={safeExternalUrl(p.website)!} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} style={{ fontSize: "11px", fontFamily: mono, color: link, textDecoration: "none", opacity: 0.7, whiteSpace: "nowrap" }}>Website ↗</a>}
                     {tw && <a href={tw} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} style={{ fontSize: "11px", fontFamily: mono, color: t2, textDecoration: "none", opacity: 0.7, whiteSpace: "nowrap" }}>Twitter ↗</a>}
                   </div>
                 </div>

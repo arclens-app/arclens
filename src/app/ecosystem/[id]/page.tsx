@@ -5,6 +5,7 @@ import ArcLayout from "@/components/ArcLayout"
 import TvlCards from "./TvlCards"
 import { TrustBadge } from "@/components/TrustBadge"
 import { trustBadge } from "@/lib/trustBadge"
+import { safeExternalUrl } from "@/lib/submissionGuards"
 import AskLens from "@/components/AskLens"
 
 function imgSrc(url: string | null): string | null {
@@ -433,7 +434,7 @@ export default function ProjectPage() {
           </div>
           <div style={{ height: "1px", background: bdr }} />
           <div style={{ padding: "16px 28px", display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
-            {project.website  && <a href={project.website}  target="_blank" rel="nofollow ugc noopener noreferrer" style={{ height: "34px", padding: "0 16px", display: "flex", alignItems: "center", background: "rgba(26,86,255,0.08)", color: "#8aaeff", fontSize: "12px", fontFamily: mono, border: "1px solid rgba(26,86,255,0.2)", borderRadius: "7px", textDecoration: "none", gap: "6px" }}>🌐 Website</a>}
+            {safeExternalUrl(project.website)  && <a href={safeExternalUrl(project.website)!}  target="_blank" rel="nofollow ugc noopener noreferrer" style={{ height: "34px", padding: "0 16px", display: "flex", alignItems: "center", background: "rgba(26,86,255,0.08)", color: "#8aaeff", fontSize: "12px", fontFamily: mono, border: "1px solid rgba(26,86,255,0.2)", borderRadius: "7px", textDecoration: "none", gap: "6px" }}>🌐 Website</a>}
             {twitterUrl       && <a href={twitterUrl}       target="_blank" rel="nofollow ugc noopener noreferrer" style={{ height: "34px", padding: "0 16px", display: "flex", alignItems: "center", background: "transparent", color: t2, fontSize: "12px", fontFamily: mono, border: "1px solid " + bdr, borderRadius: "7px", textDecoration: "none", gap: "6px" }}>𝕏 Twitter</a>}
             {project.github   && <a href={project.github}   target="_blank" rel="nofollow ugc noopener noreferrer" style={{ height: "34px", padding: "0 16px", display: "flex", alignItems: "center", background: "transparent", color: t2, fontSize: "12px", fontFamily: mono, border: "1px solid " + bdr, borderRadius: "7px", textDecoration: "none", gap: "6px" }}>⌥ GitHub</a>}
             {project.discord  && <a href={project.discord}  target="_blank" rel="nofollow ugc noopener noreferrer" style={{ height: "34px", padding: "0 16px", display: "flex", alignItems: "center", background: "transparent", color: t2, fontSize: "12px", fontFamily: mono, border: "1px solid " + bdr, borderRadius: "7px", textDecoration: "none", gap: "6px" }}>Discord</a>}
