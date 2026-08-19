@@ -286,6 +286,36 @@ export default function ProjectPage() {
     setTimeout(() => setCopied(false), 1500)
   }
 
+  // ONE source for the embed snippet. The preview box renders this string and
+  // the copy button writes this same string — they used to be built separately,
+  // so the button handed founders a bare unstyled link that looked nothing like
+  // the badge they had just been shown.
+  //
+  // The badge carries the tier the listing actually earned, from the same
+  // trustBadge() the on-site chip uses. A Verified or Arc Partner listing should
+  // not advertise identically to a bare Listed one, or there is no reason for
+  // anyone to climb the ladder.
+  //
+  // Every style is inline and explicit (font, colour, size) because this renders
+  // inside someone else's stylesheet, where inherited values cannot be trusted.
+  function embedCode(): string {
+    const tb = trustBadge({
+      trust_level: project?.trust_level,
+      recognition: project?.recognition,
+      risk_flagged: project?.trust_profile?.hard_risk,
+      legacy_badge: project?.badge,
+    })
+    const dot = tb.mark === "check" ? "#00b87a" : "#6b7da8"
+    const mono = "ui-monospace,SFMono-Regular,Menlo,Consolas,monospace"
+    return `<a href="https://arclenz.xyz/ecosystem/${id}?ref=badge" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:8px;padding:8px 14px;background:#04060f;border:1px solid rgba(26,86,255,0.3);border-radius:8px;text-decoration:none;font-family:${mono};font-size:12px;line-height:1"><span style="width:8px;height:8px;border-radius:50%;background:${dot};display:inline-block;flex:none"></span><span style="color:#e8ecff;font-weight:600">${project?.name ?? ""}</span><span style="color:#6b7da8">on ArcLens</span><span style="color:#2e3a5c">|</span><span style="color:#8aaeff">${tb.label}</span></a>`
+  }
+
+  function copyEmbed() {
+    navigator.clipboard.writeText(embedCode())
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1500)
+  }
+
   if (!mounted) return <div style={{ minHeight: "100vh", background: "var(--bg, #060812)" }} />
 
   const mono  = "'DM Mono', monospace"
@@ -506,17 +536,24 @@ export default function ProjectPage() {
         <div style={{ background: surf, border: "1px solid " + bdr, borderRadius: "14px", padding: "20px 28px", marginBottom: "16px" }}>
           <div style={{ fontSize: "10px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "14px" }}>Embed on your site</div>
           <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap", marginBottom: "12px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 14px", background: "#04060f", border: "1px solid rgba(26,86,255,0.3)", borderRadius: "8px" }}>
-              <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: usdc }} />
-              <span style={{ fontSize: "12px", fontFamily: mono, color: "#e8ecff", fontWeight: 600 }}>{project.name}</span>
-              <span style={{ fontSize: "10px", fontFamily: mono, color: "#6b7da8" }}>on ArcLens</span>
-            </div>
+            {(() => {
+              const tb = trustBadge({ trust_level: project.trust_level, recognition: project.recognition, risk_flagged: project.trust_profile?.hard_risk, legacy_badge: project.badge })
+              return (
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 14px", background: "#04060f", border: "1px solid rgba(26,86,255,0.3)", borderRadius: "8px" }}>
+                  <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: tb.mark === "check" ? usdc : "#6b7da8", flex: "none" }} />
+                  <span style={{ fontSize: "12px", fontFamily: mono, color: "#e8ecff", fontWeight: 600 }}>{project.name}</span>
+                  <span style={{ fontSize: "12px", fontFamily: mono, color: "#6b7da8" }}>on ArcLens</span>
+                  <span style={{ fontSize: "12px", fontFamily: mono, color: "#2e3a5c" }}>|</span>
+                  <span style={{ fontSize: "12px", fontFamily: mono, color: "#8aaeff" }}>{tb.label}</span>
+                </div>
+              )
+            })()}
           </div>
           <div style={{ background: surf2, borderRadius: "8px", padding: "12px 14px", fontFamily: mono, fontSize: "11px", color: t3, wordBreak: "break-all" }}>
-            {`<a href="https://arclenz.xyz/ecosystem/${id}?ref=badge" target="_blank" style="display:inline-flex;align-items:center;gap:8px;padding:8px 14px;background:#04060f;border:1px solid rgba(26,86,255,0.3);border-radius:8px;text-decoration:none;font-family:monospace"><span style="width:8px;height:8px;border-radius:50%;background:#00b87a;display:inline-block"></span><span style="color:#e8ecff;font-weight:600">${project.name}</span><span style="color:#6b7da8">on ArcLens</span></a>`}
+            {embedCode()}
           </div>
           <button
-            onClick={() => { navigator.clipboard.writeText(`<a href="https://arclenz.xyz/ecosystem/${id}?ref=badge">on ArcLens</a>`); setCopied(true); setTimeout(() => setCopied(false), 1500) }}
+            onClick={copyEmbed}
             style={{ marginTop: "10px", height: "30px", padding: "0 14px", background: "transparent", color: t2, fontSize: "11px", fontFamily: mono, border: "1px solid " + bdr, borderRadius: "6px", cursor: "pointer" }}>
             Copy embed code
           </button>
