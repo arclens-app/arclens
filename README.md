@@ -38,8 +38,9 @@ This is what an agentic economy should look like: agents that credit the people 
 - **Lens AI** — live, grounded answers about Arc, projects, builders, metrics, and events; pays the builders it cites, on-chain.
 - **Trust layer** — an on-chain badge ladder (Listed → Claimed → Verified, plus Established, Arc Partner / Official) so anyone can tell proven projects from unproven ones.
 - **Metrics** — TVL, volume, and revenue tracking with pluggable methods; on-chain-verified figures rank the leaderboard, protocol-reported figures are clearly labeled.
-- **Ecosystem directory** — every project on Arc, categorized, searchable, with live stats and builder profiles.
-- **Arc Trials** — trial campaigns that connect builders with verified testers, settled in USDC.
+- **Ecosystem directory** — every project on Arc, categorized, searchable, with live stats and builder profiles. Every listing needs a verified email and a website on a domain the project owns, carries a reference number, and is reviewed by a person before it goes live.
+- **Arc Trials** — trial campaigns that connect builders with verified testers, settled in USDC. Proof-backed task types (beta test, payment flow, stress test, UX review, builder audit, integration, new users) with tester reputation scoring.
+- **Embeddable badge** — every live listing can be embedded on the project's own site, showing the trust tier it has actually earned.
 - **Events** — official Arc House events alongside community submissions, with correct local times and one-click calendar add.
 
 ## Architecture
@@ -58,8 +59,10 @@ Arc RPC ─┴─ on-chain indexer (cron) ── TVL / volume / revenue┘
              • 6-confirmation reorg buffer
              • subgraph fallback for large multi-pool DEXes
 
-Circle / Arc: Developer-Controlled Wallets · Gateway (x402) ·
-ERC-8004 agent identity · USDC & EURC settlement on Arc
+Circle / Arc: Programmable Wallets — User-Controlled (email sign-in, W3S
+challenge flow) and Developer-Controlled (programmatic payouts) · App Kit ·
+Gateway (x402, EIP-3009 settlement) · ERC-8004 agent identity ·
+USDC & EURC settlement on Arc
 ```
 
 ## Stack
@@ -69,7 +72,7 @@ ERC-8004 agent identity · USDC & EURC settlement on Arc
 | **App** | Next.js 16 (App Router), TypeScript, React |
 | **Data** | PostgreSQL (Supabase), a resilient on-chain indexer with rate-limit and drift handling |
 | **AI** | Vercel AI SDK, Gemini, retrieval over a curated Arc knowledge base |
-| **Circle + Arc** | Developer-Controlled Wallets, Gateway (x402), ERC-8004 agent identity, USDC & EURC on Arc |
+| **Circle + Arc** | Programmable Wallets — User-Controlled (W3S SDK, email sign-in) and Developer-Controlled (payout signing) · App Kit · Gateway with x402 batching (EIP-3009) · ERC-8004 agent identity · USDC & EURC on Arc |
 | **Infra** | Vercel |
 
 ## Local development
@@ -94,8 +97,10 @@ Create a `.env.local` with the variables below. The app boots with the **core** 
 | `AI_RETENTION_DAYS` | Lens AI | Chat retention window (default `30`) |
 | `LENS_AI_DAILY_GLOBAL` | Lens AI | Hard daily cap on total model calls |
 | `CIRCLE_API_KEY`, `CIRCLE_ENTITY_SECRET` | Circle | Developer-Controlled Wallets |
+| `NEXT_PUBLIC_CIRCLE_APP_ID` | Circle | User-Controlled Wallets (W3S SDK, email sign-in) |
 | `USDC_ARC_ADDRESS`, `ARCLENS_REGISTRY` | Arc | On-chain token & trust registry |
 | `LENS_WALLET_ID`, `PAYOUT_WALLET_PRIVATE_KEY` | Payments | Builder-recognition payouts (`LENS_PAY_*` knobs tune amount/caps) |
+| `SELLER_ADDRESS` | Payments | Receives x402 / Gateway nanopayments |
 | `RESEND_API_KEY` | Email | Transactional email (approvals, campaigns) |
 | `BLOB_READ_WRITE_TOKEN` | Uploads | Vercel Blob for logos/images |
 | `VIRUSTOTAL_API_KEY` | Trust | URL reputation scanning |
@@ -112,4 +117,6 @@ Released under the [MIT License](LICENSE). © 2026 ArcLens.
 - **Live:** https://arclenz.xyz
 - **Lens AI:** https://arclenz.xyz/lens
 - **Docs:** https://docs.arclenz.xyz
+- **Community:** https://t.me/arclenschat
+- **X:** https://x.com/arclens_app
 - **Arc:** https://arc.network
