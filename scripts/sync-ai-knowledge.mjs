@@ -46,6 +46,30 @@ const FACTS = [
   { key: "arc-cheap",       topic: "arc-basics", fact: "Average transfer cost on Arc is a fraction of a cent in USDC, computed live from gas price.", source_url: "/" },
   { key: "arc-evm-compat",  topic: "arc-basics", fact: "Arc is EVM-compatible — any contract that deploys on Ethereum, Polygon, Base, etc. can deploy on Arc with no code changes.", source_url: "https://developers.circle.com" },
 
+  // ─── Arc mainnet ─────────────────────────────────────────────────────────
+  // Deliberately says nothing about mainnet chain ID or contract addresses:
+  // those are not public yet, and a confident wrong address is worse than "I
+  // don't know". If asked, the AI should say it will confirm at launch.
+  { key: "arc-mainnet-date",   topic: "arc-mainnet", fact: "Arc mainnet launches on 16 September 2026. Everything on Arc before that date runs on Arc Testnet.", source_url: "/" },
+  { key: "arc-mainnet-change", topic: "arc-mainnet", fact: "At Arc mainnet, transactions settle in real USDC rather than testnet USDC. Testnet balances and testnet activity do not carry over to mainnet — they are separate networks.", source_url: "/" },
+  { key: "arc-mainnet-gas",    topic: "arc-mainnet", fact: "USDC remains the native gas token on Arc mainnet, exactly as on testnet — there is no separate gas coin to hold.", source_url: "/about" },
+  { key: "arc-mainnet-ids",    topic: "arc-mainnet", fact: "Arc mainnet chain ID, RPC URL and contract addresses are not published yet. Do not guess them — the testnet values (chain ID 5042002, rpc.testnet.arc.network) are testnet only and will not work on mainnet.", source_url: "/dev" },
+  { key: "arclens-mainnet",    topic: "arc-mainnet", fact: "ArcLens is preparing for Arc mainnet: hardening the payout path, tightening listing standards, and making sure the directory is accurate for the people who arrive on day one. ArcLens itself is live now on testnet.", source_url: "/" },
+  { key: "arc-mainnet-prep",   topic: "arc-mainnet", fact: "For a builder, getting ready for Arc mainnet means having a working product on a domain the project owns, a verified listing on ArcLens so users can find and check it, and contracts ready to redeploy — testnet deployments do not migrate automatically.", source_url: "/ecosystem" },
+
+  // ─── Listing standard + the domain deadline ──────────────────────────────
+  // Founders email and ask this constantly, so Lens must answer it exactly and
+  // must never imply a listing is being deleted. It is hidden and reversible.
+  { key: "listing-standard",   topic: "listing-standard", fact: "Every ArcLens listing must point at a domain the project owns. Free hosting subdomains — vercel.app, netlify.app, github.io, replit.app and similar — are not accepted. New submissions also need a verified email and get a reference number to track the review, and a person reviews every one.", source_url: "/ecosystem" },
+  { key: "listing-deadline",   topic: "listing-standard", fact: "Listings created before the project-owned-domain rule have until 11 September 2026 to move to a domain they own. After that date a listing still on a free subdomain is hidden from the public directory until it is fixed. Nothing is deleted — the listing and all its data stay intact and it goes back up as soon as the domain is updated.", source_url: "/ecosystem" },
+  { key: "listing-fix-domain", topic: "listing-standard", fact: "To fix a listing on a free subdomain: point the site at a domain the project owns, then claim the listing on ArcLens and update the website URL. A live contract with real on-chain usage can also qualify — reply to the ArcLens email or ask in the community if that applies.", source_url: "/ecosystem" },
+
+  // ─── Community + the embed badge ─────────────────────────────────────────
+  // Lens previously invented an attestation-API answer for the badge question.
+  // This is the real path: it is on the founder's own project page.
+  { key: "arclens-telegram",   topic: "arclens-basics", fact: "ArcLens has an official Telegram community at t.me/arclenschat, with topics for listing support, Arc Trials, builders and scam reports. ArcLens admins never DM first and never ask for a seed phrase, a private key, or a payment through DMs.", source_url: "/" },
+  { key: "arclens-badge",      topic: "arclens-basics", fact: "Every live listing has an embeddable ArcLens badge. Open the project's page on ArcLens, find the 'Embed on your site' section, and use 'Copy embed code' to get HTML you can paste on your own site. The badge shows the trust tier the listing has earned, so a Verified or Arc Partner listing displays differently from a plain Listed one.", source_url: "/ecosystem" },
+
   // ─── USDC fundamentals ───────────────────────────────────────────────────
   { key: "usdc-backed",     topic: "usdc", fact: "USDC is a fully-backed dollar stablecoin issued by Circle. Each USDC is redeemable 1:1 for US dollars held in regulated reserves.", source_url: "https://www.circle.com/usdc" },
   { key: "usdc-native-gas", topic: "usdc", fact: "On Arc, USDC is the native gas token — you pay for every transaction in USDC directly, no ETH wrapper needed.", source_url: "/about" },
