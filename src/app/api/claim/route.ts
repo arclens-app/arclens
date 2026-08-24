@@ -72,14 +72,14 @@ export async function GET(req: NextRequest) {
     let projectRow: any = null
     if (wallet) {
       const result = await pool.query(
-        `SELECT id, name, slug, tagline, description, category, logo_url, website, twitter, github, discord, contract, founder_social, featured, badge, color, email, claimed_at, view_count, owner_wallet, city, country FROM projects WHERE (slug = $1 OR id::text = $1) AND owner_wallet = $2 AND approved = true AND live = true`,
+        `SELECT id, name, slug, tagline, description, category, logo_url, website, twitter, github, discord, contract, contracts, founder_social, featured, badge, color, email, claimed_at, view_count, owner_wallet, city, country, trust_level, recognition, established FROM projects WHERE (slug = $1 OR id::text = $1) AND owner_wallet = $2 AND approved = true AND live = true`,
         [slug, wallet.toLowerCase()]
       )
       if (result.rows.length === 0) return NextResponse.json({ error: "Wallet not authorized for this project" }, { status: 403 })
       projectRow = result.rows[0]
     } else if (token) {
       const result = await pool.query(
-        `SELECT id, name, slug, tagline, description, category, logo_url, website, twitter, github, discord, contract, founder_social, featured, badge, color, email, claimed_at, view_count, owner_wallet, city, country, claim_token_expires FROM projects WHERE (slug = $1 OR id::text = $1) AND claim_token = $2`,
+        `SELECT id, name, slug, tagline, description, category, logo_url, website, twitter, github, discord, contract, contracts, founder_social, featured, badge, color, email, claimed_at, view_count, owner_wallet, city, country, trust_level, recognition, established, claim_token_expires FROM projects WHERE (slug = $1 OR id::text = $1) AND claim_token = $2`,
         [slug, token]
       )
       if (result.rows.length === 0) return NextResponse.json({ error: "Invalid or expired token" }, { status: 403 })
@@ -92,8 +92,45 @@ export async function GET(req: NextRequest) {
     }
     const reviews   = await pool.query(`SELECT id, wallet, category, rating, review_text, is_public, contact, badge, created_at FROM reviews WHERE project_id = $1 ORDER BY created_at DESC`, [projectRow.id])
     const weekNum   = Math.floor(Date.now() / (7 * 24 * 60 * 60 * 1000))
-    const weekViews = await pool.query(`SELECT COUNT(*) as cnt FROM project_views WHERE project_id = $1 AND week_num = $2`, [projectRow.id, weekNum])
-    return NextResponse.json({ project: { ...projectRow, claim_token: undefined, claim_token_expires: undefined }, reviews: reviews.rows, weekViews: parseInt(weekViews.rows[0]?.cnt || "0"), hasWallet: !!projectRow.owner_wallet })
+
+    // Everything below feeds the dashboard's "needs your attention" panel and
+    // listing-health readout. All of it is state the founder could already be
+    // in — they just had no way to discover it without clicking through every
+    // tab. Run in parallel and fail soft: a dashboard that loads without its
+    // health readout is fine, one that 500s because a side query failed is not.
+    const [weekViews, prevViews, pending, unrated, scan] = await Promise.all([
+      pool.query(`SELECT COUNT(*) AS cnt FROM project_views WHERE project_id = $1 AND week_num = $2`, [projectRow.id, weekNum]),
+      pool.query(`SELECT COUNT(*) AS cnt FROM project_views WHERE project_id = $1 AND week_num = $2`, [projectRow.id, weekNum - 1]).catch(() => null),
+      pool.query(
+        `SELECT count(*)::int AS n, min(submitted_at) AS oldest,
+                array_agg(DISTINCT field) AS fields
+           FROM pending_updates WHERE project_id = $1 AND status = 'pending'`, [projectRow.id]).catch(() => null),
+      // Submissions the founder still owes a rating on, across every campaign
+      // this project runs.
+      pool.query(
+        `SELECT count(*)::int AS n, min(cc.created_at) AS oldest
+           FROM campaign_completions cc
+           JOIN campaigns c ON c.id = cc.campaign_id
+          WHERE c.project_id = $1 AND cc.builder_rating IS NULL`, [projectRow.id]).catch(() => null),
+      projectRow.website
+        ? pool.query(`SELECT verdict, malicious, suspicious, scanned_at FROM url_scans WHERE url = $1 ORDER BY scanned_at DESC LIMIT 1`, [projectRow.website]).catch(() => null)
+        : Promise.resolve(null),
+    ])
+
+    return NextResponse.json({
+      project: { ...projectRow, claim_token: undefined, claim_token_expires: undefined },
+      reviews: reviews.rows,
+      weekViews: parseInt(weekViews.rows[0]?.cnt || "0"),
+      prevWeekViews: parseInt(prevViews?.rows[0]?.cnt || "0"),
+      hasWallet: !!projectRow.owner_wallet,
+      pendingUpdate: (pending?.rows[0]?.n || 0) > 0
+        ? { count: pending!.rows[0].n, oldest: pending!.rows[0].oldest, fields: (pending!.rows[0].fields || []).filter(Boolean) }
+        : null,
+      unratedSubmissions: (unrated?.rows[0]?.n || 0) > 0
+        ? { count: unrated!.rows[0].n, oldest: unrated!.rows[0].oldest }
+        : null,
+      urlScan: scan?.rows[0] || null,
+    })
   } catch (err) { console.error("[Claim GET]", err); return NextResponse.json({ error: "Server error" }, { status: 500 }) }
 }
 

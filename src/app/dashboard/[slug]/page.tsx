@@ -7,6 +7,8 @@ import { SpotlightCard } from "@/components/Spotlight"
 import { useArcStore } from "@/store/arc"
 import TvlTrackingPanel from "./TvlTrackingPanel"
 import LensEarningsPanel from "@/components/LensEarningsPanel"
+import { freeHostOf, hostFromUrl } from "@/lib/submissionGuards"
+import { trustBadge } from "@/lib/trustBadge"
 
 interface Project {
   id: number; name: string; slug: string; tagline: string; description: string
@@ -15,6 +17,7 @@ interface Project {
   contract: string | null; featured: boolean; badge: string | null
   color: string | null; email: string; claimed_at: string | null
   view_count: number; owner_wallet: string | null
+  trust_level?: string | null; recognition?: string | null; established?: boolean | null
 }
 
 interface Review {
@@ -31,11 +34,17 @@ export default function DashboardPage() {
   const [project, setProject]       = useState<Project | null>(null)
   const [reviews, setReviews]       = useState<Review[]>([])
   const [weekViews, setWeekViews]   = useState(0)
+  const [prevWeekViews, setPrevWeekViews] = useState(0)
+  // Attention-panel inputs. Each is a state the founder can already be in; the
+  // dashboard simply never told them about it before.
+  const [pendingUpdate, setPendingUpdate]   = useState<{ count: number; oldest: string; fields: string[] } | null>(null)
+  const [unratedSubs, setUnratedSubs]       = useState<{ count: number; oldest: string } | null>(null)
+  const [urlScan, setUrlScan]               = useState<{ verdict: string | null; malicious: number; suspicious: number } | null>(null)
   const [hasWallet, setHasWallet]   = useState(false)
   const [loading, setLoading]       = useState(true)
   const [error, setError]           = useState("")
   const [mounted, setMounted]       = useState(false)
-  const [activeTab, setActiveTab]   = useState<"overview"|"reviews"|"private"|"forge"|"edit"|"tvl">("overview")
+  const [activeTab, setActiveTab]   = useState<"overview"|"reviews"|"private"|"forge"|"edit"|"trust"|"tvl">("overview")
   const [forgeCampaigns, setForgeCampaigns]   = useState<any[]>([])
   const [connectedWallet, setConnectedWallet] = useState<string | null>(null)
 
@@ -147,6 +156,10 @@ export default function DashboardPage() {
         setProject(data.project)
         setReviews(data.reviews || [])
         setWeekViews(data.weekViews || 0)
+        setPrevWeekViews(data.prevWeekViews || 0)
+        setPendingUpdate(data.pendingUpdate || null)
+        setUnratedSubs(data.unratedSubmissions || null)
+        setUrlScan(data.urlScan || null)
         setHasWallet(data.hasWallet || false)
         if (wallet) {
           fetch(`/api/trials?creator=${wallet}`)
@@ -318,6 +331,22 @@ export default function DashboardPage() {
     } finally { setFundingCampaign(false) }
   }
 
+  // Locked-tab prompt. Deliberately thin: it asks the injected wallet for an
+  // account, stores it exactly where ArcLayout stores it, and reloads so the
+  // page's own mount-time tryWalletAuth does the authorisation. Duplicating
+  // that flow here would be a second code path to keep correct.
+  async function promptConnect() {
+    try {
+      const eth = typeof window !== "undefined" ? (window as any).ethereum : null
+      if (!eth) { setActiveTab("overview"); return }
+      const accounts = await eth.request({ method: "eth_requestAccounts" })
+      if (accounts?.[0]) {
+        localStorage.setItem("arclens-wallet", accounts[0].toLowerCase())
+        window.location.reload()
+      }
+    } catch { /* user rejected — leave the prompt in place */ }
+  }
+
   async function saveWallet() {
     if (!connectedWallet || !token || !project?.name) return
     setSavingWallet(true)
@@ -452,9 +481,138 @@ export default function DashboardPage() {
     return acc
   }, {})
   const accentColor = project.color || "#1a56ff"
+  const canWallet = !!connectedWallet
+  const canEdit   = !!(connectedWallet || token)
+  const tabLocked =
+    (activeTab === "private" || activeTab === "forge") ? !canWallet
+    : (activeTab === "edit" || activeTab === "trust" || activeTab === "tvl") ? !canEdit
+    : false
+
+  // ── Attention + health ───────────────────────────────────────────────────
+  // The free-host rule is read from the same module the submission form uses,
+  // so the dashboard can never tell a founder their domain is fine while the
+  // form rejects it.
+  const siteHost   = project.website ? hostFromUrl(project.website.startsWith("http") ? project.website : `https://${project.website}`) : null
+  const freeHost   = siteHost ? freeHostOf(siteHost) : null
+  const daysAgo    = (iso?: string | null) => iso ? Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 86400000)) : 0
+  const viewsDelta = prevWeekViews > 0 ? Math.round(((weekViews - prevWeekViews) / prevWeekViews) * 100) : null
+
+  const tasks: { key: string; tone: "red" | "amber" | "blue"; icon: string; title: string; sub: string; action: string; go: () => void }[] = []
+  if (freeHost) tasks.push({
+    key: "domain", tone: "red", icon: "!",
+    title: "Your website is on a free subdomain",
+    sub: `${siteHost} · listings not on a domain you own are hidden from 11 September`,
+    action: "Update website", go: () => setActiveTab("edit"),
+  })
+  if (unratedSubs) tasks.push({
+    key: "unrated", tone: "amber", icon: String(unratedSubs.count),
+    title: `${unratedSubs.count} tester submission${unratedSubs.count === 1 ? "" : "s"} waiting on your rating`,
+    sub: `Oldest has been waiting ${daysAgo(unratedSubs.oldest)} day${daysAgo(unratedSubs.oldest) === 1 ? "" : "s"}`,
+    action: "Review them", go: () => setActiveTab("forge"),
+  })
+  if (pendingUpdate) tasks.push({
+    key: "pending", tone: "blue", icon: "↻",
+    title: "Listing edit is pending review",
+    sub: `Submitted ${daysAgo(pendingUpdate.oldest)} day${daysAgo(pendingUpdate.oldest) === 1 ? "" : "s"} ago${pendingUpdate.fields.length ? ` · ${pendingUpdate.fields.join(", ")}` : ""}`,
+    action: "See what changed", go: () => setActiveTab("edit"),
+  })
+
+  const health: { k: string; v: string; tone: "ok" | "bad" | "meh" }[] = [
+    { k: "Website set",      v: project.website ? "OK" : "Missing", tone: project.website ? "ok" : "bad" },
+    { k: "Owned domain",     v: !project.website ? "—" : freeHost ? "Failing" : "OK", tone: !project.website ? "meh" : freeHost ? "bad" : "ok" },
+    { k: "Contract on file", v: project.contract ? "OK" : "None",   tone: project.contract ? "ok" : "meh" },
+    { k: "URL reputation",   v: !urlScan ? "Not scanned" : urlScan.malicious > 0 ? "Flagged" : urlScan.suspicious > 0 ? "Suspicious" : "Clean",
+      tone: !urlScan ? "meh" : urlScan.malicious > 0 ? "bad" : urlScan.suspicious > 0 ? "meh" : "ok" },
+    { k: "Description",      v: (project.description || "").length >= 120 ? "Good" : "Thin", tone: (project.description || "").length >= 120 ? "ok" : "meh" },
+  ]
+
+  const badgeSpec = trustBadge({ trust_level: project.trust_level, recognition: project.recognition, legacy_badge: project.badge })
+  const ladder = [
+    { label: "Listed",  done: true },
+    { label: "Claimed", done: !!project.owner_wallet },
+    { label: badgeSpec.key === "verified" || badgeSpec.mark === "check" ? "Verified" : "Verified — submit an audit", done: project.trust_level === "verified" || badgeSpec.mark === "check" },
+    { label: "Established", done: !!project.established },
+  ]
 
   return (
     <ArcLayout active="ecosystem">
+      {/* Media queries can't be expressed in the inline styles this page is
+          built with, so the new sections use classes. Scoped to dash-* so they
+          cannot collide with anything else in the app. */}
+      <style>{`
+        .dash-attn{border-top:1px solid ${bdr};border-bottom:1px solid ${bdr};
+          background:linear-gradient(180deg,rgba(224,160,32,0.055),rgba(224,160,32,0.012));
+          box-shadow:inset 3px 0 0 #e0a020;padding:15px 20px 5px;margin-bottom:22px}
+        .dash-attn-top{display:flex;align-items:center;gap:9px;margin-bottom:4px;
+          font-family:${mono};font-size:10px;color:#e0a020;letter-spacing:.14em;text-transform:uppercase}
+        .dash-dot{width:6px;height:6px;border-radius:50%;background:#e0a020;box-shadow:0 0 10px #e0a020;flex:none}
+        .dash-task{display:flex;align-items:center;gap:13px;padding:12px 0;
+          border-top:1px solid rgba(255,255,255,.045);flex-wrap:wrap}
+        .dash-task:nth-of-type(2){border-top:none}
+        .dash-ico{width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;
+          font-size:12.5px;font-family:${mono};flex:none}
+        .dash-ico-red{background:rgba(224,51,72,.12);color:#ff8494}
+        .dash-ico-amber{background:rgba(224,160,32,.12);color:#ffcf7a}
+        .dash-ico-blue{background:rgba(26,86,255,.14);color:#8aaeff}
+        .dash-task-body{flex:1;min-width:180px}
+        .dash-task-t{font-size:13.5px;font-weight:600;color:${t1}}
+        .dash-task-s{font-size:12px;color:${t3};margin-top:2px;overflow-wrap:anywhere}
+        .dash-act{height:29px;padding:0 13px;border-radius:7px;font-size:11.5px;font-family:${mono};
+          border:1px solid ${bdr};background:rgba(255,255,255,.05);color:#cfdcff;cursor:pointer;flex:none}
+        .dash-act:hover{border-color:rgba(140,165,255,.4)}
+
+        .dash-tabs{display:flex;gap:2px;border-bottom:1px solid ${bdr};margin-bottom:22px;
+          overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+        .dash-tabs::-webkit-scrollbar{display:none}
+        .dash-tab{padding:11px 14px;font-size:12.5px;font-family:${mono};color:${t3};border:none;background:none;
+          cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;display:flex;align-items:center;
+          gap:7px;white-space:nowrap;flex:none}
+        .dash-tab.on{color:#bcd0ff;border-bottom-color:#1a56ff}
+        .dash-tab:hover{color:${t2}}
+        .dash-cnt{font-size:10px;padding:1px 6px;border-radius:20px;background:rgba(255,255,255,.05);color:${t2}}
+        .dash-cnt.hot{background:rgba(224,160,32,.18);color:#ffcf7a}
+        .dash-lock{font-size:9px;opacity:.5}
+
+        .dash-metrics{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid ${bdr};
+          border-radius:12px;overflow:hidden;margin-bottom:18px}
+        .dash-metric{padding:15px 18px;border-left:1px solid ${bdr}}
+        .dash-metric:first-child{border-left:none}
+        .dash-metric .k{font-size:9px;font-family:${mono};color:${t3};text-transform:uppercase;letter-spacing:.1em}
+        .dash-metric .v{font-size:25px;font-weight:700;letter-spacing:-.04em;margin:6px 0 3px;
+          color:${t1};font-variant-numeric:tabular-nums}
+        .dash-metric .d{font-size:11px;font-family:${mono}}
+        .dash-spark{height:22px;margin-top:8px;display:flex;align-items:flex-end;gap:2px;max-width:200px}
+        .dash-spark i{flex:1;max-width:22px;background:linear-gradient(180deg,rgba(26,86,255,.7),rgba(26,86,255,.1));
+          border-radius:1px;display:block;min-height:2px}
+
+        .dash-cols{display:grid;grid-template-columns:1fr 290px;border:1px solid ${bdr};border-radius:12px;overflow:hidden}
+        .dash-main{padding:18px 20px}
+        .dash-rail{border-left:1px solid ${bdr};padding:18px 20px}
+        .dash-sec + .dash-sec{margin-top:22px;padding-top:18px;border-top:1px solid ${bdr}}
+        .dash-sec h3{font-size:13px;font-weight:600;color:${t1}}
+        .dash-sec .sub{font-size:12px;color:${t3};margin:2px 0 12px}
+        .dash-row{display:flex;align-items:center;gap:11px;padding:10px 0;
+          border-top:1px solid rgba(255,255,255,.045);flex-wrap:wrap}
+        .dash-row:first-of-type{border-top:none}
+        .dash-item{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:9px 0;
+          border-top:1px solid rgba(255,255,255,.045);font-size:12.5px}
+        .dash-item:first-of-type{border-top:none}
+        .dash-step{display:flex;align-items:center;gap:9px;font-size:12.5px;margin-bottom:9px}
+        .dash-step b{width:16px;height:16px;border-radius:50%;border:1.5px solid ${bdr};flex:none;
+          display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:400}
+        .dash-step.done b{background:rgba(0,184,122,.16);border-color:rgba(0,184,122,.5);color:#4fd8a5}
+        .dash-step.now b{border-color:#8aaeff;box-shadow:0 0 0 3px rgba(26,86,255,.14)}
+
+        @media (max-width: 760px){
+          .dash-cols{grid-template-columns:1fr}
+          .dash-rail{border-left:none;border-top:1px solid ${bdr}}
+          .dash-metrics{grid-template-columns:1fr}
+          .dash-metric{border-left:none;border-top:1px solid ${bdr}}
+          .dash-metric:first-child{border-top:none}
+          .dash-attn{padding-left:16px;padding-right:16px}
+          .dash-act{width:100%}
+        }
+      `}</style>
       <div style={{ padding: "0 0 60px", maxWidth: "900px", margin: "0 auto" }}>
 
         {/* ── HERO HEADER ── */}
@@ -522,48 +680,156 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* ── STATS ROW ── */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: "10px", marginBottom: "24px" }}>
-            {[
-              { label: "Views this week",    value: weekViews.toString(), color: "#1a56ff" },
-              { label: "Total reviews",      value: reviews.length.toString(), color: green },
-              { label: "Avg rating",         value: avgRating + (reviews.length > 0 ? " / 5" : ""), color: "#e08810" },
-              ...(connectedWallet ? [
-                { label: "Active campaigns", value: activeCampaigns.toString(), color: "#8aaeff" },
-                { label: "Private reviews",  value: privateReviews.length.toString(), color: "#a855f7" },
-              ] : []),
-            ].map(stat => (
-              <div key={stat.label} style={{ background: surf, border: "1px solid " + bdr, borderRadius: "10px", padding: "14px 16px" }}>
-                <div style={{ fontSize: "9px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "6px" }}>{stat.label}</div>
-                <div style={{ fontSize: "22px", fontWeight: 700, color: stat.color, letterSpacing: "-0.04em" }}>{stat.value}</div>
+          {/* ── NEEDS YOUR ATTENTION ──────────────────────────────────────
+              The dashboard opens as a to-do list. Every item is a state the
+              founder was already in; previously it took clicking through three
+              tabs to discover any of them. Full-bleed band with a left stripe
+              rather than a rounded card, so it reads as part of the dashboard
+              that is currently lit up rather than a panel sitting on top. */}
+          {tasks.length > 0 && (
+            <div className="dash-attn">
+              <div className="dash-attn-top">
+                <i className="dash-dot" />
+                <span>{tasks.length} thing{tasks.length === 1 ? "" : "s"} need{tasks.length === 1 ? "s" : ""} you</span>
               </div>
-            ))}
-          </div>
+              {tasks.map(t => (
+                <div key={t.key} className="dash-task">
+                  <div className={"dash-ico dash-ico-" + t.tone}>{t.icon}</div>
+                  <div className="dash-task-body">
+                    <div className="dash-task-t">{t.title}</div>
+                    <div className="dash-task-s">{t.sub}</div>
+                  </div>
+                  <button className="dash-act" onClick={t.go}>{t.action}</button>
+                </div>
+              ))}
+            </div>
+          )}
 
-          {/* ── TABS ── */}
-          <div style={{ display: "flex", gap: "6px", marginBottom: "20px", flexWrap: "wrap" }}>
+          {/* ── TABS ──────────────────────────────────────────────────────
+              Always the same set. Previously the bar showed two tabs on a
+              magic link and six with a wallet, so the navigation changed shape
+              under the user. Tabs needing a wallet now prompt inside the panel
+              instead of vanishing from the bar. */}
+          <div className="dash-tabs" role="tablist">
             {([
-              { key: "overview", label: "Overview" },
-              { key: "reviews",  label: `Reviews (${publicReviews.length})` },
-              ...(connectedWallet ? [
-                { key: "private", label: `Private (${privateReviews.length})` },
-                { key: "forge",   label: `Campaigns (${forgeCampaigns.length})` },
-              ] : []),
-              ...((connectedWallet || token) ? [
-                { key: "edit",    label: "Edit Listing" },
-                { key: "tvl",     label: "TVL Tracking" },
-              ] : []),
+              { key: "overview", label: "Overview",  count: null,                     lock: false },
+              { key: "forge",    label: "Campaigns", count: forgeCampaigns.length,    lock: !connectedWallet, hot: unratedSubs?.count || 0 },
+              { key: "reviews",  label: "Reviews",   count: publicReviews.length,     lock: false },
+              { key: "private",  label: "Private",   count: privateReviews.length,    lock: !connectedWallet },
+              { key: "edit",     label: "Listing",   count: null,                     lock: !(connectedWallet || token) },
+              { key: "trust",    label: "Trust",     count: null,                     lock: !(connectedWallet || token) },
+              { key: "tvl",      label: "Analytics", count: null,                     lock: !(connectedWallet || token) },
             ] as const).map(tab => (
-              <button key={tab.key} onClick={() => setActiveTab(tab.key as typeof activeTab)}
-                style={{ height: "32px", padding: "0 16px", background: activeTab === tab.key ? "rgba(26,86,255,0.12)" : "transparent", color: activeTab === tab.key ? "#8aaeff" : t2, fontSize: "12px", fontFamily: mono, border: "1px solid " + (activeTab === tab.key ? "rgba(26,86,255,0.35)" : bdr), borderRadius: "6px", cursor: "pointer", fontWeight: activeTab === tab.key ? 600 : 400 }}>
+              <button key={tab.key} role="tab" aria-selected={activeTab === tab.key}
+                onClick={() => setActiveTab(tab.key as typeof activeTab)}
+                className={"dash-tab" + (activeTab === tab.key ? " on" : "")}>
                 {tab.label}
+                {("hot" in tab && tab.hot) ? <span className="dash-cnt hot">{tab.hot}</span>
+                  : tab.count !== null ? <span className="dash-cnt">{tab.count}</span> : null}
+                {tab.lock && <span className="dash-lock" aria-label="needs a connected wallet">🔒</span>}
               </button>
             ))}
           </div>
 
           {/* ── OVERVIEW ── */}
+          {tabLocked && (
+            <div style={{ background: surf, border: "1px solid " + bdr, borderRadius: "12px", padding: "40px 28px", textAlign: "center" }}>
+              <div style={{ fontSize: "22px", marginBottom: "10px" }}>&#128274;</div>
+              <div style={{ fontSize: "13.5px", fontWeight: 600, color: t1, marginBottom: "6px" }}>Connect your wallet to open this</div>
+              <div style={{ fontSize: "12px", fontFamily: mono, color: t3, lineHeight: 1.7, maxWidth: "380px", margin: "0 auto 18px" }}>
+                {activeTab === "private" || activeTab === "forge"
+                  ? "Campaigns and private feedback are tied to the wallet that owns this listing."
+                  : "Editing your listing needs either a connected wallet or a fresh dashboard link from your email."}
+              </div>
+              <button onClick={promptConnect}
+                style={{ height: "38px", padding: "0 20px", background: "rgba(26,86,255,0.16)", color: "#bcd0ff", fontSize: "12.5px", fontFamily: mono, border: "1px solid rgba(107,147,255,0.42)", borderRadius: "8px", cursor: "pointer" }}>
+                Connect wallet
+              </button>
+            </div>
+          )}
+
           {activeTab === "overview" && (
             <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+
+              {/* Three metrics that carry a trend, replacing five flat counts.
+                  The sparkline is intentionally coarse — it exists to show
+                  direction, not to be read value by value. */}
+              <div className="dash-metrics">
+                <div className="dash-metric">
+                  <div className="k">Views this week</div>
+                  <div className="v">{weekViews.toLocaleString()}</div>
+                  <div className="d" style={{ color: viewsDelta === null ? t3 : viewsDelta > 0 ? green : viewsDelta < 0 ? "#ff8494" : t3 }}>
+                    {viewsDelta === null ? "● no prior week" : viewsDelta === 0 ? "● unchanged" : `${viewsDelta > 0 ? "▲" : "▼"} ${Math.abs(viewsDelta)}% vs last week`}
+                  </div>
+                  <div className="dash-spark" aria-hidden="true">
+                    {(() => {
+                      const hi = Math.max(weekViews, prevWeekViews, 1)
+                      return [prevWeekViews, weekViews].map((v, i) => <i key={i} style={{ height: `${Math.round((v / hi) * 100)}%` }} />)
+                    })()}
+                  </div>
+                </div>
+                <div className="dash-metric">
+                  <div className="k">Avg rating</div>
+                  <div className="v">{avgRating}{reviews.length > 0 && <span style={{ fontSize: "14px", color: t3 }}> / 5</span>}</div>
+                  <div className="d" style={{ color: t3 }}>● {reviews.length} review{reviews.length === 1 ? "" : "s"}</div>
+                  <div className="dash-spark" aria-hidden="true">
+                    {[5,4,3,2,1].map(star => {
+                      const n = reviews.filter(r => Math.round(r.rating) === star).length
+                      const hi = Math.max(1, ...[5,4,3,2,1].map(s => reviews.filter(r => Math.round(r.rating) === s).length))
+                      return <i key={star} style={{ height: `${Math.round((n / hi) * 100)}%` }} />
+                    })}
+                  </div>
+                </div>
+                <div className="dash-metric">
+                  <div className="k">Campaigns</div>
+                  <div className="v">{forgeCampaigns.length}</div>
+                  <div className="d" style={{ color: activeCampaigns > 0 ? green : t3 }}>● {activeCampaigns} active</div>
+                  <div className="dash-spark" aria-hidden="true">
+                    {["active","ended","rejected"].map(s => {
+                      const n = forgeCampaigns.filter(c => c.status === s).length
+                      const hi = Math.max(1, forgeCampaigns.length)
+                      return <i key={s} style={{ height: `${Math.round((n / hi) * 100)}%` }} />
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* Trust ladder and listing health. Both read from checks the
+                  server already runs — nothing here is a new signal, it is the
+                  first time the founder gets to see the result. */}
+              <div className="dash-cols">
+                <div className="dash-main">
+                  <div className="dash-sec">
+                    <h3>Your trust standing</h3>
+                    <div className="sub">What lifts this listing next.</div>
+                    {ladder.map((s, i) => {
+                      const isNow = !s.done && ladder.slice(0, i).every(p => p.done)
+                      return (
+                        <div key={s.label} className={"dash-step" + (s.done ? " done" : isNow ? " now" : "")}
+                          style={{ color: s.done ? t2 : isNow ? t1 : t3, fontWeight: isNow ? 600 : 400 }}>
+                          <b>{s.done ? "✓" : ""}</b>{s.label}
+                        </div>
+                      )
+                    })}
+                    <div style={{ fontSize: "11.5px", color: t3, lineHeight: 1.6, marginTop: "12px" }}>
+                      An independent audit on record moves you to Verified. It shows on your card, your embed badge, and on-chain.
+                    </div>
+                  </div>
+                </div>
+                <div className="dash-rail">
+                  <div className="dash-sec">
+                    <h3>Listing health</h3>
+                    <div className="sub">Checked continuously.</div>
+                    {health.map(h => (
+                      <div key={h.k} className="dash-item">
+                        <span style={{ color: t2 }}>{h.k}</span>
+                        <span style={{ fontFamily: mono, fontSize: "11.5px", color: h.tone === "ok" ? green : h.tone === "bad" ? "#ff8494" : t3 }}>{h.v}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
               <LensEarningsPanel slug={slug} />
               {reviews.length > 0 ? (
                 <div style={{ background: surf, border: "1px solid " + bdr, borderRadius: "12px", padding: "22px 24px" }}>
@@ -617,7 +883,7 @@ export default function DashboardPage() {
           )}
 
           {/* ── PRIVATE REVIEWS ── */}
-          {activeTab === "private" && (
+          {activeTab === "private" && canWallet && (
             <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
               {privateReviews.length === 0
                 ? <div style={{ padding: "48px", textAlign: "center", color: t3, fontFamily: mono, fontSize: "12px" }}>No private reviews yet</div>
@@ -627,7 +893,7 @@ export default function DashboardPage() {
           )}
 
           {/* ── CAMPAIGNS (Arc Trials) ── */}
-          {activeTab === "forge" && (
+          {activeTab === "forge" && canWallet && (
             <div>
               {selectedCampaignId === null ? (
                 /* Campaign list */
@@ -1075,7 +1341,7 @@ export default function DashboardPage() {
           )}
 
           {/* ── EDIT LISTING ── */}
-          {activeTab === "edit" && (<>
+          {activeTab === "edit" && canEdit && (<>
             <div style={{ background: surf, border: "1px solid " + bdr, borderRadius: "12px", padding: "24px 26px" }}>
               <div style={{ fontSize: "14px", fontWeight: 600, color: t1, marginBottom: "4px" }}>Edit your listing</div>
               <div style={{ fontSize: "11px", fontFamily: mono, color: t3, marginBottom: "22px" }}>Changes go through admin review before going live</div>
@@ -1170,6 +1436,14 @@ export default function DashboardPage() {
                 </button>
               </div>
             </div>
+
+          </>)}
+
+          {/* ── TRUST ──────────────────────────────────────────────────────
+              Get Verified and Apply for Spotlight used to sit at the bottom of
+              the Edit tab. Submitting an audit is not an edit, and nobody
+              looking to apply for the banner thinks to look under "Edit". */}
+          {activeTab === "trust" && canEdit && (<>
 
             {/* GET VERIFIED — submit a third-party audit for review */}
             <div style={{ background: surf, border: "1px solid " + bdr, borderRadius: "12px", padding: "24px 26px", marginTop: "16px" }}>
@@ -1331,7 +1605,7 @@ export default function DashboardPage() {
             </div>
           </>)}
 
-          {activeTab === "tvl" && (
+          {activeTab === "tvl" && canEdit && (
             <TvlTrackingPanel
               slug={slug}
               token={token}
