@@ -2,6 +2,7 @@
 import { Geist, Geist_Mono } from "next/font/google"
 import { headers } from "next/headers"
 import "./globals.css"
+import VisitTracker from "@/components/VisitTracker"
 
 export const viewport: Viewport = {
   width: "device-width",
@@ -60,6 +61,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     <html lang="en" suppressHydrationWarning>
       <body className={`${geist.variable} ${geistMono.variable}`} style={{ margin: 0, padding: 0 }}>
         {children}
+        <VisitTracker />
       </body>
     </html>
   )

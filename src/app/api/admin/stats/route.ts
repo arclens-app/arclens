@@ -58,6 +58,7 @@ export async function GET(req: NextRequest) {
     xpAwarded, usdcPaid,
     reviewsTotal, projectViews,
     projects30d, completions30d, completions7d, activeTesters7d,
+    visitorsToday, visitors7d, visitors30d, pageViews30d,
   ] = await Promise.all([
     num("SELECT COUNT(*) FROM projects WHERE approved AND live"),
     num("SELECT COUNT(*) FROM projects"),
@@ -84,7 +85,23 @@ export async function GET(req: NextRequest) {
     num("SELECT COUNT(*) FROM campaign_completions WHERE created_at > NOW() - INTERVAL '30 days'"),
     num("SELECT COUNT(*) FROM campaign_completions WHERE created_at > NOW() - INTERVAL '7 days'"),
     num("SELECT COUNT(DISTINCT tester_wallet) FROM campaign_completions WHERE created_at > NOW() - INTERVAL '7 days'"),
+    // Traffic (cookieless page_visits). num() returns 0 if the table doesn't exist yet.
+    num("SELECT COUNT(DISTINCT device_id) FROM page_visits WHERE day = CURRENT_DATE"),
+    num("SELECT COUNT(DISTINCT device_id) FROM page_visits WHERE day >= CURRENT_DATE - 6"),
+    num("SELECT COUNT(DISTINCT device_id) FROM page_visits WHERE day >= CURRENT_DATE - 29"),
+    num("SELECT COUNT(*) FROM page_visits WHERE day >= CURRENT_DATE - 29"),
   ])
+
+  // Top pages by unique visitors (last 30d) — its own query since it returns rows.
+  let topPages: Array<{ path: string; visitors: number }> = []
+  try {
+    const tp = await pool.query(
+      `SELECT path, COUNT(DISTINCT device_id)::int AS visitors
+         FROM page_visits WHERE day >= CURRENT_DATE - 29
+         GROUP BY path ORDER BY visitors DESC LIMIT 8`,
+    )
+    topPages = tp.rows as any
+  } catch { /* table not created yet */ }
 
   return NextResponse.json({
     users: {
@@ -115,6 +132,13 @@ export async function GET(req: NextRequest) {
     momentum7d: {
       completions: completions7d,
       activeTesters: activeTesters7d,
+    },
+    traffic: {
+      visitorsToday,       // unique devices today
+      visitors7d,          // unique devices, last 7 days
+      visitors30d,         // unique devices, last 30 days
+      pageViews30d,        // total page visits, last 30 days
+      topPages,            // [{ path, visitors }] — most-visited pages, 30d
     },
     generated_at: new Date().toISOString(),
   })

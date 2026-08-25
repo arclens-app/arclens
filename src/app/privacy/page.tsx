@@ -26,6 +26,7 @@ Wallet addresses, transaction hashes, contract addresses, and on-chain activity 
 2.3 Automatically collected technical data:
 • Server logs including IP addresses, browser type, and page access times
 • This data is used solely for security monitoring, rate limiting, and platform operations
+• Aggregate page-visit counts, recorded against an anonymous device identifier (not a cookie, and not linked to your identity) so we can measure overall traffic and show founders how their listings perform. We do not build individual visitor profiles, and these counts are retained for 90 days
 
 2.4 Local device storage (never transmitted to our servers):
 • Your preferred colour theme (light/dark), stored in browser localStorage
