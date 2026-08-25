@@ -1751,8 +1751,12 @@ function ClaimForm({ slug, mono, bdr, surf, surf2, t1, t2, t3 }: any) {
       <p style={{ fontSize: "13px", color: t2, lineHeight: 1.7, marginBottom: "28px" }}>Enter the email you used when submitting your project. We'll send you a magic link — no password needed.</p>
       {success ? (
         <div>
-          <div style={{ padding: "16px", background: "rgba(0,184,122,0.06)", border: "1px solid rgba(0,184,122,0.2)", borderRadius: "8px", fontSize: "13px", color: "#00b87a", marginBottom: "16px" }}>
+          <div style={{ padding: "16px", background: "rgba(0,184,122,0.06)", border: "1px solid rgba(0,184,122,0.2)", borderRadius: "8px", fontSize: "13px", color: "#00b87a", marginBottom: "10px" }}>
             ✓ Check your email for the dashboard link
+          </div>
+          {/* On screen, not in the email — a filtered message is never read. */}
+          <div style={{ fontSize: "12px", color: t3, lineHeight: 1.7, marginBottom: "16px" }}>
+            Not in your inbox after a minute? Check your spam or promotions folder — a first email from a new sender is often filtered there.
           </div>
           {debugUrl && (
             <div style={{ padding: "12px", background: surf, border: "1px solid " + bdr, borderRadius: "8px", fontSize: "11px", fontFamily: mono, color: t3, wordBreak: "break-all" }}>

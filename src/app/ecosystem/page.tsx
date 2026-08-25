@@ -638,6 +638,11 @@ export default function EcosystemPage() {
                 <div style={{ fontSize: "13px", color: t2, fontWeight: 300, lineHeight: 1.7, marginBottom: "24px", maxWidth: "400px", marginLeft: "auto", marginRight: "auto" }}>
                   We sent it to <span style={{ color: t1 }}>{form.email}</span>. Nothing has been submitted yet — this just confirms we can reach you about it.
                 </div>
+                {/* Said on screen rather than in the email: if the mail was
+                    filtered, the person never reads anything we put inside it. */}
+                <div style={{ fontSize: "12px", color: t3, lineHeight: 1.7, marginBottom: "22px", maxWidth: "400px", marginLeft: "auto", marginRight: "auto" }}>
+                  Not in your inbox after a minute? Check your spam or promotions folder — a first email from a new sender is often filtered there.
+                </div>
                 <input
                   value={codeInput}
                   onChange={e => { setCodeInput(e.target.value.replace(/\D/g, "").slice(0, 6)); setCodeError("") }}

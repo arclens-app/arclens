@@ -1138,8 +1138,13 @@ export default function ArcLayout({ children, active, lockDark }: { children: Re
             {/* Custom OTP input view */}
             {connectView === "otp" && (
               <div>
-                <div style={{ fontSize: "12px", color: t2, lineHeight: 1.6, marginBottom: "20px" }}>
+                <div style={{ fontSize: "12px", color: t2, lineHeight: 1.6, marginBottom: "8px" }}>
                   We sent a 6-digit code to <span style={{ color: t1, fontWeight: 600 }}>{emailInput}</span>
+                </div>
+                {/* On screen, not in the email — if it was filtered, nothing we
+                    write inside the email will ever be read. */}
+                <div style={{ fontSize: "11.5px", color: t3, lineHeight: 1.6, marginBottom: "20px" }}>
+                  Not in your inbox after a minute? Check your spam or promotions folder.
                 </div>
 
                 <div style={{ display: "flex", gap: "8px", justifyContent: "space-between", marginBottom: "14px" }}>
