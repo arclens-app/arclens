@@ -7,33 +7,78 @@ const pool = getPool()
 
 const CATEGORIES = ["Product Experience", "Performance", "UI/UX", "Customer Support", "Security", "Feature Request"]
 
+type ActivityResult = "active" | "inactive" | "unavailable"
+
+// A review used to depend entirely on Arcscan's counters endpoint. A timeout or
+// a small response-shape change therefore looked exactly like a wallet with no
+// activity and blocked real Arc users. Check the chain RPC and Arcscan in
+// parallel, and only call a wallet inactive when both services answered zero.
+async function getWalletActivity(wallet: string): Promise<ActivityResult> {
+  const rpcUrl = process.env.ARC_RPC_HTTP || "https://rpc.testnet.arc.network"
+  const explorerBase = process.env.ARC_EXPLORER_API || "https://testnet.arcscan.app/api/v2"
+
+  const [rpc, explorer] = await Promise.allSettled([
+    fetch(rpcUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", method: "eth_getTransactionCount", params: [wallet, "latest"], id: 1 }),
+      cache: "no-store",
+      signal: AbortSignal.timeout(5000),
+    }).then(async res => {
+      if (!res.ok) throw new Error(`RPC returned ${res.status}`)
+      const data = await res.json()
+      if (typeof data?.result !== "string" || !/^0x[0-9a-f]+$/i.test(data.result)) {
+        throw new Error("RPC returned no transaction count")
+      }
+      return BigInt(data.result) > 0n
+    }),
+    fetch(`${explorerBase}/addresses/${wallet}/counters`, {
+      cache: "no-store",
+      signal: AbortSignal.timeout(5000),
+    }).then(async res => {
+      if (!res.ok) throw new Error(`Explorer returned ${res.status}`)
+      const data = await res.json()
+      const raw = data?.transactions_count ?? data?.transaction_count
+      if (raw == null || !Number.isFinite(Number(raw))) {
+        throw new Error("Explorer returned no transaction count")
+      }
+      return Number(raw) > 0
+    }),
+  ])
+
+  const answers = [rpc, explorer]
+    .filter((r): r is PromiseFulfilledResult<boolean> => r.status === "fulfilled")
+    .map(r => r.value)
+
+  if (answers.includes(true)) return "active"
+  if (answers.length === 2) return "inactive"
+  return "unavailable"
+}
+
 async function getWalletBadge(wallet: string, contract: string | null): Promise<string> {
-  try {
-    if (contract) {
+  if (contract) {
+    try {
       const res = await fetch(
         `https://testnet.arcscan.app/api/v2/addresses/${wallet}/transactions?filter=to&limit=10`,
-        { signal: AbortSignal.timeout(4000) }
+        { cache: "no-store", signal: AbortSignal.timeout(4000) }
       )
+      if (!res.ok) throw new Error(`Explorer returned ${res.status}`)
       const data = await res.json()
       const txs = data?.items || []
       const usedContract = txs.some((tx: any) =>
         tx.to?.hash?.toLowerCase() === contract.toLowerCase()
       )
       if (usedContract) return "verified"
+    } catch {
+      // Contract-specific verification is a stronger badge, not a requirement
+      // to review. Fall through to the resilient general activity check.
     }
-
-    const res2 = await fetch(
-      `https://testnet.arcscan.app/api/v2/addresses/${wallet}/counters`,
-      { signal: AbortSignal.timeout(4000) }
-    )
-    const data2 = await res2.json()
-    const txCount = parseInt(data2?.transactions_count || "0")
-    if (txCount > 0) return "arc_user"
-
-    return "unverified"
-  } catch {
-    return "unverified"
   }
+
+  const activity = await getWalletActivity(wallet)
+  if (activity === "active") return "arc_user"
+  if (activity === "unavailable") return "activity_unavailable"
+  return "unverified"
 }
 
 export async function GET(req: NextRequest) {
@@ -102,6 +147,9 @@ export async function POST(req: NextRequest) {
     // Determine badge
     const badge = await getWalletBadge(wallet, contract)
 
+    if (badge === "activity_unavailable") {
+      return NextResponse.json({ error: "We couldn't verify your Arc activity right now. Please try again in a moment." }, { status: 503 })
+    }
     if (badge === "unverified") {
       return NextResponse.json({ error: "You need at least one transaction on Arc testnet to leave a review. Make any transaction on Arc first." }, { status: 400 })
     }
