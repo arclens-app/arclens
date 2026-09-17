@@ -398,7 +398,19 @@ export default function HomePage() {
 
   useEffect(() => {
     if (!mounted) return
-    fetch("/api/ecosystem").then(r => r.json()).then(d => setProjects(d.projects || [])).catch(() => {})
+    Promise.all([
+      fetch("/api/ecosystem").then(r => r.json()),
+      fetch("/api/ecosystem/visibility", { cache: "no-store" })
+        .then(r => r.ok ? r.json() : null)
+        .catch(() => null),
+    ]).then(([directory, visibility]) => {
+      const liveIds = visibility?.liveProjectIds
+        ? new Set<string>(visibility.liveProjectIds.map((id: unknown) => String(id)))
+        : null
+      setProjects((directory.projects || []).filter((project: Project) =>
+        !liveIds || liveIds.has(String(project.id)),
+      ))
+    }).catch(() => {})
   }, [mounted])
 
   useEffect(() => {

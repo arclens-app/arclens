@@ -174,11 +174,25 @@ export default function EcosystemPage() {
     async function load() {
       setLoading(true)
       try {
-        const res  = await fetch("/api/ecosystem")
-        const data = await res.json()
-        const loaded: Project[] = data.projects || []
+        const [res, visibilityRes] = await Promise.all([
+          fetch("/api/ecosystem"),
+          fetch("/api/ecosystem/visibility", { cache: "no-store" }),
+        ])
+        const [data, visibility] = await Promise.all([
+          res.json(),
+          visibilityRes.ok ? visibilityRes.json() : Promise.resolve(null),
+        ])
+        const liveIds = visibility?.liveProjectIds
+          ? new Set<string>(visibility.liveProjectIds.map((id: unknown) => String(id)))
+          : null
+        const loaded: Project[] = (data.projects || []).filter((project: Project) =>
+          !liveIds || liveIds.has(String(project.id)),
+        )
+        const visibleTrending: TrendingProject[] = (data.trending || []).filter((project: TrendingProject) =>
+          !liveIds || liveIds.has(String(project.id)),
+        )
         setProjects(loaded)
-        setTrending(data.trending || [])
+        setTrending(visibleTrending)
         // Build lookup sets for duplicate detection — done once, checked instantly
         existingNames.current     = new Set(loaded.map(p => p.name.toLowerCase().trim()))
         existingContracts.current = new Set(loaded.filter(p => p.contract).map(p => p.contract!.toLowerCase().trim()))

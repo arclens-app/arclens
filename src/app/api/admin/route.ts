@@ -8,6 +8,7 @@ import { attestOnChain, subjectFor } from "@/lib/registry"
 import { loadPhishingList, hostOf, checkWebsite, analyzeContract, assessProject } from "@/lib/trustEngine"
 import { getPool } from "@/lib/dbPool"
 import { createUnsubscribeToken } from "@/lib/unsubscribeToken"
+import { revalidatePath } from "next/cache"
 
 const pool = getPool()
 
@@ -955,6 +956,11 @@ export async function POST(req: NextRequest) {
         [String(id)])
       if (!r.rows.length) return NextResponse.json({ error: "Project not found" }, { status: 404 })
       if (data?.notify !== false) await sendListingHiddenEmail(r.rows[0].id, reason, data?.note)
+      revalidatePath("/api/ecosystem")
+      revalidatePath(`/api/ecosystem/${String(id)}`)
+      revalidatePath("/ecosystem")
+      revalidatePath("/")
+      revalidatePath("/sitemap.xml")
       return NextResponse.json({ success: true, name: r.rows[0].name, live: false })
     }
     if (action === "restore-listing") {
@@ -963,6 +969,11 @@ export async function POST(req: NextRequest) {
         [String(id)])
       if (!r.rows.length) return NextResponse.json({ error: "Project not found" }, { status: 404 })
       if (data?.notify !== false) await sendListingRestoredEmail(r.rows[0].id, data?.note)
+      revalidatePath("/api/ecosystem")
+      revalidatePath(`/api/ecosystem/${String(id)}`)
+      revalidatePath("/ecosystem")
+      revalidatePath("/")
+      revalidatePath("/sitemap.xml")
       return NextResponse.json({ success: true, name: r.rows[0].name, live: true })
     }
 
