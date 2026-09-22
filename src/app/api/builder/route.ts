@@ -4,6 +4,7 @@ import { verifyMessage } from "viem"
 import { enforce } from "@/lib/ratelimit"
 import { getSession } from "@/lib/session"
 import { getPool } from "@/lib/dbPool"
+import { ARC_EXPLORER_API } from "@/lib/constants"
 
 const pool = getPool()
 
@@ -132,12 +133,12 @@ export async function GET(req: NextRequest) {
 
     try {
       const [txsRes, ...contractRes] = await Promise.all([
-        fetch(`https://testnet.arcscan.app/api/v2/addresses/${address}/transactions?limit=50`, {
+        fetch(`${ARC_EXPLORER_API}/addresses/${address}/transactions?limit=50`, {
           headers: { Accept: "application/json" },
           next: { revalidate: 60 },
         }),
         ...contractAddresses.map(c =>
-          fetch(`https://testnet.arcscan.app/api/v2/addresses/${c}`, {
+          fetch(`${ARC_EXPLORER_API}/addresses/${c}`, {
             headers: { Accept: "application/json" },
             next: { revalidate: 60 },
           })

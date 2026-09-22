@@ -1,6 +1,7 @@
 ﻿"use client"
 import { useEffect, useState } from "react"
 import ArcLayout from "@/components/ArcLayout"
+import { ARC_CHAIN_NAME, ARC_EXPLORER_URL } from "@/lib/constants"
 import { CAMPAIGN_TYPE_LABELS } from "@/lib/campaignTypes"
 import { SpotlightCard } from "@/components/Spotlight"
 
@@ -1052,7 +1053,7 @@ export default function AdminPage() {
             const tone = stale ? "#d7c160" : (crit || underwater) ? "#e03348" : low ? "#d7c160" : "#00b87a"
             const bg   = stale ? "rgba(255,200,0,0.04)" : (crit || underwater) ? "rgba(224,51,72,0.08)" : low ? "rgba(255,200,0,0.06)" : "rgba(0,184,122,0.04)"
             const bd   = stale ? "rgba(255,200,0,0.2)"  : (crit || underwater) ? "rgba(224,51,72,0.3)"  : low ? "rgba(255,200,0,0.2)"  : "rgba(0,184,122,0.15)"
-            const explorerUrl = `https://testnet.arcscan.app/address/${payoutBal.address}`
+            const explorerUrl = `${ARC_EXPLORER_URL}/address/${payoutBal.address}`
             const fmt = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
             return (
               <div style={{ marginBottom:"16px", padding:"16px 20px", background:bg, border:`1px solid ${bd}`, borderRadius:"12px" }}>
@@ -1181,7 +1182,7 @@ export default function AdminPage() {
                             >
                               <option value="">Select a reason or type below...</option>
                               <option value="ArcLens requires a website on a domain your project owns. Free hosting subdomains (vercel.app, netlify.app, github.io and similar) are not accepted. Point your site at a domain you own and resubmit.">No project-owned domain</option>
-                              <option value="Project does not appear to be deployed or active on Arc Testnet.">Not deployed or active on Arc Testnet</option>
+                              <option value={`Project does not appear to be deployed or active on ${ARC_CHAIN_NAME}.`}>Not deployed or active on {ARC_CHAIN_NAME}</option>
                               <option value="Your website was flagged as suspicious or malicious by one or more security scanners. Resolve the flag with the scanning vendors (or move to a clean domain), then resubmit — we cannot list projects whose sites security tools warn users about.">Website flagged by security scanners</option>
                               <option value="Insufficient project information — missing website, description, or verifiable links.">Insufficient information</option>
                               <option value="Logo or branding does not meet listing standards.">Logo or branding quality</option>
@@ -2044,7 +2045,7 @@ export default function AdminPage() {
                                                         {proofTasks.map((t: any) => {
                                                           const value = proofs[t.id] || ""
                                                           const labelType = t.proof_type === "x_link" ? "X post" : t.proof_type === "tx_hash" ? "Tx hash" : t.proof_type === "screenshot" ? "Screenshot" : "URL"
-                                                          const linkHref = !value ? null : t.proof_type === "tx_hash" ? `https://testnet.arcscan.app/tx/${value}` : value
+                                                          const linkHref = !value ? null : t.proof_type === "tx_hash" ? `${ARC_EXPLORER_URL}/tx/${value}` : value
                                                           const isShot = t.proof_type === "screenshot" && !!value
                                                           return (
                                                             <div key={t.id} style={{ display: "flex", alignItems: isShot ? "flex-start" : "center", gap: 8, fontSize: 10.5 }}>
@@ -2469,7 +2470,7 @@ export default function AdminPage() {
                                 <option value="">Select a reason or type below...</option>
                                 <option value="The banner image is low quality, blurry, or cropped awkwardly. Upload a cleaner, higher-resolution image and resubmit.">Banner image quality</option>
                                 <option value="The headline or copy is unclear, too promotional, or doesn't describe what you're spotlighting. Refine the wording and resubmit.">Headline / copy needs work</option>
-                                <option value="Your project isn't active or established enough on Arc Testnet yet to feature in the spotlight. Build some traction first, then reapply.">Not enough traction yet</option>
+                                <option value={`Your project isn't active or established enough on ${ARC_CHAIN_NAME} yet to feature in the spotlight. Build some traction first, then reapply.`}>Not enough traction yet</option>
                                 <option value="The spotlight slot is fully booked for your requested window. Please reapply for a later window.">Slot fully booked</option>
                                 <option value="The link destination is broken or doesn't point to a relevant, working page.">Broken or irrelevant link</option>
                                 <option value="The content doesn't fit ArcLens spotlight guidelines (no unrelated promotions, token sales, or off-topic content).">Doesn't fit guidelines</option>
@@ -2561,7 +2562,7 @@ export default function AdminPage() {
                             <div className="admin-grid-collapse" style={{ display:"grid", gridTemplateColumns:"180px 1fr", gap:"6px 14px", fontSize:"11.5px", fontFamily:mono, marginBottom:"10px" }}>
                               <div style={{ color:t3 }}>Address</div>
                               <div style={{ color:t1, wordBreak:"break-all" }}>
-                                <a href={`https://testnet.arcscan.app/address/${c.address}`} target="_blank" rel="noopener noreferrer" style={{ color:"#8aaeff", textDecoration:"none" }}>
+                                <a href={`${ARC_EXPLORER_URL}/address/${c.address}`} target="_blank" rel="noopener noreferrer" style={{ color:"#8aaeff", textDecoration:"none" }}>
                                   {c.address}
                                 </a>
                               </div>

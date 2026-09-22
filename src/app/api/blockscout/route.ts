@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { ARC_EXPLORER_URL } from "@/lib/constants"
 
 export async function GET(req: NextRequest) {
   const path = req.nextUrl.searchParams.get("path")
@@ -9,7 +10,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Invalid path" }, { status: 400 })
   }
 
-  const res  = await fetch("https://testnet.arcscan.app/api/" + path)
+  const res  = await fetch(`${ARC_EXPLORER_URL}/api/` + path)
   const data = await res.json()
 
   // Cache at Vercel edge — blocks/txs change fast so keep short,

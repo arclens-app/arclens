@@ -1,7 +1,7 @@
 "use client"
 import ArcLayout from "@/components/ArcLayout"
 
-const LAST_UPDATED = "August 6, 2026"
+const LAST_UPDATED = "September 16, 2026"
 
 const sections = [
   {
@@ -27,8 +27,8 @@ ArcLens is independently operated and is not affiliated with, endorsed by, or op
   },
   {
     id: "3",
-    title: "Testnet Disclaimer",
-    body: `ArcLens currently operates primarily on Arc Testnet (Chain ID 5042002). Testnet assets, transactions, and balances have no real monetary value unless explicitly stated otherwise. Blockchain data displayed on the platform is sourced from third-party nodes and may be subject to delays, inaccuracies, or gaps. ArcLens makes no warranty as to the accuracy, completeness, or timeliness of any data presented. You should independently verify all on-chain data before relying on it for any purpose.`,
+    title: "Network and Data Disclaimer",
+    body: `ArcLens operates on Arc mainnet and may retain clearly identified Arc testnet history. Mainnet assets, transactions, fees, campaign deposits, and rewards can have real monetary value; testnet assets have no monetary value. Blockchain data displayed on the platform is sourced from third-party nodes and may be subject to delays, inaccuracies, or gaps. ArcLens makes no warranty as to the accuracy, completeness, or timeliness of any data presented. You should independently verify all on-chain data before relying on it for any purpose.`,
   },
   {
     id: "4",

@@ -12,6 +12,7 @@
 import { tool, jsonSchema } from "ai"
 import { getPayoutStats, getBuilderBoard } from "@/lib/lensPay"
 import { getPool } from "@/lib/dbPool"
+import { ARC_CHAIN_ID, ARC_RPC_HTTP } from "@/lib/constants"
 
 const pool = getPool()
 
@@ -98,7 +99,7 @@ function trustOf(row: any): { tier: string; established: boolean; risk: boolean;
 
 // Live Arc chain reads (gas, blocks, tx, address) via JSON-RPC — so the agent can
 // actually answer "how much is gas", "how fast is Arc", "explain this tx / wallet".
-const ARC_RPC = process.env.ARC_RPC_URL || "https://rpc.testnet.arc.network"
+const ARC_RPC = process.env.ARC_RPC_URL || ARC_RPC_HTTP
 async function rpc(method: string, params: unknown[] = []): Promise<any> {
   const res = await fetch(ARC_RPC, {
     method: "POST",
@@ -130,7 +131,7 @@ export function buildTools() {
         const col = METRIC_COL[metric] ?? "tvl_usd_e6"
         const lim = Math.min(Math.max(Number(limit) || 5, 1), 20)
         const params: any[] = []
-        let where = `approved AND live AND ${col} > 0`
+        let where = `approved AND live AND metrics_chain_id = ${ARC_CHAIN_ID} AND ${col} > 0`
         if (category) { params.push(category); where += ` AND category ILIKE $${params.length}` }
         params.push(lim)
         const r = await pool.query(
@@ -177,8 +178,10 @@ export function buildTools() {
         for (const name of wanted) {
           const r = await pool.query(
             `SELECT name, slug, category, tagline, logo_url,
-                    tvl_usd_e6::text AS tvl, volume_cum_usd_e6::text AS volume,
-                    revenue_cum_usd_e6::text AS revenue, tvl_tracking_enabled,
+                    CASE WHEN metrics_chain_id = ${ARC_CHAIN_ID} THEN tvl_usd_e6::text ELSE '0' END AS tvl,
+                    CASE WHEN metrics_chain_id = ${ARC_CHAIN_ID} THEN volume_cum_usd_e6::text ELSE '0' END AS volume,
+                    CASE WHEN metrics_chain_id = ${ARC_CHAIN_ID} THEN revenue_cum_usd_e6::text ELSE '0' END AS revenue,
+                    (tvl_tracking_enabled AND metrics_chain_id = ${ARC_CHAIN_ID}) AS tvl_tracking_enabled,
                     ${TRUST_COLS}
              FROM projects
              WHERE approved AND live AND (slug ILIKE $1 OR name ILIKE $1)
@@ -226,7 +229,7 @@ export function buildTools() {
         params.push(lim)
         const r = await pool.query(
           `SELECT name, slug, category, tagline, featured, logo_url,
-                  tvl_usd_e6::text AS tvl,
+                  CASE WHEN metrics_chain_id = ${ARC_CHAIN_ID} THEN tvl_usd_e6::text ELSE '0' END AS tvl,
                   ${TRUST_COLS}
            FROM projects
            WHERE ${clauses.join(" AND ")}
@@ -480,12 +483,16 @@ export function buildTools() {
         required: ["project"],
       }),
       execute: async ({ project }) => {
-        const sql = `SELECT name, slug, category, tagline, tvl_tracking_enabled,
+        const sql = `SELECT name, slug, category, tagline,
+                  (tvl_tracking_enabled AND metrics_chain_id = ${ARC_CHAIN_ID}) AS tvl_tracking_enabled,
                   twitter, website, discord, github,
-                  tvl_usd_e6::text AS tvl, volume_cum_usd_e6::text AS volume,
-                  revenue_cum_usd_e6::text AS revenue,
-                  tvl_ath_usd_e6::text AS tvl_ath, tvl_last_indexed_at,
-                  subgraph_tvl_usd_e6::text AS sg_tvl, subgraph_volume_usd_e6::text AS sg_volume,
+                  CASE WHEN metrics_chain_id = ${ARC_CHAIN_ID} THEN tvl_usd_e6::text ELSE '0' END AS tvl,
+                  CASE WHEN metrics_chain_id = ${ARC_CHAIN_ID} THEN volume_cum_usd_e6::text ELSE '0' END AS volume,
+                  CASE WHEN metrics_chain_id = ${ARC_CHAIN_ID} THEN revenue_cum_usd_e6::text ELSE '0' END AS revenue,
+                  CASE WHEN metrics_chain_id = ${ARC_CHAIN_ID} THEN tvl_ath_usd_e6::text ELSE '0' END AS tvl_ath,
+                  CASE WHEN metrics_chain_id = ${ARC_CHAIN_ID} THEN tvl_last_indexed_at ELSE NULL END AS tvl_last_indexed_at,
+                  CASE WHEN subgraph_chain_id = ${ARC_CHAIN_ID} THEN subgraph_tvl_usd_e6::text ELSE '0' END AS sg_tvl,
+                  CASE WHEN subgraph_chain_id = ${ARC_CHAIN_ID} THEN subgraph_volume_usd_e6::text ELSE '0' END AS sg_volume,
                   ${TRUST_COLS}
            FROM projects
            WHERE approved AND live AND (slug ILIKE $1 OR name ILIKE $1)
@@ -545,12 +552,12 @@ export function buildTools() {
             `WITH past AS (
                SELECT DISTINCT ON (project_id) project_id, total_usd_e6
                FROM tvl_snapshots
-               WHERE block_time <= NOW() - make_interval(days => $1::int)
+               WHERE block_time <= NOW() - make_interval(days => $1::int) AND chain_id = ${ARC_CHAIN_ID}
                ORDER BY project_id, block_time DESC
              )
              SELECT p.name, p.slug, p.tvl_usd_e6::text AS cur, COALESCE(past.total_usd_e6, 0)::text AS past
              FROM projects p LEFT JOIN past ON past.project_id = p.id
-             WHERE p.approved AND p.live AND p.tvl_usd_e6 > 0`,
+             WHERE p.approved AND p.live AND p.metrics_chain_id = ${ARC_CHAIN_ID} AND p.tvl_usd_e6 > 0`,
             [days],
           )
           const movers = r.rows
@@ -576,7 +583,7 @@ export function buildTools() {
         const tbl = metric === "revenue" ? "revenue_daily" : "volume_daily"
         const r = await pool.query(
           `SELECT p.name, p.slug, COALESCE(SUM(d.total_usd_e6), 0)::text AS period_total
-           FROM projects p JOIN ${tbl} d ON d.project_id = p.id
+           FROM projects p JOIN ${tbl} d ON d.project_id = p.id AND d.chain_id = ${ARC_CHAIN_ID}
            WHERE p.approved AND p.live AND d.day >= (CURRENT_DATE - ($1::int - 1))
            GROUP BY p.id, p.name, p.slug
            HAVING SUM(d.total_usd_e6) > 0
@@ -678,8 +685,8 @@ export function buildTools() {
         const WEEK = Math.floor(Date.now() / (7 * 24 * 60 * 60 * 1000))
         let trendingJoin = ""
         let order: string
-        if (sort === "tvl") order = "p.tvl_usd_e6 DESC NULLS LAST"
-        else if (sort === "volume") order = "p.volume_cum_usd_e6 DESC NULLS LAST"
+        if (sort === "tvl") order = `(CASE WHEN p.metrics_chain_id = ${ARC_CHAIN_ID} THEN p.tvl_usd_e6 ELSE 0 END) DESC NULLS LAST`
+        else if (sort === "volume") order = `(CASE WHEN p.metrics_chain_id = ${ARC_CHAIN_ID} THEN p.volume_cum_usd_e6 ELSE 0 END) DESC NULLS LAST`
         else if (sort === "newest") order = "p.created_at DESC"
         else if (sort === "oldest") order = "p.created_at ASC NULLS LAST"
         else if (sort === "trending") {
@@ -690,7 +697,9 @@ export function buildTools() {
         else order = "p.featured DESC, COALESCE(p.view_count, 0) DESC"
         params.push(lim)
         const r = await pool.query(
-          `SELECT p.name, p.slug, p.category, p.tagline, p.tvl_usd_e6::text AS tvl, p.logo_url,
+          `SELECT p.name, p.slug, p.category, p.tagline,
+                  CASE WHEN p.metrics_chain_id = ${ARC_CHAIN_ID} THEN p.tvl_usd_e6::text ELSE '0' END AS tvl,
+                  p.logo_url,
                   p.trust_level, p.recognition, p.established,
                   COALESCE((p.trust_profile->>'hard_risk')::bool, false) AS hard_risk,
                   b.display_name AS builder_name, b.verified AS builder_verified
@@ -743,7 +752,7 @@ export function buildTools() {
                   CASE WHEN ${openExpr} THEN 'open' ELSE 'ended' END AS state
            FROM campaigns c
            LEFT JOIN projects p ON p.owner_wallet = c.creator_wallet AND p.approved = true AND p.live = true
-           WHERE c.status IN ('active','ended')
+           WHERE c.status IN ('active','ended') AND c.chain_id = ${ARC_CHAIN_ID}
            ORDER BY (CASE WHEN ${openExpr} THEN 0 ELSE 1 END), c.created_at DESC NULLS LAST
            LIMIT $1`,
           [lim],
@@ -769,9 +778,9 @@ export function buildTools() {
         const r = await pool.query(
           `SELECT
              COUNT(*) FILTER (WHERE approved AND live)::int AS projects,
-             COUNT(*) FILTER (WHERE approved AND live AND tvl_tracking_enabled)::int AS tracking,
-             COALESCE(SUM(tvl_usd_e6)        FILTER (WHERE approved AND live), 0)::text AS tvl,
-             COALESCE(SUM(volume_cum_usd_e6) FILTER (WHERE approved AND live), 0)::text AS volume
+             COUNT(*) FILTER (WHERE approved AND live AND tvl_tracking_enabled AND metrics_chain_id = ${ARC_CHAIN_ID})::int AS tracking,
+             COALESCE(SUM(tvl_usd_e6) FILTER (WHERE approved AND live AND metrics_chain_id = ${ARC_CHAIN_ID}), 0)::text AS tvl,
+             COALESCE(SUM(volume_cum_usd_e6) FILTER (WHERE approved AND live AND metrics_chain_id = ${ARC_CHAIN_ID}), 0)::text AS volume
            FROM projects`,
         )
         const b = await pool.query(`SELECT COUNT(*)::int n FROM builder_profiles`).catch(() => ({ rows: [{ n: 0 }] }))

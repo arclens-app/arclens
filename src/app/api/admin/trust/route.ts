@@ -11,6 +11,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { timingSafeEqual } from "crypto"
 import { attestOnChain, subjectFor } from "@/lib/registry"
 import { getPool } from "@/lib/dbPool"
+import { ARC_CHAIN_ID } from "@/lib/constants"
 
 const pool = getPool()
 
@@ -40,7 +41,7 @@ export async function GET(req: NextRequest) {
               ia.created_at, p.slug, p.name
        FROM indexer_alerts ia
        LEFT JOIN projects p ON p.id = ia.project_id
-       WHERE ia.resolved_at IS NULL
+       WHERE ia.resolved_at IS NULL AND ia.chain_id = ${ARC_CHAIN_ID}
        ORDER BY
          CASE ia.severity WHEN 'critical' THEN 1 WHEN 'warning' THEN 2 ELSE 3 END,
          ia.created_at DESC
@@ -126,7 +127,7 @@ export async function PATCH(req: NextRequest) {
         return NextResponse.json({ error: "alerts only support action=resolve" }, { status: 400 })
       }
       await pool.query(
-        `UPDATE indexer_alerts SET resolved_at = NOW() WHERE id = $1 AND resolved_at IS NULL`,
+        `UPDATE indexer_alerts SET resolved_at = NOW() WHERE id = $1 AND resolved_at IS NULL AND chain_id = ${ARC_CHAIN_ID}`,
         [Number(id)],
       )
       return NextResponse.json({ success: true })
@@ -168,7 +169,7 @@ export async function PATCH(req: NextRequest) {
       await pool.query(`UPDATE projects SET trust_level = 'verified', audit_status = 'approved', trust_updated_at = NOW() WHERE id = $1`, [Number(id)])
       const p = (await pool.query(
         `SELECT slug, recognition, established,
-                (SELECT address FROM project_contracts WHERE project_id = projects.id AND verified_at IS NOT NULL AND revoked_at IS NULL LIMIT 1) AS proven
+                (SELECT address FROM project_contracts WHERE project_id = projects.id AND chain_id = ${ARC_CHAIN_ID} AND verified_at IS NOT NULL AND revoked_at IS NULL LIMIT 1) AS proven
            FROM projects WHERE id = $1`, [Number(id)]
       )).rows[0]
       if (before?.trust_level !== "verified") {

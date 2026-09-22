@@ -13,9 +13,9 @@ import crypto from "crypto"
 import { ethers } from "ethers"
 import { enforce } from "@/lib/ratelimit"
 import { getSession } from "@/lib/session"
-import { ARC_RPC_HTTP } from "@/lib/constants"
+import { ARC_EXPLORER_API, ARC_RPC_HTTP } from "@/lib/constants"
 
-const ARCSCAN = "https://testnet.arcscan.app/api/v2"
+const ARCSCAN = ARC_EXPLORER_API
 const CHALLENGE_TTL_MS = 10 * 60 * 1000
 
 interface VerifyChallengePayload {

@@ -2,6 +2,7 @@
 import { enforce } from "@/lib/ratelimit"
 import { getSession } from "@/lib/session"
 import { getPool } from "@/lib/dbPool"
+import { ARC_CHAIN_ID } from "@/lib/constants"
 
 const pool = getPool()
 
@@ -47,7 +48,15 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ wal
   const w = wallet.toLowerCase()
   try {
     const [repRes, historyRes] = await Promise.all([
-      pool.query(`SELECT * FROM tester_reputation WHERE wallet = $1`, [w]),
+      pool.query(
+        `SELECT tr.* FROM tester_reputation tr
+          WHERE tr.wallet = $1
+            AND (
+              EXISTS (SELECT 1 FROM circle_wallet_users c WHERE LOWER(c.wallet_address) = $1 AND c.chain_id = ${ARC_CHAIN_ID})
+              OR NOT EXISTS (SELECT 1 FROM circle_wallet_users c WHERE LOWER(c.wallet_address) = $1)
+            )`,
+        [w],
+      ),
       pool.query(`
         SELECT
           cc.campaign_id, cc.auto_score, cc.builder_rating, cc.quality_score,
@@ -56,7 +65,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ wal
           c.reward_type, c.reward_usdc_amount
         FROM campaign_completions cc
         JOIN campaigns c ON c.id = cc.campaign_id
-        WHERE cc.tester_wallet = $1
+        WHERE LOWER(COALESCE(cc.profile_wallet, cc.tester_wallet)) = $1
         ORDER BY cc.created_at DESC
         LIMIT 50
       `, [w]),

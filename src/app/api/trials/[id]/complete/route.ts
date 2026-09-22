@@ -3,6 +3,7 @@ import { getProvider } from "@/lib/arc"
 import { rateLimit, getIp } from "@/lib/ratelimit"
 import { getSession } from "@/lib/session"
 import { getPool } from "@/lib/dbPool"
+import { ARC_CHAIN_ID, ARC_CHAIN_NAME } from "@/lib/constants"
 
 const pool = getPool()
 
@@ -134,7 +135,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const isNumeric = /^\d+$/.test(id)
     const campaignRes = await pool.query(
       `SELECT id, status, total_slots, filled_slots, tasks, review_questions, min_rank, contract_address
-       FROM campaigns WHERE ${isNumeric ? "id = $1" : "slug = $1"}`,
+       FROM campaigns WHERE ${isNumeric ? "id = $1" : "slug = $1"} AND chain_id = ${ARC_CHAIN_ID}`,
       [isNumeric ? Number(id) : id]
     )
     if (!campaignRes.rows.length) {
@@ -166,7 +167,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     // Check for duplicate
     const dupCheck = await pool.query(
-      `SELECT id FROM campaign_completions WHERE campaign_id = $1 AND tester_wallet = $2`,
+      `SELECT id FROM campaign_completions WHERE campaign_id = $1 AND tester_wallet = $2 AND chain_id = ${ARC_CHAIN_ID}`,
       [campaignNumericId, wallet]
     )
     if (dupCheck.rows.length) {
@@ -286,7 +287,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         // dup-check above already prevents re-submission anyway).
         const prior = await pool.query(
           `SELECT task_proofs FROM campaign_completions
-            WHERE campaign_id = $1 AND tester_wallet != $2`,
+            WHERE campaign_id = $1 AND tester_wallet != $2 AND chain_id = ${ARC_CHAIN_ID}`,
           [campaignNumericId, wallet]
         )
         const usedKeys = new Set<string>()
@@ -332,7 +333,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       // Hard gate — if contracts are configured and the tester hasn't interacted, block submission
       if (contract_verified === false) {
         return NextResponse.json({
-          error: "On-chain participation required. Complete the contract interaction on Arc Testnet before submitting.",
+          error: `On-chain participation required. Complete the contract interaction on ${ARC_CHAIN_NAME} before submitting.`,
           contract_required: true,
         }, { status: 403 })
       }
@@ -351,8 +352,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const provisionalScore = (auto_score / 100) * 5
     await pool.query(
       `INSERT INTO campaign_completions
-         (campaign_id, tester_wallet, tx_hashes, review_answers, task_proofs, auto_score, contract_verified, provisional_score)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+         (campaign_id, tester_wallet, profile_wallet, tx_hashes, review_answers, task_proofs, auto_score, contract_verified, provisional_score, chain_id)
+       VALUES ($1, $2, $2, $3, $4, $5, $6, $7, $8, ${ARC_CHAIN_ID})`,
       [campaignNumericId, wallet, tx_hashes, JSON.stringify(review_answers), JSON.stringify(cleanedProofs), auto_score, contract_verified, provisionalScore]
     )
 
@@ -377,17 +378,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
              WHEN filled_slots + 1 >= total_slots AND ended_reason IS NULL THEN 'slots_filled'
              ELSE ended_reason
            END
-         WHERE id = $1 AND filled_slots < total_slots
+         WHERE id = $1 AND filled_slots < total_slots AND chain_id = ${ARC_CHAIN_ID}
          RETURNING id, status, filled_slots, total_slots`,
         [campaignNumericId]
       )
       if (!slotRes.rows.length) {
         // Another tester claimed the last slot between our check and now — roll back completion
-        await pool.query(`DELETE FROM campaign_completions WHERE campaign_id = $1 AND tester_wallet = $2`, [campaignNumericId, wallet])
+        await pool.query(`DELETE FROM campaign_completions WHERE campaign_id = $1 AND tester_wallet = $2 AND chain_id = ${ARC_CHAIN_ID}`, [campaignNumericId, wallet])
         return NextResponse.json({ error: "Campaign is full" }, { status: 400 })
       }
     } else {
-      await pool.query(`UPDATE campaigns SET filled_slots = filled_slots + 1 WHERE id = $1`, [campaignNumericId])
+      await pool.query(`UPDATE campaigns SET filled_slots = filled_slots + 1 WHERE id = $1 AND chain_id = ${ARC_CHAIN_ID}`, [campaignNumericId])
     }
 
     // Upsert reputation record (provisional — quality_score refined after builder rating)

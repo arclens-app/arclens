@@ -22,7 +22,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { PoolClient } from "pg"
 import { ethers } from "ethers"
 
-import { ARC_RPC_HTTP } from "@/lib/constants"
+import { ARC_CHAIN_ID, ARC_RPC_HTTP } from "@/lib/constants"
 import { getPool } from "@/lib/dbPool"
 import {
   TRANSFER_TOPIC,
@@ -271,7 +271,7 @@ export async function GET(req: NextRequest) {
 async function loadActiveStablecoins(client: PoolClient): Promise<StablecoinRow[]> {
   const r = await client.query<StablecoinRow>(
     `SELECT id, LOWER(address) AS address, symbol, decimals, peg_currency
-     FROM stablecoins WHERE active = true ORDER BY id`,
+     FROM stablecoins WHERE active = true AND chain_id = ${ARC_CHAIN_ID} ORDER BY id`,
   )
   return r.rows
 }
@@ -289,6 +289,7 @@ async function loadLiveProjectContracts(client: PoolClient): Promise<ProjectCont
      JOIN projects p ON p.id = pc.project_id
      WHERE pc.verified_at IS NOT NULL
        AND pc.revoked_at IS NULL
+       AND pc.chain_id = ${ARC_CHAIN_ID}
        AND p.approved = true
        AND p.live = true
        AND p.tvl_tracking_enabled = true
@@ -336,7 +337,7 @@ async function scanStablecoinRevenueEvents(
   // Cursor: last block we already ingested for this stablecoin.
   const curRes = await client.query<{ last_block: string }>(
     `SELECT last_block::text FROM indexer_cursors
-     WHERE kind = 'tvl_revenue' AND stablecoin_id = $1`,
+     WHERE kind = 'tvl_revenue' AND stablecoin_id = $1 AND chain_id = ${ARC_CHAIN_ID}`,
     [s.id],
   )
   const cursor = curRes.rows[0] ? Number(curRes.rows[0].last_block) : 0
@@ -417,9 +418,10 @@ async function scanStablecoinRevenueEvents(
     const r = await client.query<{ project_id: number; block_time: string; amount_usd_e6: string }>(
       `INSERT INTO revenue_events
          (project_id, contract_id, stablecoin_id, tx_hash, log_index,
-          block_number, block_time, from_address, amount_raw, amount_usd_e6)
-       VALUES ${placeholders.join(",")}
-       ON CONFLICT (tx_hash, log_index) DO NOTHING
+          block_number, block_time, from_address, amount_raw, amount_usd_e6, chain_id)
+       SELECT v.*, ${ARC_CHAIN_ID} FROM (VALUES ${placeholders.join(",")}) AS v
+         (project_id, contract_id, stablecoin_id, tx_hash, log_index, block_number, block_time, from_address, amount_raw, amount_usd_e6)
+       ON CONFLICT (chain_id, tx_hash, log_index) DO NOTHING
        RETURNING project_id, block_time::text, amount_usd_e6::text`,
       flat,
     )
@@ -438,9 +440,9 @@ async function scanStablecoinRevenueEvents(
   for (const [k, { usdE6, count }] of dailyDeltas) {
     const [projStr, day] = k.split("|")
     await client.query(
-      `INSERT INTO revenue_daily (project_id, day, total_usd_e6, event_count)
-       VALUES ($1, $2, $3, $4)
-       ON CONFLICT (project_id, day) DO UPDATE SET
+      `INSERT INTO revenue_daily (project_id, day, total_usd_e6, event_count, chain_id)
+       VALUES ($1, $2, $3, $4, ${ARC_CHAIN_ID})
+       ON CONFLICT (chain_id, project_id, day) DO UPDATE SET
          total_usd_e6 = revenue_daily.total_usd_e6 + EXCLUDED.total_usd_e6,
          event_count  = revenue_daily.event_count + EXCLUDED.event_count,
          updated_at   = NOW()`,
@@ -450,9 +452,9 @@ async function scanStablecoinRevenueEvents(
 
   // Advance cursor only after successful write.
   await client.query(
-    `INSERT INTO indexer_cursors (kind, stablecoin_id, last_block, updated_at)
-     VALUES ('tvl_revenue', $1, $2, NOW())
-     ON CONFLICT (kind, stablecoin_id) DO UPDATE SET
+    `INSERT INTO indexer_cursors (kind, stablecoin_id, last_block, updated_at, chain_id)
+     VALUES ('tvl_revenue', $1, $2, NOW(), ${ARC_CHAIN_ID})
+     ON CONFLICT (chain_id, kind, stablecoin_id) DO UPDATE SET
        last_block = EXCLUDED.last_block,
        updated_at = NOW()`,
     [s.id, toBlock],
@@ -528,8 +530,8 @@ async function indexProjectTvl(
       usd_e6: c.usdE6.toString(),
     }))
     await client.query(
-      `INSERT INTO tvl_snapshots (project_id, block_number, block_time, total_usd_e6, breakdown)
-       VALUES ($1, $2, $3, $4, $5::jsonb)`,
+      `INSERT INTO tvl_snapshots (project_id, block_number, block_time, total_usd_e6, breakdown, chain_id)
+       VALUES ($1, $2, $3, $4, $5::jsonb, ${ARC_CHAIN_ID})`,
       [projectId, targetBlock, blockTime, totalUsdE6.toString(), JSON.stringify(breakdown)],
     )
     snapshotWritten = true
@@ -541,6 +543,7 @@ async function indexProjectTvl(
     await client.query(
       `UPDATE projects SET
          tvl_usd_e6 = $2,
+         metrics_chain_id = ${ARC_CHAIN_ID},
          tvl_ath_usd_e6 = $2,
          tvl_ath_block = $3,
          tvl_ath_at = $4,
@@ -552,6 +555,7 @@ async function indexProjectTvl(
     await client.query(
       `UPDATE projects SET
          tvl_usd_e6 = $2,
+         metrics_chain_id = ${ARC_CHAIN_ID},
          tvl_last_indexed_at = NOW()
        WHERE id = $1`,
       [projectId, totalUsdE6.toString()],
@@ -571,17 +575,18 @@ async function rollupRevenueOntoProjects(client: PoolClient, projectIds: number[
   await client.query(
     `UPDATE projects p SET
        revenue_cum_usd_e6     = COALESCE(t.cum, 0),
+       metrics_chain_id       = ${ARC_CHAIN_ID},
        revenue_ath_day_usd_e6 = ath.max_day,
        revenue_ath_day        = ath.max_date
      FROM (SELECT unnest($1::int[]) AS project_id) ids
      LEFT JOIN LATERAL (
        SELECT SUM(amount_usd_e6) AS cum
-       FROM revenue_events WHERE project_id = ids.project_id
+       FROM revenue_events WHERE project_id = ids.project_id AND chain_id = ${ARC_CHAIN_ID}
      ) t ON true
      LEFT JOIN LATERAL (
        SELECT day AS max_date, total_usd_e6 AS max_day
        FROM revenue_daily rd
-       WHERE rd.project_id = ids.project_id
+       WHERE rd.project_id = ids.project_id AND rd.chain_id = ${ARC_CHAIN_ID}
        ORDER BY rd.total_usd_e6 DESC LIMIT 1
      ) ath ON true
      WHERE p.id = ids.project_id`,
@@ -613,7 +618,7 @@ async function scanVolumeEvents(
   const cursorKind = `volume_${vc.id}`
   const curRes = await client.query<{ last_block: string }>(
     `SELECT last_block::text FROM indexer_cursors
-     WHERE kind = $1 AND stablecoin_id = $2`,
+     WHERE kind = $1 AND stablecoin_id = $2 AND chain_id = ${ARC_CHAIN_ID}`,
     [cursorKind, stable.id],
   )
   const cursor = curRes.rows[0] ? Number(curRes.rows[0].last_block) : 0
@@ -635,9 +640,9 @@ async function scanVolumeEvents(
 
   if (logs.length === 0) {
     await client.query(
-      `INSERT INTO indexer_cursors (kind, stablecoin_id, last_block, updated_at)
-       VALUES ($1, $2, $3, NOW())
-       ON CONFLICT (kind, stablecoin_id) DO UPDATE SET
+      `INSERT INTO indexer_cursors (kind, stablecoin_id, last_block, updated_at, chain_id)
+       VALUES ($1, $2, $3, NOW(), ${ARC_CHAIN_ID})
+       ON CONFLICT (chain_id, kind, stablecoin_id) DO UPDATE SET
          last_block = GREATEST(indexer_cursors.last_block, EXCLUDED.last_block),
          updated_at = NOW()`,
       [cursorKind, stable.id, toBlock],
@@ -732,9 +737,10 @@ async function scanVolumeEvents(
     const r = await client.query<{ project_id: number; block_time: string; amount_usd_e6: string }>(
       `INSERT INTO volume_events
          (project_id, contract_id, stablecoin_id, tx_hash, log_index,
-          block_number, block_time, amount_raw, amount_usd_e6)
-       VALUES ${placeholders.join(",")}
-       ON CONFLICT (tx_hash, log_index) DO NOTHING
+          block_number, block_time, amount_raw, amount_usd_e6, chain_id)
+       SELECT v.*, ${ARC_CHAIN_ID} FROM (VALUES ${placeholders.join(",")}) AS v
+         (project_id, contract_id, stablecoin_id, tx_hash, log_index, block_number, block_time, amount_raw, amount_usd_e6)
+       ON CONFLICT (chain_id, tx_hash, log_index) DO NOTHING
        RETURNING project_id, block_time::text, amount_usd_e6::text`,
       flat,
     )
@@ -753,9 +759,9 @@ async function scanVolumeEvents(
   for (const [k, { usdE6, count }] of insertedDeltas) {
     const [projStr, day] = k.split("|")
     await client.query(
-      `INSERT INTO volume_daily (project_id, day, total_usd_e6, event_count)
-       VALUES ($1, $2, $3, $4)
-       ON CONFLICT (project_id, day) DO UPDATE SET
+      `INSERT INTO volume_daily (project_id, day, total_usd_e6, event_count, chain_id)
+       VALUES ($1, $2, $3, $4, ${ARC_CHAIN_ID})
+       ON CONFLICT (chain_id, project_id, day) DO UPDATE SET
          total_usd_e6 = volume_daily.total_usd_e6 + EXCLUDED.total_usd_e6,
          event_count  = volume_daily.event_count + EXCLUDED.event_count,
          updated_at   = NOW()`,
@@ -764,9 +770,9 @@ async function scanVolumeEvents(
   }
 
   await client.query(
-    `INSERT INTO indexer_cursors (kind, stablecoin_id, last_block, updated_at)
-     VALUES ($1, $2, $3, NOW())
-     ON CONFLICT (kind, stablecoin_id) DO UPDATE SET
+    `INSERT INTO indexer_cursors (kind, stablecoin_id, last_block, updated_at, chain_id)
+     VALUES ($1, $2, $3, NOW(), ${ARC_CHAIN_ID})
+     ON CONFLICT (chain_id, kind, stablecoin_id) DO UPDATE SET
        last_block = GREATEST(indexer_cursors.last_block, EXCLUDED.last_block),
        updated_at = NOW()`,
     [cursorKind, stable.id, toBlock],
@@ -794,7 +800,7 @@ async function scanVolumeOutflow(
   const cursorKind = `volume_${vc.id}`
   const curRes = await client.query<{ last_block: string }>(
     `SELECT last_block::text FROM indexer_cursors
-     WHERE kind = $1 AND stablecoin_id = $2`,
+     WHERE kind = $1 AND stablecoin_id = $2 AND chain_id = ${ARC_CHAIN_ID}`,
     [cursorKind, stable.id],
   )
   const cursor = curRes.rows[0] ? Number(curRes.rows[0].last_block) : 0
@@ -815,9 +821,9 @@ async function scanVolumeOutflow(
 
   if (logs.length === 0) {
     await client.query(
-      `INSERT INTO indexer_cursors (kind, stablecoin_id, last_block, updated_at)
-       VALUES ($1, $2, $3, NOW())
-       ON CONFLICT (kind, stablecoin_id) DO UPDATE SET
+      `INSERT INTO indexer_cursors (kind, stablecoin_id, last_block, updated_at, chain_id)
+       VALUES ($1, $2, $3, NOW(), ${ARC_CHAIN_ID})
+       ON CONFLICT (chain_id, kind, stablecoin_id) DO UPDATE SET
          last_block = GREATEST(indexer_cursors.last_block, EXCLUDED.last_block),
          updated_at = NOW()`,
       [cursorKind, stable.id, toBlock],
@@ -875,9 +881,10 @@ async function scanVolumeOutflow(
     const r = await client.query<{ project_id: number; block_time: string; amount_usd_e6: string }>(
       `INSERT INTO volume_events
          (project_id, contract_id, stablecoin_id, tx_hash, log_index,
-          block_number, block_time, amount_raw, amount_usd_e6)
-       VALUES ${placeholders.join(",")}
-       ON CONFLICT (tx_hash, log_index) DO NOTHING
+          block_number, block_time, amount_raw, amount_usd_e6, chain_id)
+       SELECT v.*, ${ARC_CHAIN_ID} FROM (VALUES ${placeholders.join(",")}) AS v
+         (project_id, contract_id, stablecoin_id, tx_hash, log_index, block_number, block_time, amount_raw, amount_usd_e6)
+       ON CONFLICT (chain_id, tx_hash, log_index) DO NOTHING
        RETURNING project_id, block_time::text, amount_usd_e6::text`,
       flat,
     )
@@ -895,9 +902,9 @@ async function scanVolumeOutflow(
   for (const [k, { usdE6, count }] of insertedDeltas) {
     const [projStr, day] = k.split("|")
     await client.query(
-      `INSERT INTO volume_daily (project_id, day, total_usd_e6, event_count)
-       VALUES ($1, $2, $3, $4)
-       ON CONFLICT (project_id, day) DO UPDATE SET
+      `INSERT INTO volume_daily (project_id, day, total_usd_e6, event_count, chain_id)
+       VALUES ($1, $2, $3, $4, ${ARC_CHAIN_ID})
+       ON CONFLICT (chain_id, project_id, day) DO UPDATE SET
          total_usd_e6 = volume_daily.total_usd_e6 + EXCLUDED.total_usd_e6,
          event_count  = volume_daily.event_count + EXCLUDED.event_count,
          updated_at   = NOW()`,
@@ -906,9 +913,9 @@ async function scanVolumeOutflow(
   }
 
   await client.query(
-    `INSERT INTO indexer_cursors (kind, stablecoin_id, last_block, updated_at)
-     VALUES ($1, $2, $3, NOW())
-     ON CONFLICT (kind, stablecoin_id) DO UPDATE SET
+    `INSERT INTO indexer_cursors (kind, stablecoin_id, last_block, updated_at, chain_id)
+     VALUES ($1, $2, $3, NOW(), ${ARC_CHAIN_ID})
+     ON CONFLICT (chain_id, kind, stablecoin_id) DO UPDATE SET
        last_block = GREATEST(indexer_cursors.last_block, EXCLUDED.last_block),
        updated_at = NOW()`,
     [cursorKind, stable.id, toBlock],
@@ -925,17 +932,18 @@ async function rollupVolumeOntoProjects(client: PoolClient, projectIds: number[]
   await client.query(
     `UPDATE projects p SET
        volume_cum_usd_e6     = COALESCE(t.cum, 0),
+       metrics_chain_id      = ${ARC_CHAIN_ID},
        volume_ath_day_usd_e6 = ath.max_day,
        volume_ath_day        = ath.max_date
      FROM (SELECT unnest($1::int[]) AS project_id) ids
      LEFT JOIN LATERAL (
        SELECT SUM(amount_usd_e6) AS cum
-       FROM volume_events WHERE project_id = ids.project_id
+       FROM volume_events WHERE project_id = ids.project_id AND chain_id = ${ARC_CHAIN_ID}
      ) t ON true
      LEFT JOIN LATERAL (
        SELECT day AS max_date, total_usd_e6 AS max_day
        FROM volume_daily vd
-       WHERE vd.project_id = ids.project_id
+       WHERE vd.project_id = ids.project_id AND vd.chain_id = ${ARC_CHAIN_ID}
        ORDER BY vd.total_usd_e6 DESC LIMIT 1
      ) ath ON true
      WHERE p.id = ids.project_id`,
@@ -954,8 +962,8 @@ async function recordAlert(
 ) {
   try {
     await client.query(
-      `INSERT INTO indexer_alerts (project_id, kind, severity, message, details)
-       VALUES ($1, $2, $3, $4, $5::jsonb)`,
+      `INSERT INTO indexer_alerts (project_id, kind, severity, message, details, chain_id)
+       VALUES ($1, $2, $3, $4, $5::jsonb, ${ARC_CHAIN_ID})`,
       [projectId, kind, severity, message, details ? JSON.stringify(details) : null],
     )
   } catch (e) {

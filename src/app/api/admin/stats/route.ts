@@ -2,6 +2,7 @@ export const runtime = "nodejs"
 import { NextRequest, NextResponse } from "next/server"
 import { timingSafeEqual } from "crypto"
 import { getPool } from "@/lib/dbPool"
+import { ARC_CHAIN_ID } from "@/lib/constants"
 
 // Site-wide stats panel for the admin dashboard — milestone tracking + the
 // numbers you'll want at hand for grant submissions (Circle, etc.). One query
@@ -38,11 +39,11 @@ export async function GET(req: NextRequest) {
   const TOTAL_WALLETS_SQL = `
     SELECT COUNT(DISTINCT w) FROM (
       SELECT LOWER(owner_wallet) w  FROM projects               WHERE owner_wallet  IS NOT NULL
-      UNION SELECT LOWER(tester_wallet) FROM campaign_completions WHERE tester_wallet IS NOT NULL
-      UNION SELECT LOWER(wallet)        FROM reviews              WHERE wallet         IS NOT NULL
+      UNION SELECT LOWER(tester_wallet) FROM campaign_completions WHERE tester_wallet IS NOT NULL AND chain_id = ${ARC_CHAIN_ID}
+      UNION SELECT LOWER(wallet)        FROM reviews              WHERE wallet IS NOT NULL AND chain_id = ${ARC_CHAIN_ID}
       UNION SELECT LOWER(wallet)        FROM tester_reputation    WHERE wallet         IS NOT NULL
-      UNION SELECT LOWER(deployer)      FROM contracts            WHERE deployer       IS NOT NULL
-      UNION SELECT LOWER(creator_wallet) FROM campaigns           WHERE creator_wallet IS NOT NULL
+      UNION SELECT LOWER(deployer)      FROM contracts            WHERE deployer IS NOT NULL AND chain_id = ${ARC_CHAIN_ID}
+      UNION SELECT LOWER(creator_wallet) FROM campaigns           WHERE creator_wallet IS NOT NULL AND chain_id = ${ARC_CHAIN_ID}
       UNION SELECT LOWER(address)       FROM builder_profiles     WHERE address        IS NOT NULL
     ) z
   `
@@ -63,28 +64,28 @@ export async function GET(req: NextRequest) {
     num("SELECT COUNT(*) FROM projects WHERE approved AND live"),
     num("SELECT COUNT(*) FROM projects"),
     num("SELECT COUNT(*) FROM projects WHERE owner_wallet IS NOT NULL"),
-    num("SELECT COUNT(*) FROM contracts WHERE badge IN ('claimed','verified','official')"),
-    num("SELECT COUNT(*) FROM contracts WHERE badge='verified'"),
-    num("SELECT COUNT(*) FROM campaigns"),
-    num("SELECT COUNT(*) FROM campaigns WHERE status IN ('active','approved')"),
-    num("SELECT COUNT(*) FROM campaign_completions"),
-    num("SELECT COUNT(*) FROM campaign_completions WHERE status='reviewed'"),
-    num("SELECT COUNT(*) FROM campaign_completions WHERE reward_delivered"),
+    num(`SELECT COUNT(*) FROM contracts WHERE badge IN ('claimed','verified','official') AND chain_id = ${ARC_CHAIN_ID}`),
+    num(`SELECT COUNT(*) FROM contracts WHERE badge='verified' AND chain_id = ${ARC_CHAIN_ID}`),
+    num(`SELECT COUNT(*) FROM campaigns WHERE chain_id = ${ARC_CHAIN_ID}`),
+    num(`SELECT COUNT(*) FROM campaigns WHERE status IN ('active','approved') AND chain_id = ${ARC_CHAIN_ID}`),
+    num(`SELECT COUNT(*) FROM campaign_completions WHERE chain_id = ${ARC_CHAIN_ID}`),
+    num(`SELECT COUNT(*) FROM campaign_completions WHERE status='reviewed' AND chain_id = ${ARC_CHAIN_ID}`),
+    num(`SELECT COUNT(*) FROM campaign_completions WHERE reward_delivered AND chain_id = ${ARC_CHAIN_ID}`),
     num(TOTAL_WALLETS_SQL),
-    num("SELECT COUNT(DISTINCT tester_wallet) FROM campaign_completions"),
+    num(`SELECT COUNT(DISTINCT tester_wallet) FROM campaign_completions WHERE chain_id = ${ARC_CHAIN_ID}`),
     num("SELECT COUNT(DISTINCT owner_wallet) FROM projects WHERE owner_wallet IS NOT NULL"),
-    num("SELECT COUNT(DISTINCT wallet) FROM reviews WHERE wallet IS NOT NULL"),
-    num("SELECT COUNT(DISTINCT deployer) FROM contracts WHERE deployer IS NOT NULL"),
-    num("SELECT COUNT(*) FROM circle_wallet_users"),
+    num(`SELECT COUNT(DISTINCT wallet) FROM reviews WHERE wallet IS NOT NULL AND chain_id = ${ARC_CHAIN_ID}`),
+    num(`SELECT COUNT(DISTINCT deployer) FROM contracts WHERE deployer IS NOT NULL AND chain_id = ${ARC_CHAIN_ID}`),
+    num(`SELECT COUNT(*) FROM circle_wallet_users WHERE chain_id = ${ARC_CHAIN_ID}`),
     num("SELECT COUNT(*) FROM builder_profiles"),
-    num("SELECT COALESCE(SUM(xp_earned),0) FROM campaign_completions WHERE xp_earned IS NOT NULL"),
-    num(`SELECT COALESCE(SUM(reward_usdc_amount),0) FROM campaign_completions cc JOIN campaigns c ON c.id=cc.campaign_id WHERE cc.reward_delivered AND c.reward_type='usdc'`),
-    num("SELECT COUNT(*) FROM reviews"),
+    num(`SELECT COALESCE(SUM(xp_earned),0) FROM campaign_completions WHERE xp_earned IS NOT NULL AND chain_id = ${ARC_CHAIN_ID}`),
+    num(`SELECT COALESCE(SUM(reward_usdc_amount),0) FROM campaign_completions cc JOIN campaigns c ON c.id=cc.campaign_id AND c.chain_id=${ARC_CHAIN_ID} WHERE cc.reward_delivered AND cc.chain_id=${ARC_CHAIN_ID} AND c.reward_type='usdc'`),
+    num(`SELECT COUNT(*) FROM reviews WHERE chain_id = ${ARC_CHAIN_ID}`),
     num("SELECT COUNT(*) FROM project_views"),
     num("SELECT COUNT(*) FROM projects WHERE created_at > NOW() - INTERVAL '30 days'"),
-    num("SELECT COUNT(*) FROM campaign_completions WHERE created_at > NOW() - INTERVAL '30 days'"),
-    num("SELECT COUNT(*) FROM campaign_completions WHERE created_at > NOW() - INTERVAL '7 days'"),
-    num("SELECT COUNT(DISTINCT tester_wallet) FROM campaign_completions WHERE created_at > NOW() - INTERVAL '7 days'"),
+    num(`SELECT COUNT(*) FROM campaign_completions WHERE created_at > NOW() - INTERVAL '30 days' AND chain_id = ${ARC_CHAIN_ID}`),
+    num(`SELECT COUNT(*) FROM campaign_completions WHERE created_at > NOW() - INTERVAL '7 days' AND chain_id = ${ARC_CHAIN_ID}`),
+    num(`SELECT COUNT(DISTINCT tester_wallet) FROM campaign_completions WHERE created_at > NOW() - INTERVAL '7 days' AND chain_id = ${ARC_CHAIN_ID}`),
     // Traffic (cookieless page_visits). num() returns 0 if the table doesn't exist yet.
     num("SELECT COUNT(DISTINCT device_id) FROM page_visits WHERE day = CURRENT_DATE"),
     num("SELECT COUNT(DISTINCT device_id) FROM page_visits WHERE day >= CURRENT_DATE - 6"),

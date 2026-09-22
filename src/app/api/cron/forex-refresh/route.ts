@@ -22,6 +22,7 @@
 
 import { NextRequest, NextResponse } from "next/server"
 import { getPool } from "@/lib/dbPool"
+import { ARC_CHAIN_ID } from "@/lib/constants"
 
 const pool = getPool()
 
@@ -72,7 +73,7 @@ export async function GET(req: NextRequest) {
     // drift cron's "forex_stale" check doesn't fire on the synthetic row.
     const needRes = await client.query<{ peg_currency: string }>(
       `SELECT DISTINCT peg_currency FROM stablecoins
-       WHERE active = true AND peg_currency <> 'USD'`,
+       WHERE active = true AND peg_currency <> 'USD' AND chain_id = ${ARC_CHAIN_ID}`,
     )
     const needed = needRes.rows.map(r => r.peg_currency)
     stats.currencies_required = needed.length
@@ -93,7 +94,7 @@ export async function GET(req: NextRequest) {
       // Resolve any open forex_stale alerts that no longer apply.
       await client.query(
         `UPDATE indexer_alerts SET resolved_at = NOW()
-         WHERE kind = 'forex_stale' AND resolved_at IS NULL`,
+         WHERE kind = 'forex_stale' AND resolved_at IS NULL AND chain_id = ${ARC_CHAIN_ID}`,
       )
       return NextResponse.json({
         ok: true,
@@ -113,8 +114,8 @@ export async function GET(req: NextRequest) {
       xml = await r.text()
     } catch (e: any) {
       await client.query(
-        `INSERT INTO indexer_alerts (kind, severity, message, details)
-         VALUES ('forex_fetch_error', 'critical', $1, $2::jsonb)`,
+        `INSERT INTO indexer_alerts (kind, severity, message, details, chain_id)
+         VALUES ('forex_fetch_error', 'critical', $1, $2::jsonb, ${ARC_CHAIN_ID})`,
         [`ECB fetch failed: ${e?.message || e}`, JSON.stringify({ url: ECB_URL })],
       )
       stats.elapsedMs = Date.now() - startedAt
@@ -146,8 +147,8 @@ export async function GET(req: NextRequest) {
       if (usdPerTarget == null || !Number.isFinite(usdPerTarget)) {
         stats.currencies_missing.push(cur)
         await client.query(
-          `INSERT INTO indexer_alerts (kind, severity, message, details)
-           VALUES ('forex_currency_missing', 'warning', $1, $2::jsonb)`,
+          `INSERT INTO indexer_alerts (kind, severity, message, details, chain_id)
+           VALUES ('forex_currency_missing', 'warning', $1, $2::jsonb, ${ARC_CHAIN_ID})`,
           [`ECB did not publish a rate for ${cur} — non-USD stablecoins pegged to it will use the most recent prior rate.`,
            JSON.stringify({ currency: cur, ecb_date: effectiveDate })],
         )
@@ -171,7 +172,7 @@ export async function GET(req: NextRequest) {
     // anything actually still stale.)
     await client.query(
       `UPDATE indexer_alerts SET resolved_at = NOW()
-       WHERE kind IN ('forex_stale', 'forex_currency_missing') AND resolved_at IS NULL`,
+       WHERE kind IN ('forex_stale', 'forex_currency_missing') AND resolved_at IS NULL AND chain_id = ${ARC_CHAIN_ID}`,
     )
 
     stats.elapsedMs = Date.now() - startedAt

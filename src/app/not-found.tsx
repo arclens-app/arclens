@@ -1,5 +1,6 @@
 "use client"
 import ArcLayout from "@/components/ArcLayout"
+import { ARC_CHAIN_ID, ARC_CHAIN_NAME } from "@/lib/constants"
 
 export default function NotFound() {
   return (
@@ -44,7 +45,7 @@ export default function NotFound() {
           </div>
 
           <div style={{ fontSize: "13px", color: "var(--t2, #6b7da8)", fontWeight: 300, lineHeight: 1.7, marginBottom: "32px", fontFamily: "'DM Mono', monospace" }}>
-            This address, transaction, or page doesn't exist on Arc Testnet.<br/>
+            This address, transaction, or page doesn't exist on {ARC_CHAIN_NAME}.<br/>
             It may have been moved or never existed.
           </div>
 
@@ -67,12 +68,12 @@ export default function NotFound() {
           {/* Chain info */}
           <div style={{ marginTop: "40px", padding: "12px 20px", background: "var(--surf, #0a0e1a)", border: "1px solid var(--bdr, rgba(255,255,255,0.06))", borderRadius: "10px", display: "inline-flex", alignItems: "center", gap: "16px" }}>
             <div style={{ fontSize: "9.5px", fontFamily: "'DM Mono', monospace", color: "var(--t3, #2e3a5c)", textAlign: "left" }}>
-              <div style={{ marginBottom: "2px" }}>Chain ID <span style={{ color: "var(--t2, #6b7da8)" }}>5042002</span></div>
+              <div style={{ marginBottom: "2px" }}>Chain ID <span style={{ color: "var(--t2, #6b7da8)" }}>{ARC_CHAIN_ID}</span></div>
               <div>Gas token <span style={{ color: "#00b87a" }}>USDC</span></div>
             </div>
             <div style={{ width: "1px", height: "28px", background: "var(--bdr, rgba(255,255,255,0.06))" }} />
             <div style={{ fontSize: "9.5px", fontFamily: "'DM Mono', monospace", color: "var(--t3, #2e3a5c)", textAlign: "left" }}>
-              <div style={{ marginBottom: "2px" }}>Network <span style={{ color: "var(--t2, #6b7da8)" }}>Arc Testnet</span></div>
+              <div style={{ marginBottom: "2px" }}>Network <span style={{ color: "var(--t2, #6b7da8)" }}>{ARC_CHAIN_NAME}</span></div>
               <div>Finality <span style={{ color: "#8aaeff" }}>&lt; 1 second</span></div>
             </div>
           </div>

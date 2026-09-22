@@ -3,6 +3,7 @@ import { enforce } from "@/lib/ratelimit"
 import { getSession } from "@/lib/session"
 import { getPool } from "@/lib/dbPool"
 import { hasAdminAuthorization } from "@/lib/adminAuth"
+import { ARC_CHAIN_ID } from "@/lib/constants"
 
 const pool = getPool()
 
@@ -42,7 +43,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
           CASE
             WHEN total_slots IS NOT NULL AND filled_slots >= total_slots THEN
               COALESCE(
-                (SELECT MAX(cc.created_at) FROM campaign_completions cc WHERE cc.campaign_id = campaigns.id),
+                (SELECT MAX(cc.created_at) FROM campaign_completions cc WHERE cc.campaign_id = campaigns.id AND cc.chain_id = ${ARC_CHAIN_ID}),
                 NOW()
               )
             ELSE expires_at
@@ -56,7 +57,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
             ELSE 'expired'
           END
         )
-      WHERE status = 'active'
+      WHERE status = 'active' AND chain_id = ${ARC_CHAIN_ID}
         AND (
           (expires_at IS NOT NULL AND expires_at < NOW())
           OR (total_slots IS NOT NULL AND filled_slots >= total_slots)
@@ -68,11 +69,13 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
          c.*,
          p.twitter AS project_twitter,
          p.slug    AS project_slug,
-         (SELECT COUNT(*) FROM campaign_completions cc WHERE cc.campaign_id = c.id) AS completion_count,
-         (SELECT COUNT(*) FROM campaign_completions cc WHERE cc.campaign_id = c.id AND cc.status = 'reviewed') AS reviewed_count
+         (SELECT COUNT(*) FROM campaign_completions cc WHERE cc.campaign_id = c.id AND cc.chain_id = c.chain_id) AS completion_count,
+         (SELECT COUNT(*) FROM campaign_completions cc WHERE cc.campaign_id = c.id AND cc.status = 'reviewed' AND cc.chain_id = c.chain_id) AS reviewed_count
        FROM campaigns c
        LEFT JOIN projects p ON p.id = c.project_id
-       WHERE ${whereClause}`,
+       WHERE ${whereClause}
+       ORDER BY (c.chain_id = ${ARC_CHAIN_ID}) DESC
+       LIMIT 1`,
       [isNumeric ? Number(id) : id]
     )
 
@@ -81,6 +84,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     }
 
     const campaignId = campaignRes.rows[0].id
+    const campaignChainId = Number(campaignRes.rows[0].chain_id)
     const creatorWallet = campaignRes.rows[0].creator_wallet
     const isCreator = !!(session && creatorWallet && session.addr === String(creatorWallet).toLowerCase())
     const canReviewAll = isCreator || isAdmin
@@ -105,10 +109,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
        FROM campaigns c
        WHERE cc.campaign_id = c.id
          AND cc.campaign_id = $1
+         AND cc.chain_id = $2
+         AND c.chain_id = $2
          AND cc.status      = 'submitted'
          AND cc.created_at  < NOW() - INTERVAL '7 days'
          AND cc.provisional_score IS NOT NULL`,
-      [campaignId]
+      [campaignId, campaignChainId]
     ).catch(() => {})
 
     // NOTE: task_proofs MUST be included — the founder dashboard renders proof
@@ -118,29 +124,29 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     // every tester.
     const completionsRes = await pool.query(
       canReviewAll
-        ? `SELECT tester_wallet, auto_score, builder_rating, quality_score, status,
+        ? `SELECT COALESCE(profile_wallet, 'pending:' || id::text) AS tester_wallet, auto_score, builder_rating, quality_score, status,
                   reward_delivered, review_answers, task_proofs, contract_verified,
                   xp_earned, per_question_ratings, created_at
-             FROM campaign_completions WHERE campaign_id = $1
+             FROM campaign_completions WHERE campaign_id = $1 AND chain_id = $2
              ORDER BY created_at DESC LIMIT 500`
-        : `SELECT tester_wallet, builder_rating, quality_score, status,
+        : `SELECT COALESCE(profile_wallet, 'pending:' || id::text) AS tester_wallet, builder_rating, quality_score, status,
                   reward_delivered, xp_earned, created_at
-             FROM campaign_completions WHERE campaign_id = $1
+             FROM campaign_completions WHERE campaign_id = $1 AND chain_id = $2
              ORDER BY created_at DESC LIMIT 500`,
-      [campaignId],
+      [campaignId, campaignChainId],
     )
 
     // A signed-in tester can see their own submitted answers/proofs, but never
     // another tester's. The creator can see all submissions for moderation.
     if (!canReviewAll && session) {
       const own = await pool.query(
-        `SELECT tester_wallet, auto_score, builder_rating, quality_score, status,
+        `SELECT COALESCE(profile_wallet, 'pending:' || id::text) AS tester_wallet, auto_score, builder_rating, quality_score, status,
                 reward_delivered, review_answers, task_proofs, contract_verified,
                 xp_earned, per_question_ratings, created_at
            FROM campaign_completions
-          WHERE campaign_id = $1 AND LOWER(tester_wallet) = $2
+          WHERE campaign_id = $1 AND LOWER(COALESCE(profile_wallet, tester_wallet)) = $2 AND chain_id = $3
           LIMIT 1`,
-        [campaignId, session.addr],
+        [campaignId, session.addr, campaignChainId],
       )
       if (own.rows[0]) {
         const index = completionsRes.rows.findIndex(r => String(r.tester_wallet).toLowerCase() === session.addr)
@@ -207,7 +213,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
     const isNumeric = /^\d+$/.test(id)
     const campaign = await pool.query(
-      `SELECT id, title, filled_slots FROM campaigns WHERE ${isNumeric ? "id = $1" : "slug = $1"} AND creator_wallet = $2`,
+      `SELECT id, title, filled_slots FROM campaigns WHERE ${isNumeric ? "id = $1" : "slug = $1"} AND creator_wallet = $2 AND chain_id = ${ARC_CHAIN_ID}`,
       [isNumeric ? Number(id) : id, wallet]
     )
     if (!campaign.rows.length) return NextResponse.json({ error: "Campaign not found or not authorized" }, { status: 403 })
@@ -364,7 +370,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       const keys   = Object.keys(cosmetic)
       const setSql = keys.map((k, i) => `${k} = $${i + 2}`).join(", ")
       const vals   = keys.map(k => cosmetic[k])
-      await pool.query(`UPDATE campaigns SET ${setSql} WHERE id = $1`, [c.id, ...vals])
+      await pool.query(`UPDATE campaigns SET ${setSql} WHERE id = $1 AND chain_id = ${ARC_CHAIN_ID}`, [c.id, ...vals])
       appliedCount = keys.length
     }
 
@@ -420,7 +426,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     const result = await pool.query(
       `UPDATE campaigns SET deposit_tx_hash = $1, status = 'active'
-       WHERE id = $2 AND creator_wallet = $3 AND status = 'approved'
+       WHERE id = $2 AND creator_wallet = $3 AND status = 'approved' AND chain_id = ${ARC_CHAIN_ID}
        RETURNING id`,
       [deposit_tx_hash, id, session.addr]
     )

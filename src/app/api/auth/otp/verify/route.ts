@@ -4,6 +4,9 @@ import crypto from "crypto"
 import { enforce } from "@/lib/ratelimit"
 import { attachSessionCookie, attachOtpProof } from "@/lib/session"
 import { getPool } from "@/lib/dbPool"
+import { ARC_CHAIN_ID, CIRCLE_BLOCKCHAIN } from "@/lib/constants"
+import { getCircleEnvironmentError } from "@/lib/circleEnvironment"
+import { ensureCircleAccount, promoteCircleWallet } from "@/lib/accountIdentity"
 
 const pool = getPool()
 const BASE = "https://api.circle.com"
@@ -37,6 +40,8 @@ export async function POST(req: NextRequest) {
     // Burst protection against brute-force code guessing per IP
     const blocked = await enforce(req, "otp-verify", { limit: 30, windowMs: 60_000 })
     if (blocked) return blocked
+    const environmentError = getCircleEnvironmentError()
+    if (environmentError) return NextResponse.json({ error: environmentError }, { status: 503 })
 
     const { email, code } = await req.json()
     if (!email || !code) return NextResponse.json({ error: "Email and code required" }, { status: 400 })
@@ -74,17 +79,22 @@ export async function POST(req: NextRequest) {
     await pool.query("DELETE FROM otp_codes WHERE email = $1", [lower])
 
     // Look up or create Circle user
+    const accountId = await ensureCircleAccount(lower)
     const userRow = await pool.query(
-      "SELECT circle_user_id, wallet_address FROM circle_wallet_users WHERE email = $1",
-      [lower]
+      "SELECT circle_user_id, wallet_address FROM circle_wallet_users WHERE email = $1 AND chain_id = $2",
+      [lower, ARC_CHAIN_ID]
     )
-
     let circleUserId: string
     let cachedAddress: string | null = null
+    const existingCircleIdentity = userRow.rows.length > 0
 
     if (userRow.rows.length) {
       circleUserId  = userRow.rows[0].circle_user_id
       cachedAddress = userRow.rows[0].wallet_address
+      await pool.query(
+        "UPDATE circle_wallet_users SET account_id = $1 WHERE email = $2 AND chain_id = $3",
+        [accountId, lower, ARC_CHAIN_ID],
+      )
     } else {
       circleUserId = crypto.randomUUID()
       const createRes = await fetch(`${BASE}/v1/w3s/users`, {
@@ -98,8 +108,8 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Failed to create account" }, { status: 500 })
       }
       await pool.query(
-        "INSERT INTO circle_wallet_users (email, circle_user_id) VALUES ($1, $2) ON CONFLICT (email) DO NOTHING",
-        [lower, circleUserId]
+        "INSERT INTO circle_wallet_users (email, circle_user_id, chain_id, account_id) VALUES ($1, $2, $3, $4) ON CONFLICT (chain_id, email) DO UPDATE SET account_id = EXCLUDED.account_id",
+        [lower, circleUserId, ARC_CHAIN_ID, accountId]
       )
     }
 
@@ -120,6 +130,7 @@ export async function POST(req: NextRequest) {
     // Do NOT return userToken/encryptionKey: client doesn't need them and
     // they would let a network observer trigger PIN challenges on this user.
     if (cachedAddress) {
+      await promoteCircleWallet(lower, cachedAddress)
       // Email ownership is proven (valid OTP) and the DB maps this email to this
       // wallet — mint the session here. This is the ONLY place a Circle session is
       // born for returning users; we no longer trust a client-supplied pair.
@@ -134,16 +145,17 @@ export async function POST(req: NextRequest) {
     }
 
     // Check if Circle already has a wallet for this user
-    const walletsRes  = await fetch(`${BASE}/v1/w3s/wallets?pageSize=1`, { headers: apiHeaders(userToken) })
+    const walletsRes  = await fetch(`${BASE}/v1/w3s/wallets?blockchain=${encodeURIComponent(CIRCLE_BLOCKCHAIN)}&pageSize=1`, { headers: apiHeaders(userToken) })
     const walletsData = await walletsRes.json()
     const existing    = walletsData.data?.wallets?.[0]
 
     if (walletsRes.ok && existing?.address) {
       const addr = String(existing.address).toLowerCase()
       await pool.query(
-        "UPDATE circle_wallet_users SET wallet_address = $1, wallet_id = $2 WHERE email = $3",
-        [addr, existing.id, lower]
+        "UPDATE circle_wallet_users SET wallet_address = $1, wallet_id = $2 WHERE email = $3 AND chain_id = $4",
+        [addr, existing.id, lower, ARC_CHAIN_ID]
       )
+      await promoteCircleWallet(lower, addr)
       const res = NextResponse.json({
         success:       true,
         address:       addr,
@@ -154,13 +166,36 @@ export async function POST(req: NextRequest) {
       return res
     }
 
-    // First-time user — needs to set a PIN via Circle's iframe
-    const initRes = await fetch(`${BASE}/v1/w3s/user/initialize`, {
+    // New users create a PIN. An initialized user in this same Circle
+    // environment authorizes an additional network with their existing PIN.
+    if (!walletsRes.ok) {
+      console.error("[otp/verify] list wallets:", walletsData)
+      return NextResponse.json({ error: "Failed to load wallet" }, { status: 500 })
+    }
+
+    // Unified EVM addressing applies inside one Circle environment. A TEST API
+    // key and a LIVE API key are different environments, so we never reuse a
+    // test-environment Circle user ID when creating the live Arc wallet.
+    let hasExistingCircleWallet = false
+    if (existingCircleIdentity) {
+      const anyWalletsRes = await fetch(`${BASE}/v1/w3s/wallets?pageSize=1`, {
+        headers: apiHeaders(userToken),
+      })
+      const anyWalletsData = await anyWalletsRes.json()
+      if (!anyWalletsRes.ok) {
+        console.error("[otp/verify] list existing wallets:", anyWalletsData)
+        return NextResponse.json({ error: "Failed to load wallet" }, { status: 500 })
+      }
+      hasExistingCircleWallet = !!anyWalletsData.data?.wallets?.[0]
+    }
+
+    const walletEndpoint = hasExistingCircleWallet ? "user/wallets" : "user/initialize"
+    const initRes = await fetch(`${BASE}/v1/w3s/${walletEndpoint}`, {
       method:  "POST",
       headers: apiHeaders(userToken),
       body: JSON.stringify({
         idempotencyKey: crypto.randomUUID(),
-        blockchains:    ["ARC-TESTNET"],
+        blockchains:    [CIRCLE_BLOCKCHAIN],
         accountType:    "EOA",
       }),
     })
@@ -179,6 +214,7 @@ export async function POST(req: NextRequest) {
       userToken,
       encryptionKey,
       needsPinSetup:  true,
+      walletAction:   hasExistingCircleWallet ? "add_network" : "initialize",
       challengeId:    initData.data.challengeId,
     })
     attachOtpProof(res, lower)

@@ -8,6 +8,7 @@
 import { useEffect, useState } from "react"
 import ArcLayout from "@/components/ArcLayout"
 import LensFace, { type LensState } from "@/components/LensFace"
+import { CIRCLE_BLOCKCHAIN } from "@/lib/constants"
 
 // ArcLens theme tokens — adapt to light/dark exactly like the rest of the app.
 const T1 = "var(--t1, #e8ecff)", T2 = "var(--t2, #6b7da8)", T3 = "var(--t3, #2e3a5c)"
@@ -190,7 +191,7 @@ curl https://arclenz.xyz/api/agent
 # pay it with the Circle CLI — one command, settled over Gateway / x402
 circle services pay https://arclenz.xyz/api/agent \\
   -X POST -d '{"action":"trust","target":"lunex"}' \\
-  --chain ARC-TESTNET
+  --chain ${CIRCLE_BLOCKCHAIN}
 # → { result: { trust: "Established", ... },
 #     paid_to_builders: [ { project, amount, tx } ] }`}</pre>
           <div style={{ fontSize: 12.5, color: T3, marginTop: 10 }}>

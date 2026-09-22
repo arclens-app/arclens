@@ -18,6 +18,7 @@ import { timingSafeEqual } from "crypto"
 import { ethers } from "ethers"
 import { canonicalEventSignature, dataArgTypes } from "@/lib/tvl"
 import { getPool } from "@/lib/dbPool"
+import { ARC_CHAIN_ID } from "@/lib/constants"
 
 const pool = getPool()
 
@@ -69,7 +70,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     // Load existing row to detect what changed
     const prior = await pool.query(
-      `SELECT * FROM project_contracts WHERE id = $1`,
+      `SELECT * FROM project_contracts WHERE id = $1 AND chain_id = ${ARC_CHAIN_ID}`,
       [idNum],
     )
     if (prior.rows.length === 0) {
@@ -134,7 +135,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     }
 
     const updated = await pool.query(
-      `UPDATE project_contracts SET ${sets.join(", ")} WHERE id = $1 RETURNING *`,
+      `UPDATE project_contracts SET ${sets.join(", ")} WHERE id = $1 AND chain_id = ${ARC_CHAIN_ID} RETURNING *`,
       vals,
     )
     const after = updated.rows[0]
@@ -143,11 +144,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     // 5-min cron tick rescans from start_block with the new config.
     if (materialChanged) {
       const cursorKind = `volume_${idNum}`
-      await pool.query(`DELETE FROM volume_events  WHERE contract_id = $1`, [idNum])
-      await pool.query(`DELETE FROM revenue_events WHERE contract_id = $1`, [idNum])
-      await pool.query(`DELETE FROM volume_daily   WHERE project_id  = $1`, [before.project_id])
-      await pool.query(`DELETE FROM revenue_daily  WHERE project_id  = $1`, [before.project_id])
-      await pool.query(`DELETE FROM indexer_cursors WHERE kind = $1`, [cursorKind])
+      await pool.query(`DELETE FROM volume_events WHERE contract_id = $1 AND chain_id = ${ARC_CHAIN_ID}`, [idNum])
+      await pool.query(`DELETE FROM revenue_events WHERE contract_id = $1 AND chain_id = ${ARC_CHAIN_ID}`, [idNum])
+      await pool.query(`DELETE FROM volume_daily WHERE project_id = $1 AND chain_id = ${ARC_CHAIN_ID}`, [before.project_id])
+      await pool.query(`DELETE FROM revenue_daily WHERE project_id = $1 AND chain_id = ${ARC_CHAIN_ID}`, [before.project_id])
+      await pool.query(`DELETE FROM indexer_cursors WHERE kind = $1 AND chain_id = ${ARC_CHAIN_ID}`, [cursorKind])
     }
 
     await logAction("contract_edit_admin", idNum, before, after)
@@ -179,7 +180,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
       `UPDATE project_contracts
        SET revoked_at = NOW(),
            revoke_reason = COALESCE(revoke_reason, 'admin-revoked')
-       WHERE id = $1
+       WHERE id = $1 AND chain_id = ${ARC_CHAIN_ID}
        RETURNING id, project_id`,
       [idNum],
     )
@@ -207,6 +208,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
          AND NOT EXISTS (
            SELECT 1 FROM project_contracts pc
            WHERE pc.project_id = p.id
+             AND pc.chain_id = ${ARC_CHAIN_ID}
              AND pc.verified_at IS NOT NULL
              AND pc.revoked_at IS NULL
          )`,

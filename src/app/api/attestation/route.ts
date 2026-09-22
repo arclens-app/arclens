@@ -29,7 +29,8 @@ export async function GET(req: NextRequest) {
       const r = await pool.query(
         `SELECT slug,
                 (SELECT address FROM project_contracts
-                  WHERE project_id = projects.id AND verified_at IS NOT NULL AND revoked_at IS NULL
+                  WHERE project_id = projects.id AND chain_id = ${ARC_CHAIN_ID}
+                    AND verified_at IS NOT NULL AND revoked_at IS NULL
                   LIMIT 1) AS proven
            FROM projects WHERE slug = $1 OR id::text = $1 LIMIT 1`,
         [slug],

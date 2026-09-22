@@ -26,7 +26,7 @@ export const CAMPAIGN_TYPES: CampaignType[] = [
   //    the tasks, and the same title/proof/question rules apply as every type.
   { id: "custom",        abbr: "＋", label: "Custom",             color: "#a855f7", tag: "Build your own", desc: "Start from a blank slate and define your own tasks, proofs, and questions — for any campaign a preset doesn't cover", contract: "optional" },
   // ── Testing / product (the original core) ──────────────────────────────────
-  { id: "beta_test",     abbr: "BT", label: "Beta Test",          color: "#1a56ff", tag: "Most popular", desc: "Walk real users through your core contract flow end-to-end on Arc Testnet",              contract: "required" },
+  { id: "beta_test",     abbr: "BT", label: "Product Test",       color: "#1a56ff", tag: "Most popular", desc: `Walk real users through your core contract flow end-to-end on ${ARC_CHAIN_NAME}`,          contract: "required" },
   { id: "payment_flow",  abbr: "PF", label: "Payment Flow Test",  color: "#00d990", tag: "Arc native",   desc: "Verify USDC transfers, settlement logic, and multi-step payment sequences",              contract: "required" },
   { id: "stress_test",   abbr: "ST", label: "Stress Test",        color: "#e08810", tag: "Break it",     desc: "Push it to the limits — rapid transactions, concurrency, boundary values, and edge-case inputs that break contract logic", contract: "required" },
   { id: "ux_review",     abbr: "UX", label: "UX Review",          color: "#00b87a", tag: "Experience",   desc: "First impressions, friction points, and whether a brand-new user can figure it out with no docs", contract: "hidden"   },
@@ -85,7 +85,7 @@ export const CAMPAIGN_TEMPLATES: Record<string, { tasks: TemplateTask[]; questio
   },
   beta_test: {
     tasks: [
-      { id: "t1", title: "Connect your wallet to the app", description: "Use MetaMask or Rabby on Arc Testnet" },
+      { id: "t1", title: "Connect your wallet to the app", description: `Use MetaMask or Rabby on ${ARC_CHAIN_NAME}` },
       { id: "t2", title: "Complete the core action", description: "Execute the main function as a first-time user would" },
       { id: "t3", title: "Verify the outcome", description: "Confirm the result is visible and matches what was promised" },
     ],
@@ -145,7 +145,7 @@ export const CAMPAIGN_TEMPLATES: Record<string, { tasks: TemplateTask[]; questio
     tasks: [
       { id: "t1", title: "Read the source code or architecture docs", description: "Review the provided contract source, README, or architecture overview" },
       { id: "t2", title: "Run the test suite locally", description: "Clone the repo, run tests, note coverage gaps or failing cases" },
-      { id: "t3", title: "Execute the most complex function on testnet", description: "Verify behavior matches spec under real conditions" },
+      { id: "t3", title: "Execute the most complex onchain function", description: "Verify behavior matches spec under real conditions" },
     ],
     questions: [
       { id: "q1", label: "List any logic errors, attack vectors, or inefficiencies you found", placeholder: "Function name, severity, suggested fix. Be as specific as possible.", min_words: 50, required: true },
@@ -175,3 +175,4 @@ export function matchesDefaultTemplate(type: string, tasks: { title?: string }[]
   const norm = (s: string) => s.trim().toLowerCase()
   return tpl.every((t, i) => norm(tasks[i]?.title || "") === norm(t.title))
 }
+import { ARC_CHAIN_NAME } from "@/lib/constants"

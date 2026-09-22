@@ -1,5 +1,6 @@
 ﻿import { NextRequest, NextResponse } from "next/server"
 import { getPool } from "@/lib/dbPool"
+import { ARC_CHAIN_ID } from "@/lib/constants"
 
 const pool = getPool()
 
@@ -21,7 +22,12 @@ export async function GET(req: NextRequest) {
   try {
     const [repRes, histRes] = await Promise.all([
       pool.query(
-        `SELECT * FROM tester_reputation WHERE wallet = $1`,
+        `SELECT tr.* FROM tester_reputation tr
+          WHERE tr.wallet = $1
+            AND (
+              EXISTS (SELECT 1 FROM circle_wallet_users c WHERE LOWER(c.wallet_address) = $1 AND c.chain_id = ${ARC_CHAIN_ID})
+              OR NOT EXISTS (SELECT 1 FROM circle_wallet_users c WHERE LOWER(c.wallet_address) = $1)
+            )`,
         [wallet.toLowerCase()]
       ),
       pool.query(
@@ -29,7 +35,7 @@ export async function GET(req: NextRequest) {
                 cc.quality_score, cc.auto_score, cc.builder_rating, cc.status, cc.created_at
          FROM campaign_completions cc
          JOIN campaigns c ON c.id = cc.campaign_id
-         WHERE cc.tester_wallet = $1
+         WHERE LOWER(COALESCE(cc.profile_wallet, cc.tester_wallet)) = $1
          ORDER BY cc.created_at DESC
          LIMIT 20`,
         [wallet.toLowerCase()]

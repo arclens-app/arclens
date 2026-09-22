@@ -3,7 +3,7 @@ import crypto from "crypto"
 import { ethers } from "ethers"
 import { enforce } from "@/lib/ratelimit"
 import { getSession } from "@/lib/session"
-import { ARC_RPC_HTTP } from "@/lib/constants"
+import { ARC_CHAIN_ID, ARC_EXPLORER_API, ARC_RPC_HTTP } from "@/lib/constants"
 import { verifyDeployerSignature } from "@/lib/deployerSig"
 import { buildVerifyMessage } from "./challenge/route"
 import { getPool } from "@/lib/dbPool"
@@ -11,7 +11,7 @@ import { getPool } from "@/lib/dbPool"
 const pool = getPool()
 
 const PROTECTED_NAMES = ["usdc","circle","arc bridge","arclens","uniswap","aave","compound","metamask"]
-const ARCSCAN        = "https://testnet.arcscan.app/api/v2"
+const ARCSCAN        = ARC_EXPLORER_API
 
 /**
  * Fetch the actual deployer address for a contract from Blockscout.
@@ -43,7 +43,8 @@ export async function GET(req: NextRequest) {
     try {
       const result = await pool.query(
         `SELECT address, name, type, description, website, twitter, badge, tx_count, created_at
-         FROM contracts WHERE verified = true ORDER BY badge DESC, created_at DESC LIMIT 50`
+         FROM contracts WHERE verified = true AND chain_id = $1 ORDER BY badge DESC, created_at DESC LIMIT 50`,
+        [ARC_CHAIN_ID]
       )
       return NextResponse.json({ contracts: result.rows })
     } catch {
@@ -147,7 +148,7 @@ export async function POST(req: NextRequest) {
 
   // Check if already claimed
   try {
-    const existing = await pool.query("SELECT address, email FROM contracts WHERE address = $1", [addr])
+    const existing = await pool.query("SELECT address, email FROM contracts WHERE address = $1 AND chain_id = $2", [addr, ARC_CHAIN_ID])
     if (existing.rows.length > 0) {
       const existingEmail = existing.rows[0].email?.toLowerCase()
       const submittedEmail = email.trim().toLowerCase()
@@ -158,8 +159,8 @@ export async function POST(req: NextRequest) {
       await pool.query(
         `UPDATE contracts SET name=$1, type=$2, description=$3, website=$4, twitter=$5,
          source_code=COALESCE($6, source_code), verified=false, deployer=$7
-         WHERE address=$8`,
-        [name.trim(), type||null, description||null, website||null, twitter||null, source_code||null, deployer||null, addr]
+         WHERE address=$8 AND chain_id=$9`,
+        [name.trim(), type||null, description||null, website||null, twitter||null, source_code||null, deployer||null, addr, ARC_CHAIN_ID]
       )
       return NextResponse.json({ success: true, updated: true })
     }
@@ -175,8 +176,8 @@ export async function POST(req: NextRequest) {
   // New submission
   try {
     await pool.query(
-      `INSERT INTO contracts (address, name, type, description, website, twitter, email, source_code, verified, deployer, badge, flag_reason, created_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,false,$9,'claimed',$10,NOW())`,
+      `INSERT INTO contracts (address, name, type, description, website, twitter, email, source_code, verified, deployer, badge, flag_reason, created_at, chain_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,false,$9,'claimed',$10,NOW(),$11)`,
       [
         addr,
         name.trim(),
@@ -189,7 +190,8 @@ export async function POST(req: NextRequest) {
         deployer?.toLowerCase()||null,
         warnings?.length > 0 || isProtected
           ? "⚠ " + (isProtected ? "Protected name. " : "") + (warnings||[]).join(" ")
-          : null
+          : null,
+        ARC_CHAIN_ID,
       ]
     )
     return NextResponse.json({ success: true, updated: false, verified: false })

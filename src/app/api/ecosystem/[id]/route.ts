@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getPool } from "@/lib/dbPool"
+import { ARC_CHAIN_ID, ARC_EXPLORER_API } from "@/lib/constants"
 
 const pool = getPool()
 
@@ -20,30 +21,37 @@ export async function GET(
     // Find by slug first, then by numeric id
     const result = await pool.query(
       `SELECT id, name, slug, tagline, description, category, logo_url,
-              website, twitter, github, discord, contract,
+              website, twitter, github, discord,
+              COALESCE(
+                (SELECT pc.address FROM project_contracts pc
+                  WHERE pc.project_id = projects.id AND pc.chain_id = ${ARC_CHAIN_ID}
+                    AND pc.verified_at IS NOT NULL AND pc.revoked_at IS NULL
+                  ORDER BY pc.created_at ASC LIMIT 1),
+                CASE WHEN ${ARC_CHAIN_ID} = 5042002 THEN projects.contract ELSE NULL END
+              ) AS contract,
               founder_social, owner_wallet,
               recognition, trust_level, trust_profile, established,
               auditor, audit_url,
               featured, badge, color, created_at,
               COALESCE(view_count, 0) as view_count,
               city, country, lat, lng,
-              tvl_tracking_enabled,
-              tvl_usd_e6::text          AS tvl_usd_e6,
-              tvl_ath_usd_e6::text      AS tvl_ath_usd_e6,
-              tvl_ath_block,
-              tvl_ath_at,
-              revenue_cum_usd_e6::text  AS revenue_cum_usd_e6,
-              revenue_ath_day_usd_e6::text AS revenue_ath_day_usd_e6,
-              revenue_ath_day,
-              volume_cum_usd_e6::text   AS volume_cum_usd_e6,
-              volume_ath_day_usd_e6::text AS volume_ath_day_usd_e6,
-              volume_ath_day,
-              tvl_last_indexed_at,
-              subgraph_tvl_usd_e6::text    AS subgraph_tvl_usd_e6,
-              subgraph_volume_usd_e6::text AS subgraph_volume_usd_e6,
-              subgraph_updated_at,
-              subgraph_source_ts::text     AS subgraph_source_ts,
-              subgraph_series
+              CASE WHEN metrics_chain_id = ${ARC_CHAIN_ID} THEN tvl_tracking_enabled ELSE false END AS tvl_tracking_enabled,
+              CASE WHEN metrics_chain_id = ${ARC_CHAIN_ID} THEN tvl_usd_e6::text END AS tvl_usd_e6,
+              CASE WHEN metrics_chain_id = ${ARC_CHAIN_ID} THEN tvl_ath_usd_e6::text END AS tvl_ath_usd_e6,
+              CASE WHEN metrics_chain_id = ${ARC_CHAIN_ID} THEN tvl_ath_block END AS tvl_ath_block,
+              CASE WHEN metrics_chain_id = ${ARC_CHAIN_ID} THEN tvl_ath_at END AS tvl_ath_at,
+              CASE WHEN metrics_chain_id = ${ARC_CHAIN_ID} THEN revenue_cum_usd_e6::text END AS revenue_cum_usd_e6,
+              CASE WHEN metrics_chain_id = ${ARC_CHAIN_ID} THEN revenue_ath_day_usd_e6::text END AS revenue_ath_day_usd_e6,
+              CASE WHEN metrics_chain_id = ${ARC_CHAIN_ID} THEN revenue_ath_day END AS revenue_ath_day,
+              CASE WHEN metrics_chain_id = ${ARC_CHAIN_ID} THEN volume_cum_usd_e6::text END AS volume_cum_usd_e6,
+              CASE WHEN metrics_chain_id = ${ARC_CHAIN_ID} THEN volume_ath_day_usd_e6::text END AS volume_ath_day_usd_e6,
+              CASE WHEN metrics_chain_id = ${ARC_CHAIN_ID} THEN volume_ath_day END AS volume_ath_day,
+              CASE WHEN metrics_chain_id = ${ARC_CHAIN_ID} THEN tvl_last_indexed_at END AS tvl_last_indexed_at,
+              CASE WHEN subgraph_chain_id = ${ARC_CHAIN_ID} THEN subgraph_tvl_usd_e6::text END AS subgraph_tvl_usd_e6,
+              CASE WHEN subgraph_chain_id = ${ARC_CHAIN_ID} THEN subgraph_volume_usd_e6::text END AS subgraph_volume_usd_e6,
+              CASE WHEN subgraph_chain_id = ${ARC_CHAIN_ID} THEN subgraph_updated_at END AS subgraph_updated_at,
+              CASE WHEN subgraph_chain_id = ${ARC_CHAIN_ID} THEN subgraph_source_ts::text END AS subgraph_source_ts,
+              CASE WHEN subgraph_chain_id = ${ARC_CHAIN_ID} THEN subgraph_series END AS subgraph_series
        FROM projects
        WHERE approved = true AND live = true
          AND (slug = $1 OR id::text = $1)
@@ -89,7 +97,7 @@ export async function GET(
     if (project.contract) {
       try {
         const res = await fetch(
-          `https://testnet.arcscan.app/api/v2/addresses/${project.contract}/counters`,
+          `${ARC_EXPLORER_API}/addresses/${project.contract}/counters`,
           { next: { revalidate: 60 } }
         )
         const data = await res.json()
@@ -119,14 +127,14 @@ export async function GET(
     let usingXp       = false
     try {
       const xpFlag = await pool.query(
-        `SELECT 1 FROM campaigns WHERE project_id = $1 AND max_xp_per_completion IS NOT NULL LIMIT 1`,
+        `SELECT 1 FROM campaigns WHERE project_id = $1 AND max_xp_per_completion IS NOT NULL AND chain_id = ${ARC_CHAIN_ID} LIMIT 1`,
         [project.id]
       )
       usingXp = xpFlag.rowCount > 0
 
       const lbRes = await pool.query(
         `SELECT
-           cc.tester_wallet,
+           COALESCE(cc.profile_wallet, 'pending:' || MIN(cc.id)::text) AS tester_wallet,
            COUNT(*)::int                                AS campaigns_completed,
            AVG(cc.quality_score)::numeric(6,2)          AS avg_quality,
            AVG(cc.builder_rating)::numeric(4,2)         AS avg_rating,
@@ -141,18 +149,18 @@ export async function GET(
            COALESCE(tr.avg_score, 0)::numeric(4,2)      AS platform_avg
          FROM campaign_completions cc
          JOIN campaigns c ON c.id = cc.campaign_id
-         LEFT JOIN tester_reputation tr ON tr.wallet = cc.tester_wallet
+         LEFT JOIN tester_reputation tr ON LOWER(tr.wallet) = LOWER(cc.profile_wallet)
          WHERE c.project_id = $1
            AND cc.status = 'reviewed'
            AND cc.builder_rating IS NOT NULL
-         GROUP BY cc.tester_wallet, tr.rank, tr.avg_score
+         GROUP BY cc.profile_wallet, tr.rank, tr.avg_score
          ORDER BY ${usingXp ? "total_xp DESC, " : ""}total_score DESC, avg_quality DESC
          LIMIT 20`,
         [project.id]
       )
       leaderboard = lbRes.rows
       const campCount = await pool.query(
-        `SELECT COUNT(*)::int AS n FROM campaigns WHERE project_id = $1 AND status IN ('active','ended')`,
+        `SELECT COUNT(*)::int AS n FROM campaigns WHERE project_id = $1 AND status IN ('active','ended') AND chain_id = ${ARC_CHAIN_ID}`,
         [project.id]
       )
       campaignsRun = campCount.rows[0]?.n || 0
@@ -174,7 +182,7 @@ export async function GET(
                   total_usd_e6::text AS total_usd_e6,
                   breakdown
            FROM tvl_snapshots
-           WHERE project_id = $1
+           WHERE project_id = $1 AND chain_id = ${ARC_CHAIN_ID}
            ORDER BY block_number DESC LIMIT 1`,
           [project.id]
         )
@@ -187,7 +195,7 @@ export async function GET(
              SELECT block_number, block_time, total_usd_e6,
                     ROW_NUMBER() OVER (ORDER BY block_number ASC) AS rn,
                     COUNT(*)     OVER ()                          AS n
-             FROM tvl_snapshots WHERE project_id = $1
+             FROM tvl_snapshots WHERE project_id = $1 AND chain_id = ${ARC_CHAIN_ID}
            )
            SELECT block_number, block_time, total_usd_e6::text AS total_usd_e6
            FROM s
@@ -201,7 +209,7 @@ export async function GET(
                   deployer_address, verified_at, revoked_at,
                   volume_method
            FROM project_contracts
-           WHERE project_id = $1 AND verified_at IS NOT NULL AND revoked_at IS NULL
+           WHERE project_id = $1 AND verified_at IS NOT NULL AND revoked_at IS NULL AND chain_id = ${ARC_CHAIN_ID}
            ORDER BY role, id`,
           [project.id]
         )
@@ -209,13 +217,13 @@ export async function GET(
         // Revenue daily series (last ~90 days) for the revenue sparkline.
         const revSeries = await pool.query(
           `SELECT day, total_usd_e6::text AS total_usd_e6, event_count
-           FROM revenue_daily WHERE project_id = $1
+           FROM revenue_daily WHERE project_id = $1 AND chain_id = ${ARC_CHAIN_ID}
            ORDER BY day DESC LIMIT 90`,
           [project.id]
         )
         const volSeries = await pool.query(
           `SELECT day, total_usd_e6::text AS total_usd_e6, event_count
-           FROM volume_daily WHERE project_id = $1
+           FROM volume_daily WHERE project_id = $1 AND chain_id = ${ARC_CHAIN_ID}
            ORDER BY day DESC LIMIT 90`,
           [project.id]
         )

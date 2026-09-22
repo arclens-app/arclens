@@ -4,6 +4,7 @@
 
 import { NextRequest, NextResponse } from "next/server"
 import { getPool } from "@/lib/dbPool"
+import { ARC_CHAIN_ID } from "@/lib/constants"
 
 const pool = getPool()
 
@@ -15,7 +16,7 @@ export async function POST(req: NextRequest) {
     const lower  = addresses.map((a: string) => a.toLowerCase())
     const result = await pool.query(
       `SELECT address, name, verified, flagged FROM contract_names_cache
-       WHERE address = ANY($1)`,
+       WHERE address = ANY($1) AND chain_id = ${ARC_CHAIN_ID}`,
       [lower]
     )
 

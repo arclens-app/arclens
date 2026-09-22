@@ -2,6 +2,7 @@
 import { enforce } from "@/lib/ratelimit"
 import { getSession } from "@/lib/session"
 import { getPool } from "@/lib/dbPool"
+import { ARC_CHAIN_ID } from "@/lib/constants"
 
 const pool = getPool()
 
@@ -38,7 +39,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const isNumeric = /^\d+$/.test(id)
     const campaignRes = await pool.query(
       `SELECT id, creator_wallet, max_xp_per_completion, xp_mode, review_questions
-         FROM campaigns WHERE ${isNumeric ? "id = $1" : "slug = $1"}`,
+         FROM campaigns WHERE ${isNumeric ? "id = $1" : "slug = $1"} AND chain_id = ${ARC_CHAIN_ID}`,
       [isNumeric ? Number(id) : id]
     )
     if (!campaignRes.rows.length) {
@@ -56,7 +57,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const compRes = await pool.query(
       `SELECT id, auto_score, provisional_score, builder_rating
        FROM campaign_completions
-       WHERE campaign_id = $1 AND tester_wallet = $2`,
+       WHERE campaign_id = $1 AND tester_wallet = $2 AND chain_id = ${ARC_CHAIN_ID}`,
       [campaignId, tester_wallet.toLowerCase()]
     )
     if (!compRes.rows.length) {
@@ -122,7 +123,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
            per_question_ratings   = $4::jsonb,
            status                 = 'reviewed',
            reviewed_at            = NOW()
-       WHERE campaign_id = $5 AND tester_wallet = $6`,
+       WHERE campaign_id = $5 AND tester_wallet = $6 AND chain_id = ${ARC_CHAIN_ID}`,
       [
         effectiveRating,
         quality_score,

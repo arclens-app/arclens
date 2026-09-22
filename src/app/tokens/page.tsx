@@ -1,6 +1,7 @@
 "use client"
 import { useEffect, useState } from "react"
 import ArcLayout from "@/components/ArcLayout"
+import { ARC_CHAIN_NAME } from "@/lib/constants"
 
 interface Token {
   rank: number
@@ -69,7 +70,7 @@ export default function TokensPage() {
         <div style={{ marginBottom: "24px" }}>
           <div style={{ fontSize: "10px", fontFamily: mono, color: "#323e62", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "8px" }}>Explorer</div>
           <div style={{ fontSize: "28px", fontWeight: 700, letterSpacing: "-0.04em", marginBottom: "5px" }}>Tokens</div>
-          <div style={{ fontSize: "13px", color: "#6b7da8", fontWeight: 300 }}>All ERC-20 tokens on Arc Testnet. Safety ratings from the contract registry.</div>
+          <div style={{ fontSize: "13px", color: "#6b7da8", fontWeight: 300 }}>All ERC-20 tokens on {ARC_CHAIN_NAME}. Safety ratings from the contract registry.</div>
         </div>
         <div style={{ background: "var(--surf, #080c1a)", border: "1px solid " + border, borderRadius: "12px", overflow: "hidden" }}>
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
@@ -82,7 +83,7 @@ export default function TokensPage() {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={5} style={{ padding: "48px", textAlign: "center", fontFamily: mono, fontSize: "11px", color: "#323e62" }}>Loading tokens from Arc Testnet...</td></tr>
+                <tr><td colSpan={5} style={{ padding: "48px", textAlign: "center", fontFamily: mono, fontSize: "11px", color: "#323e62" }}>Loading tokens from {ARC_CHAIN_NAME}...</td></tr>
               ) : tokens.map((t: any) => (
                 <tr key={t.address} onClick={() => window.location.href = "/address/" + t.address}
                   onMouseEnter={e => (e.currentTarget.style.background = "rgba(128,128,128,0.04)")}

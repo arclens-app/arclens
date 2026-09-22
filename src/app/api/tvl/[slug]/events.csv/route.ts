@@ -22,6 +22,7 @@
 
 import { NextRequest } from "next/server"
 import { getPool } from "@/lib/dbPool"
+import { ARC_CHAIN_ID } from "@/lib/constants"
 
 const pool = getPool()
 
@@ -62,7 +63,7 @@ export async function GET(
 
   // Resolve the project ID first so the streaming query doesn't have to JOIN.
   const proj = await pool.query<{ id: number; tvl_tracking_enabled: boolean; name: string }>(
-    `SELECT id, tvl_tracking_enabled, name FROM projects
+    `SELECT id, (tvl_tracking_enabled AND metrics_chain_id = ${ARC_CHAIN_ID}) AS tvl_tracking_enabled, name FROM projects
      WHERE (slug = $1 OR id::text = $1) AND approved = true AND live = true
      LIMIT 1`,
     [slug],
@@ -99,9 +100,9 @@ export async function GET(
                     r.amount_raw::text AS amount_raw,
                     r.amount_usd_e6::text AS amount_usd_e6
              FROM revenue_events r
-             JOIN project_contracts pc ON pc.id = r.contract_id
-             JOIN stablecoins      s  ON s.id  = r.stablecoin_id
-             WHERE r.project_id = $1
+             JOIN project_contracts pc ON pc.id = r.contract_id AND pc.chain_id = ${ARC_CHAIN_ID}
+             JOIN stablecoins s ON s.id = r.stablecoin_id AND s.chain_id = ${ARC_CHAIN_ID}
+             WHERE r.project_id = $1 AND r.chain_id = ${ARC_CHAIN_ID}
              UNION ALL
              SELECT 'volume'::text AS event_type,
                     v.block_number, v.block_time,
@@ -112,9 +113,9 @@ export async function GET(
                     v.amount_raw::text AS amount_raw,
                     v.amount_usd_e6::text AS amount_usd_e6
              FROM volume_events v
-             JOIN project_contracts pc ON pc.id = v.contract_id
-             JOIN stablecoins      s  ON s.id  = v.stablecoin_id
-             WHERE v.project_id = $1
+             JOIN project_contracts pc ON pc.id = v.contract_id AND pc.chain_id = ${ARC_CHAIN_ID}
+             JOIN stablecoins s ON s.id = v.stablecoin_id AND s.chain_id = ${ARC_CHAIN_ID}
+             WHERE v.project_id = $1 AND v.chain_id = ${ARC_CHAIN_ID}
            ) AS u
            ORDER BY u.block_number ASC, u.log_index ASC`,
           [projectId],

@@ -2,13 +2,9 @@
 import { useState, useEffect } from "react"
 import ArcLayout from "@/components/ArcLayout"
 import { NodeGuideSection, useColors } from "@/app/node-guide/page"
+import { ADD_CHAIN_PARAMS, ARC_CHAIN_ID, ARC_CHAIN_ID_HEX, ARC_CHAIN_NAME, ARC_IS_MAINNET, ARC_RPC_HTTP, ARC_RPC_WS } from "@/lib/constants"
 
-const CHAIN = {
-  chainId: "0x4cef52", chainName: "Arc Testnet",
-  nativeCurrency: { name: "USDC", symbol: "USDC", decimals: 18 },
-  rpcUrls: ["https://rpc.testnet.arc.network"],
-  blockExplorerUrls: ["https://arclenz.xyz"],
-}
+const CHAIN = ADD_CHAIN_PARAMS
 
 const COMMUNITY = [
   { label: "Arc on X",      href: "https://x.com/arc",                  icon: "𝕏", desc: "Announcements and ecosystem news" },
@@ -18,7 +14,7 @@ const COMMUNITY = [
   { label: "Ecosystem",     href: "/ecosystem",                           icon: "◉", desc: "Every project building on Arc" },
 ]
 
-const IDEATION_PROMPT = `I want to build a dApp on Arc network — a USDC-native EVM chain (Chain ID 5042002).
+const IDEATION_PROMPT = `I want to build a dApp on Arc network — a USDC-native EVM chain (Chain ID ${ARC_CHAIN_ID}).
 Arc is built for onchain payments and stablecoin finance. USDC is the gas token.
 
 My rough idea: [describe your idea in plain English]
@@ -38,9 +34,9 @@ const CONTRACT_PROMPT = `Write me a Solidity smart contract for Arc network.
 
 Arc details:
 - EVM-compatible, Solidity ^0.8.0
-- Chain ID: 5042002
+- Chain ID: ${ARC_CHAIN_ID}
 - Gas token: USDC (not ETH)
-- RPC: https://rpc.testnet.arc.network
+- RPC: ${ARC_RPC_HTTP}
 
 What I want to build: [paste the spec from your ideation session]
 
@@ -58,9 +54,9 @@ After the contract, give me:
 const FRONTEND_PROMPT = `Build me a complete dApp frontend for Arc network.
 
 Chain details:
-- Network name: Arc Testnet
-- Chain ID: 5042002 (hex: 0x4cef52)
-- RPC URL: https://rpc.testnet.arc.network
+- Network name: ${ARC_CHAIN_NAME}
+- Chain ID: ${ARC_CHAIN_ID} (hex: ${ARC_CHAIN_ID_HEX})
+- RPC URL: ${ARC_RPC_HTTP}
 - Gas token: USDC
 
 My smart contract:
@@ -78,7 +74,7 @@ Requirements:
 - Clear success and error messages after each action
 - Modern dark UI, clean typography, works on mobile`
 
-const DEBUG_PROMPT = `I am building a dApp on Arc network (Chain ID 5042002, USDC gas token, EVM-compatible).
+const DEBUG_PROMPT = `I am building a dApp on Arc network (Chain ID ${ARC_CHAIN_ID}, USDC gas token, EVM-compatible).
 
 Error I am seeing:
 [paste the full error from browser console (F12) or your wallet popup]
@@ -122,8 +118,8 @@ module.exports = {
   solidity: "0.8.24",
   networks: {
     arc: {
-      url: "https://rpc.testnet.arc.network",
-      chainId: 5042002,
+      url: "${ARC_RPC_HTTP}",
+      chainId: ${ARC_CHAIN_ID},
       accounts: [process.env.PRIVATE_KEY],
     },
   },
@@ -135,31 +131,31 @@ out = "out"
 libs = ["lib"]
 
 [rpc_endpoints]
-arc = "https://rpc.testnet.arc.network"
+arc = "${ARC_RPC_HTTP}"
 
 # Deploy:
 # forge script script/Deploy.s.sol --rpc-url arc --broadcast
 
 # Verify:
-# forge verify-contract <addr> src/MyContract.sol:MyContract --chain-id 5042002`
+# forge verify-contract <addr> src/MyContract.sol:MyContract --chain-id ${ARC_CHAIN_ID}`
 
 const WAGMI_CFG = `import { defineChain } from "viem"
 import { createConfig, http } from "wagmi"
 import { injected } from "wagmi/connectors"
 
-export const arcTestnet = defineChain({
-  id: 5042002,
-  name: "Arc Testnet",
+export const arcNetwork = defineChain({
+  id: ${ARC_CHAIN_ID},
+  name: "${ARC_CHAIN_NAME}",
   nativeCurrency: { name: "USDC", symbol: "USDC", decimals: 18 },
-  rpcUrls: { default: { http: ["https://rpc.testnet.arc.network"] } },
-  blockExplorers: { default: { name: "ArcLens", url: "https://arclenz.xyz" } },
-  testnet: true,
+  rpcUrls: { default: { http: ["${ARC_RPC_HTTP}"] } },
+  blockExplorers: { default: { name: "Arc", url: "${ADD_CHAIN_PARAMS.blockExplorerUrls[0]}" } },
+  testnet: ${!ARC_IS_MAINNET},
 })
 
 export const config = createConfig({
-  chains: [arcTestnet],
+  chains: [arcNetwork],
   connectors: [injected()],
-  transports: { [arcTestnet.id]: http() },
+  transports: { [arcNetwork.id]: http() },
 })`
 
 const ETHERS_CFG = `import { ethers } from "ethers"
@@ -169,10 +165,10 @@ const provider = new ethers.BrowserProvider(window.ethereum)
 
 // Add Arc network + get signer
 await provider.send("wallet_addEthereumChain", [{
-  chainId: "0x4cef52",
-  chainName: "Arc Testnet",
+  chainId: "${ARC_CHAIN_ID_HEX}",
+  chainName: "${ARC_CHAIN_NAME}",
   nativeCurrency: { name: "USDC", symbol: "USDC", decimals: 18 },
-  rpcUrls: ["https://rpc.testnet.arc.network"],
+  rpcUrls: ["${ARC_RPC_HTTP}"],
 }])
 const signer = await provider.getSigner()
 
@@ -330,7 +326,7 @@ export default function StartPage() {
         {path === "user" && (
           <div style={{ display: "flex", flexDirection: "column" }}>
             {[
-              { n: "01", title: "Add Arc to your wallet", body: "Arc works with Rabby, MetaMask, or any EVM wallet. One click adds Arc Testnet automatically.", extra: <><AddNetBtn added={netAdded} error={netError} onAdd={addNetwork} /><NetBox mono={mono} surf2={surf2} t2={t2} t3={t3} link={link} usdc={usdc} /></> },
+              { n: "01", title: "Add Arc to your wallet", body: `Arc works with Rabby, MetaMask, or any EVM wallet. One click adds ${ARC_CHAIN_NAME} automatically.`, extra: <><AddNetBtn added={netAdded} error={netError} onAdd={addNetwork} /><NetBox mono={mono} surf2={surf2} t2={t2} t3={t3} link={link} usdc={usdc} /></> },
               { n: "02", title: "Get testnet USDC", body: "Arc gas is paid in USDC. Get free testnet USDC in 30 seconds — paste your address and request.", extra: <Row><FlatLink href="https://faucets.chain.link/arc-testnet" label="Chainlink Faucet" /><FlatLink href="https://faucet.circle.com" label="Circle Faucet" /></Row> },
               { n: "03", title: "Make your first transaction", body: "Open ArcLens Explorer and watch live blocks. Send USDC to any address — gas costs fractions of a cent.", extra: <Row><FlatLink href="/overview" label="Open Explorer" /><FlatLink href="/wallets" label="Wallet Activity" /></Row> },
               { n: "04", title: "Try an Arc app", body: "Browse every project building on Arc — DeFi, payments, NFTs, infrastructure. Each has contract details and community reviews.", extra: <FlatLink href="/ecosystem" label="Browse Ecosystem" /> },
@@ -402,9 +398,9 @@ export default function StartPage() {
             </div>
 
             {/* L1 */}
-            <LM id="L1" n="L1" title="You are on the network" deliverable="A funded wallet on Arc Testnet" time="5 min"
+            <LM id="L1" n="L1" title="You are on the network" deliverable={`A funded wallet on ${ARC_CHAIN_NAME}`} time="5 min"
               aiBest={null} done={done.has("L1")} onToggle={toggleDone}
-              checkpoint={["Rabby shows Arc Testnet in the network selector", "Your USDC balance is above zero", "You can see Chain ID 5042002 in Rabby network settings"]}>
+              checkpoint={[`Rabby shows ${ARC_CHAIN_NAME} in the network selector`, "Your USDC balance is above zero", `You can see Chain ID ${ARC_CHAIN_ID} in Rabby network settings`]}>
               <SL label="1" title="Install Rabby Wallet">
                 <P>Rabby is the best wallet for beginners — it shows you exactly what every transaction will do <strong style={{ color: t1 }}>before you sign it</strong>. Free browser extension. Install it, create a wallet, and write your seed phrase on paper. Store it somewhere safe. Never share it with anyone — ever.</P>
                 <div style={{ padding: "12px 14px", background: "rgba(0,184,122,0.05)", border: "1px solid rgba(0,184,122,0.12)", borderRadius: "8px", fontSize: "11px", fontFamily: mono, color: usdc, lineHeight: 1.75, marginBottom: "12px" }}>
@@ -415,8 +411,8 @@ export default function StartPage() {
                   <FlatLink href="https://metamask.io/download/" label="MetaMask (alternative)" />
                 </Row>
               </SL>
-              <SL label="2" title="Add Arc Testnet">
-                <P>Click below — Rabby will pop up and ask to add Arc Testnet. Approve it and you are on the network.</P>
+              <SL label="2" title={`Add ${ARC_CHAIN_NAME}`}>
+                <P>Click below — Rabby will pop up and ask to add {ARC_CHAIN_NAME}. Approve it and you are on the network.</P>
                 <AddNetBtn added={netAdded} error={netError} onAdd={addNetwork} />
                 <NetBox mono={mono} surf2={surf2} t2={t2} t3={t3} link={link} usdc={usdc} />
               </SL>
@@ -495,7 +491,7 @@ export default function StartPage() {
                     ["Ctrl+S",        "compile — green tick means ready"],
                     ["Left panel",    "click the Deploy & Run icon (plug shape)"],
                     ["Environment",   "select Injected Provider - MetaMask — this is correct even if you use Rabby. Rabby injects into the same slot. Do not look for a Rabby option."],
-                    ["Wallet",        "confirm it shows Arc Testnet (Chain 5042002)"],
+                    ["Wallet",        `confirm it shows ${ARC_CHAIN_NAME} (Chain ${ARC_CHAIN_ID})`],
                     ["Deploy",        "click it — confirm in your wallet"],
                     ["Copy address",  "the 0x address shown after deploy"],
                     ["Copy ABI",      "copy icon next to ABI at bottom of compiler panel"],
@@ -564,7 +560,7 @@ export default function StartPage() {
                 </Row>
               </SL>
               <SL label="2" title="Build locally — Cursor + Netlify">
-                <P>Download <a href="https://cursor.com" target="_blank" rel="noopener noreferrer" style={{ color: link }}>Cursor</a> — it uses <strong style={{ color: t1 }}>claude-sonnet-4-5</strong> under the hood by default (free tier included). Open Cursor and paste this in the AI chat: <em style={{ color: t2 }}>&quot;Build a Next.js dApp connected to my contract at [address] on Arc Testnet (Chain ID 5042002, RPC https://rpc.testnet.arc.network). ABI: [paste ABI]. Use ethers.js. Support Rabby and MetaMask. The app should [features]. Add wallet connect, network switching, loading states.&quot;</em> Then deploy to Netlify — sign up, drag your build folder to deploy, done.</P>
+                <P>Download <a href="https://cursor.com" target="_blank" rel="noopener noreferrer" style={{ color: link }}>Cursor</a> — it uses <strong style={{ color: t1 }}>claude-sonnet-4-5</strong> under the hood by default (free tier included). Open Cursor and paste this in the AI chat: <em style={{ color: t2 }}>&quot;Build a Next.js dApp connected to my contract at [address] on {ARC_CHAIN_NAME} (Chain ID {ARC_CHAIN_ID}, RPC {ARC_RPC_HTTP}). ABI: [paste ABI]. Use ethers.js. Support Rabby and MetaMask. The app should [features]. Add wallet connect, network switching, loading states.&quot;</em> Then deploy to Netlify — sign up, drag your build folder to deploy, done.</P>
                 <Row>
                   <FlatLink href="https://cursor.com" label="Download Cursor" />
                   <FlatLink href="https://netlify.com" label="Deploy on Netlify" />
@@ -578,7 +574,9 @@ export default function StartPage() {
               done={done.has("L5")} onToggle={toggleDone}
               checkpoint={["Every button works with your main wallet", "Tested with a second wallet — owner-only actions blocked correctly", "Transactions confirm and UI updates without refreshing", "Tested on your phone — nothing broken"]}>
               <SL label="1" title="Test checklist — do not skip this">
-                <P>You are on testnet. Mistakes cost nothing. Test every scenario before real users find the issues.</P>
+                <P>{ARC_IS_MAINNET
+                  ? "You are on mainnet. Transactions use real USDC, so verify the network, address and amount before signing."
+                  : "You are on testnet. Test every scenario before real users find the issues."}</P>
                 <div style={{ background: surf2, borderRadius: "10px", padding: "16px 18px", fontSize: "12px", fontFamily: mono, lineHeight: 2.2, color: t2, marginBottom: "14px" }}>
                   {[
                     "Wallet connects and shows the right address",
@@ -655,12 +653,12 @@ export default function StartPage() {
         {path === "dev" && (
           <div style={{ display: "flex", flexDirection: "column", gap: "32px" }}>
 
-            <DevSection title="Network — Arc Testnet" mono={mono} t3={t3}>
+            <DevSection title={`Network — ${ARC_CHAIN_NAME}`} mono={mono} t3={t3}>
               <div style={{ background: "#04060f", border: "1px solid rgba(26,86,255,0.15)", borderRadius: "10px", overflow: "hidden" }}>
                 {[
-                  ["Chain ID",   "5042002  (0x4cef52)"],
-                  ["RPC",        "https://rpc.testnet.arc.network"],
-                  ["WebSocket",  "wss://rpc.testnet.arc.network"],
+                  ["Chain ID",   `${ARC_CHAIN_ID}  (${ARC_CHAIN_ID_HEX})`],
+                  ["RPC",        ARC_RPC_HTTP],
+                  ["WebSocket",  ARC_RPC_WS || "Use a supported RPC provider"],
                   ["Explorer",   "https://arclenz.xyz"],
                   ["Gas token",  "USDC — ERC-20 native, not ETH"],
                   ["EVM parity", "Full — Solidity ^0.8.x, all opcodes"],
@@ -807,7 +805,7 @@ export default function StartPage() {
 
         {/* ── NODE GUIDE ────────────────────────────────────── */}
         <div style={{ marginTop: "64px", paddingTop: "40px", borderTop: "1px solid " + bdr }}>
-          <NodeGuideSection c={nodeColors} />
+          {!ARC_IS_MAINNET && <NodeGuideSection c={nodeColors} />}
         </div>
 
         {/* ── COMMUNITY ─────────────────────────────────────── */}
@@ -951,8 +949,8 @@ function DevSection({ title, children, mono, t3 }: { title: string; children: Re
 function NetBox({ mono, surf2, t2, t3, link, usdc }: { mono: string; surf2: string; t2: string; t3: string; link: string; usdc: string }) {
   return (
     <div style={{ marginTop: "12px", padding: "12px 14px", background: surf2, borderRadius: "8px", fontSize: "11px", fontFamily: mono, color: t3, lineHeight: 1.9 }}>
-      <div>RPC &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span style={{ color: t2 }}>https://rpc.testnet.arc.network</span></div>
-      <div>Chain ID &nbsp;&nbsp;<span style={{ color: link }}>5042002</span></div>
+      <div>RPC &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span style={{ color: t2 }}>{ARC_RPC_HTTP}</span></div>
+      <div>Chain ID &nbsp;&nbsp;<span style={{ color: link }}>{ARC_CHAIN_ID}</span></div>
       <div>Symbol &nbsp;&nbsp;&nbsp;&nbsp;<span style={{ color: usdc }}>USDC (gas token)</span></div>
     </div>
   )

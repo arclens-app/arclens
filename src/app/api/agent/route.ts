@@ -17,6 +17,7 @@ import { gatewayConfigured, verifyAndSettle, paymentRequiredHeader, paymentRespo
 import { passesVetting } from "@/lib/trustEngine"
 import { getGeminiKey, searchKnowledgeBase, projectSlugsInText } from "@/lib/aiContext"
 import { getPool } from "@/lib/dbPool"
+import { ARC_CHAIN_ID } from "@/lib/constants"
 
 const pool = getPool()
 
@@ -140,7 +141,9 @@ export async function POST(req: NextRequest) {
       if (!q) return NextResponse.json({ error: "target/name required" }, { status: 400 })
       const r = await pool.query(
         `SELECT name, slug, category, tagline, ${TRUST_COLS},
-                tvl_usd_e6::text tvl, volume_cum_usd_e6::text volume, revenue_cum_usd_e6::text revenue
+                CASE WHEN metrics_chain_id = ${ARC_CHAIN_ID} THEN tvl_usd_e6::text ELSE '0' END tvl,
+                CASE WHEN metrics_chain_id = ${ARC_CHAIN_ID} THEN volume_cum_usd_e6::text ELSE '0' END volume,
+                CASE WHEN metrics_chain_id = ${ARC_CHAIN_ID} THEN revenue_cum_usd_e6::text ELSE '0' END revenue
            FROM projects WHERE approved AND live AND (slug ILIKE $1 OR name ILIKE $1)
           ORDER BY (slug = LOWER($2)) DESC LIMIT 1`,
         [`%${q}%`, q.toLowerCase()],
@@ -158,8 +161,10 @@ export async function POST(req: NextRequest) {
       const days = Math.min(Math.max(Number(body?.days) || 30, 7), 90)
       const r = await pool.query(
         `SELECT id, name, slug, category, ${TRUST_COLS},
-                tvl_usd_e6::text tvl, tvl_ath_usd_e6::text tvl_ath,
-                volume_cum_usd_e6::text volume_cum, revenue_cum_usd_e6::text revenue_cum
+                CASE WHEN metrics_chain_id = ${ARC_CHAIN_ID} THEN tvl_usd_e6::text ELSE '0' END tvl,
+                CASE WHEN metrics_chain_id = ${ARC_CHAIN_ID} THEN tvl_ath_usd_e6::text ELSE '0' END tvl_ath,
+                CASE WHEN metrics_chain_id = ${ARC_CHAIN_ID} THEN volume_cum_usd_e6::text ELSE '0' END volume_cum,
+                CASE WHEN metrics_chain_id = ${ARC_CHAIN_ID} THEN revenue_cum_usd_e6::text ELSE '0' END revenue_cum
            FROM projects WHERE approved AND live AND (slug ILIKE $1 OR name ILIKE $1)
           ORDER BY (slug = LOWER($2)) DESC LIMIT 1`,
         [`%${q}%`, q.toLowerCase()],
@@ -171,12 +176,12 @@ export async function POST(req: NextRequest) {
         const [vol, rev, tvlSeries] = await Promise.all([
           pool.query(
             `SELECT day::text, total_usd_e6::text FROM volume_daily
-              WHERE project_id = $1 AND day >= CURRENT_DATE - $2::int ORDER BY day ASC`,
+              WHERE project_id = $1 AND day >= CURRENT_DATE - $2::int AND chain_id = ${ARC_CHAIN_ID} ORDER BY day ASC`,
             [p.id, days],
           ),
           pool.query(
             `SELECT day::text, total_usd_e6::text FROM revenue_daily
-              WHERE project_id = $1 AND day >= CURRENT_DATE - $2::int ORDER BY day ASC`,
+              WHERE project_id = $1 AND day >= CURRENT_DATE - $2::int AND chain_id = ${ARC_CHAIN_ID} ORDER BY day ASC`,
             [p.id, days],
           ),
           // Downsampled to ≤ 60 points so agent payloads stay small.
@@ -187,6 +192,7 @@ export async function POST(req: NextRequest) {
                       COUNT(*) OVER () n
                  FROM tvl_snapshots
                 WHERE project_id = $1 AND block_time >= NOW() - make_interval(days => $2::int)
+                  AND chain_id = ${ARC_CHAIN_ID}
              )
              SELECT block_time, total_usd_e6 FROM s
               WHERE rn % GREATEST(1, n / 60) = 0 OR rn = 1 OR rn = n

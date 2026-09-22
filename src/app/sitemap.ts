@@ -1,5 +1,6 @@
 ﻿import { MetadataRoute } from "next"
 import { getPool } from "@/lib/dbPool"
+import { ARC_CHAIN_ID } from "@/lib/constants"
 
 const pool = getPool()
 
@@ -54,7 +55,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   try {
     const campaigns = await pool.query(
-      `SELECT slug, id, updated_at FROM campaigns WHERE status = 'active' ORDER BY created_at DESC`
+      `SELECT slug, id, updated_at FROM campaigns WHERE status = 'active' AND chain_id = ${ARC_CHAIN_ID} ORDER BY created_at DESC`
     )
     campaignRoutes = campaigns.rows.map((c: any) => ({
       url:             `${BASE}/trials/${c.slug || c.id}`,

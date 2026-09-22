@@ -8,9 +8,9 @@
 // Heuristics (mint/pause/unverified-source) are advisory only — never auto-red.
 
 import { ethers } from "ethers"
-import { ARC_RPC_HTTP } from "./constants"
+import { ARC_CHAIN_ID, ARC_EXPLORER_API, ARC_NETWORK, ARC_RPC_HTTP } from "./constants"
 
-const ARCSCAN = "https://testnet.arcscan.app/api/v2"
+const ARCSCAN = ARC_EXPLORER_API
 const EIP1967_IMPL  = "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc"
 const EIP1967_ADMIN = "0xb53127684a568b3173ae13b9f8a6016e243e63b6e8ee1178d6a717850b5d6103"
 // MetaMask's open crypto-phishing list — the data behind its "Deceptive site
@@ -36,7 +36,7 @@ export interface Assessment { hardRisk: boolean; profile: any }
 
 let _provider: ethers.JsonRpcProvider | null = null
 function provider() {
-  if (!_provider) _provider = new ethers.JsonRpcProvider(ARC_RPC_HTTP, { chainId: 5042002, name: "arc-testnet" })
+  if (!_provider) _provider = new ethers.JsonRpcProvider(ARC_RPC_HTTP, { chainId: ARC_CHAIN_ID, name: `arc-${ARC_NETWORK}` })
   return _provider
 }
 

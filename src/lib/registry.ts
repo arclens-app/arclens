@@ -11,7 +11,7 @@
 
 import { createWalletClient, createPublicClient, http, keccak256, toBytes, type Chain } from "viem"
 import { privateKeyToAccount } from "viem/accounts"
-import { ARC_RPC_HTTP, ARC_CHAIN_ID } from "./constants"
+import { ARC_RPC_HTTP, ARC_CHAIN_ID, ARC_CHAIN_NAME } from "./constants"
 
 const ABI = [
   { type: "function", name: "attest", stateMutability: "nonpayable", inputs: [{ name: "subject", type: "address" }, { name: "tier", type: "uint8" }, { name: "ref", type: "string" }], outputs: [] },
@@ -60,7 +60,7 @@ export async function readAttestation(subject: string): Promise<{ tier: number; 
 
 const arc: Chain = {
   id: ARC_CHAIN_ID,
-  name: "arc-testnet",
+  name: ARC_CHAIN_NAME,
   nativeCurrency: { name: "USDC", symbol: "USDC", decimals: 18 },
   rpcUrls: { default: { http: [ARC_RPC_HTTP] } },
 }

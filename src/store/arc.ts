@@ -102,7 +102,10 @@ export const useArcStore = create<ArcStore>()(
     newTxCount:     0,
     wsConnected:    false,
     lastUpdated:    Date.now(),
-    walletAddr:     typeof window !== "undefined" ? localStorage.getItem("arclens-wallet") : null,
+    // ArcLayout restores a wallet only after confirming that browser storage
+    // belongs to the active chain. Starting empty prevents a retired testnet
+    // Circle address flashing in the mainnet UI during hydration.
+    walletAddr:     null,
     walletBal:      null,
     myProject:      null,
 

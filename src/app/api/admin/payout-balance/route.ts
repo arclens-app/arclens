@@ -3,11 +3,12 @@ import { NextRequest, NextResponse } from "next/server"
 import { timingSafeEqual } from "crypto"
 import { privateKeyToAccount } from "viem/accounts"
 import { getPool } from "@/lib/dbPool"
+import { ARC_CHAIN_ID, ARC_EXPLORER_API } from "@/lib/constants"
 
 const pool = getPool()
 
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || ""
-const ARCSCAN        = "https://testnet.arcscan.app/api/v2"
+const ARCSCAN        = ARC_EXPLORER_API
 
 // Resolve the payout (DCW) address from any of these, in order of preference:
 //   1. PAYOUT_WALLET_ADDRESS               — explicit env (preferred)
@@ -68,11 +69,11 @@ export async function GET(req: NextRequest) {
         SELECT COALESCE(SUM(
           (c.total_slots - (
             SELECT COUNT(*) FROM campaign_completions cc
-            WHERE cc.campaign_id = c.id AND cc.reward_delivered = true
+            WHERE cc.campaign_id = c.id AND cc.reward_delivered = true AND cc.chain_id = ${ARC_CHAIN_ID}
           )) * c.reward_usdc_amount
         ), 0)::numeric AS committed
         FROM campaigns c
-        WHERE c.status = 'active'
+        WHERE c.status = 'active' AND c.chain_id = ${ARC_CHAIN_ID}
           AND c.reward_type = 'usdc'
           AND c.deposit_tx_hash IS NOT NULL
       `),

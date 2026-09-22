@@ -9,6 +9,7 @@ import TvlTrackingPanel from "./TvlTrackingPanel"
 import LensEarningsPanel from "@/components/LensEarningsPanel"
 import { freeHostOf, hostFromUrl } from "@/lib/submissionGuards"
 import { trustBadge } from "@/lib/trustBadge"
+import { APP_KIT_CHAIN, ARC_EXPLORER_URL, CAMPAIGN_USDC_ENABLED } from "@/lib/constants"
 
 interface Project {
   id: number; name: string; slug: string; tagline: string; description: string
@@ -296,6 +297,7 @@ export default function DashboardPage() {
 
   async function fundCampaign(campaign: any) {
     if (!connectedWallet || !(window as any).ethereum) return
+    if (!CAMPAIGN_USDC_ENABLED) { setFundMsg("USDC campaign funding is temporarily paused while ArcLens completes its network launch checks"); return }
     const slots       = campaign.total_slots || 10
     const totalAmount = (campaign.reward_usdc_amount * slots).toFixed(2)
     const payoutAddr  = process.env.NEXT_PUBLIC_ARCLENS_PAYOUT_ADDRESS
@@ -308,7 +310,7 @@ export default function DashboardPage() {
       const adapter = await createAdapterFromProvider({ provider: (window as any).ethereum })
       const kit     = new AppKit()
       const result  = await kit.send({
-        from:   { adapter: adapter as any, chain: "Arc_Testnet" },
+        from:   { adapter: adapter as any, chain: APP_KIT_CHAIN as any },
         to:     payoutAddr,
         amount: totalAmount,
         token:  "USDC",
@@ -1104,6 +1106,7 @@ export default function DashboardPage() {
                             </div>
                           ) : visibleSubs.map((comp: any, i: number) => {
                             const expanded    = expandedTesters.has(comp.tester_wallet)
+                            const pendingIdentity = comp.tester_wallet.startsWith("pending:")
                             const hasAnswers  = comp.review_answers && Object.keys(comp.review_answers).length > 0
                             const isRating    = dashRatingWallet === comp.tester_wallet
                             const scoreColor  = comp.auto_score > 70 ? "#00b87a" : comp.auto_score > 40 ? "#e08810" : "#e03348"
@@ -1120,11 +1123,11 @@ export default function DashboardPage() {
                                     </div>
                                   </div>
                                   <div style={{ flex: 1, minWidth: 0 }}>
-                                    <a href={`/tester/${comp.tester_wallet}`}
+                                    <a href={pendingIdentity ? undefined : `/tester/${comp.tester_wallet}`}
                                       style={{ fontSize: "11px", fontFamily: mono, color: t1, marginBottom: "3px", display: "block", textDecoration: "none" }}
                                       onMouseEnter={e => (e.currentTarget.style.color = "#8aaeff")}
                                       onMouseLeave={e => (e.currentTarget.style.color = t1)}>
-                                      {comp.tester_wallet.slice(0, 10)}...{comp.tester_wallet.slice(-6)}
+                                      {pendingIdentity ? "Tester" : `${comp.tester_wallet.slice(0, 10)}...${comp.tester_wallet.slice(-6)}`}
                                     </a>
                                     <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
                                       {comp.quality_score && <span style={{ fontSize: "10px", fontFamily: mono, color: t3 }}>Quality: <span style={{ color: t2 }}>{Number(comp.quality_score).toFixed(1)}/5</span></span>}
@@ -1180,7 +1183,7 @@ export default function DashboardPage() {
                                               const linkHref = !value
                                                 ? null
                                                 : t.proof_type === "tx_hash"
-                                                  ? `https://testnet.arcscan.app/tx/${value}`
+                                                  ? `${ARC_EXPLORER_URL}/tx/${value}`
                                                   : value
                                               const labelType = t.proof_type === "x_link"     ? "X post"
                                                               : t.proof_type === "tx_hash"    ? "Tx hash"
@@ -1660,6 +1663,7 @@ function FounderLeaderboard({ completions, surf, surf2, bdr, t1, t2, t3, green, 
       <div>
         {visible.map((c: any, i: number) => {
           const rank        = i + 1
+          const pendingIdentity = c.tester_wallet.startsWith("pending:")
           const scoreColor  = (Number(c.quality_score) || 0) > 70 ? green : (Number(c.quality_score) || 0) > 40 ? "#e08810" : t2
           const rkColor     = rankColor(rank, t3)
           return (
@@ -1669,9 +1673,9 @@ function FounderLeaderboard({ completions, surf, surf2, bdr, t1, t2, t3, green, 
                 {"#" + rank}
               </div>
               <WalletAvatar wallet={c.tester_wallet} size={28} />
-              <a href={`/tester/${c.tester_wallet}`}
+              <a href={pendingIdentity ? undefined : `/tester/${c.tester_wallet}`}
                 style={{ fontSize: "12px", fontFamily: mono, color: t1, textDecoration: "none", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {c.tester_wallet.slice(0, 8)}…{c.tester_wallet.slice(-4)}
+                {pendingIdentity ? "Tester" : `${c.tester_wallet.slice(0, 8)}…${c.tester_wallet.slice(-4)}`}
               </a>
               <div style={{ fontSize: "11px", fontFamily: mono, color: "#c08828", flexShrink: 0 }}>
                 {"★".repeat(c.builder_rating)}<span style={{ opacity: 0.25 }}>{"★".repeat(5 - c.builder_rating)}</span>

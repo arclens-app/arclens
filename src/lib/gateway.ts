@@ -10,11 +10,11 @@
 // left untouched, so nothing breaks if Gateway env isn't set.
 
 import { BatchFacilitatorClient } from "@circle-fin/x402-batching/server"
+import { ARC_CHAIN_ID, ARC_IS_MAINNET, ARC_NETWORK, USDC_ADDRESS } from "@/lib/constants"
 
-// Arc Testnet constants (from the @circle-fin/x402-batching reference).
-const ARC_TESTNET_NETWORK = "eip155:5042002"
-const ARC_TESTNET_USDC = "0x3600000000000000000000000000000000000000"
-const ARC_TESTNET_GATEWAY_WALLET = "0x0077777d7EBA4688BDeF3E311b846F25870A19B9"
+const ARC_X402_NETWORK = `eip155:${ARC_CHAIN_ID}`
+const GATEWAY_WALLET = (process.env.CIRCLE_GATEWAY_WALLET_ADDRESS ||
+  (ARC_IS_MAINNET ? "" : "0x0077777d7EBA4688BDeF3E311b846F25870A19B9")) as `0x${string}` | ""
 
 // Lens AI receives to its own wallet. SELLER_ADDRESS wins, then the Lens wallet.
 const SELLER_ADDRESS = (process.env.SELLER_ADDRESS ||
@@ -29,21 +29,23 @@ function facilitator(): BatchFacilitatorClient {
 }
 
 export function gatewayConfigured(): boolean {
-  return !!SELLER_ADDRESS
+  return process.env.X402_ENABLED === "true" &&
+    process.env.X402_NETWORK?.toLowerCase() === ARC_NETWORK &&
+    !!SELLER_ADDRESS && !!GATEWAY_WALLET
 }
 
 function requirements(priceE6: number) {
   return {
     scheme: "exact" as const,
-    network: ARC_TESTNET_NETWORK,
-    asset: ARC_TESTNET_USDC,
+    network: ARC_X402_NETWORK,
+    asset: USDC_ADDRESS,
     amount: String(priceE6), // USDC atomic units (6 decimals)
     payTo: SELLER_ADDRESS,
     maxTimeoutSeconds: 604800,
     extra: {
       name: "GatewayWalletBatched",
       version: "1",
-      verifyingContract: ARC_TESTNET_GATEWAY_WALLET,
+      verifyingContract: GATEWAY_WALLET,
     },
   }
 }
@@ -65,7 +67,7 @@ export function paymentRequiredHeader(priceE6: number, endpoint: string): string
 /** Base64 `PAYMENT-RESPONSE` header confirming settlement back to the buyer. */
 export function paymentResponseHeader(tx: string | null, payer?: string): string {
   return Buffer.from(
-    JSON.stringify({ success: true, transaction: tx, network: ARC_TESTNET_NETWORK, payer: payer ?? null }),
+    JSON.stringify({ success: true, transaction: tx, network: ARC_X402_NETWORK, payer: payer ?? null }),
   ).toString("base64")
 }
 

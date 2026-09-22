@@ -12,6 +12,7 @@ async function runSDKChallenge(userToken: string, encryptionKey: string, challen
   document.getElementById("sdkIframe")?.remove()
   const sdk = new W3SSdk()
   sdk.setAppSettings({ appId: APP_ID })
+  await sdk.getDeviceId()
   // Brand the PIN popup to match ArcLens (dark glass + Arc blue) instead of
   // Circle's default white modal.
   try {
@@ -46,6 +47,20 @@ async function runSDKChallenge(userToken: string, encryptionKey: string, challen
       else resolve()
     })
   })
+}
+
+// Restore a forgotten Circle PIN inside Circle's protected SDK window. ArcLens
+// never receives the user's security answers, old PIN, new PIN, or private key.
+export async function circleRestorePin(email: string): Promise<void> {
+  const res = await fetch("/api/auth/circle/pin/restore", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  })
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.error || "Failed to start PIN recovery")
+  await runSDKChallenge(data.userToken, data.encryptionKey, data.challengeId)
 }
 
 // Sign a plain-text message (personal_sign equivalent).

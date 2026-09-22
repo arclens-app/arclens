@@ -4,6 +4,7 @@ import { rateLimit, getIp } from "@/lib/ratelimit"
 import { getPool } from "@/lib/dbPool"
 import { matchesDefaultTemplate } from "@/lib/campaignTypes"
 import { getSession } from "@/lib/session"
+import { ARC_CHAIN_ID } from "@/lib/constants"
 
 const pool = getPool()
 
@@ -31,7 +32,7 @@ export async function GET(req: NextRequest) {
           CASE
             WHEN total_slots IS NOT NULL AND filled_slots >= total_slots THEN
               COALESCE(
-                (SELECT MAX(cc.created_at) FROM campaign_completions cc WHERE cc.campaign_id = campaigns.id),
+                (SELECT MAX(cc.created_at) FROM campaign_completions cc WHERE cc.campaign_id = campaigns.id AND cc.chain_id = ${ARC_CHAIN_ID}),
                 NOW()
               )
             ELSE expires_at
@@ -45,7 +46,7 @@ export async function GET(req: NextRequest) {
             ELSE 'expired'
           END
         )
-      WHERE status = 'active'
+      WHERE status = 'active' AND chain_id = ${ARC_CHAIN_ID}
         AND (
           (expires_at IS NOT NULL AND expires_at < NOW())
           OR (total_slots IS NOT NULL AND filled_slots >= total_slots)
@@ -62,6 +63,9 @@ export async function GET(req: NextRequest) {
     } else {
       params.push(status === "ended" ? "ended" : "active")
       conditions.push(`c.status = $${params.length}`)
+      // Historical ended campaigns remain part of the same Arc Trials product.
+      // Only campaigns that can still accept actions must be on the live chain.
+      if (status !== "ended") conditions.push(`c.chain_id = ${ARC_CHAIN_ID}`)
     }
 
     if (type && type !== "all") {
@@ -80,7 +84,7 @@ export async function GET(req: NextRequest) {
            c.project_name, c.project_logo, c.campaign_logo, c.creator_wallet,
            c.tasks, c.created_at, c.expires_at, c.status, c.rejection_reason, c.app_url,
            c.ended_at, c.ended_reason,
-           (SELECT COUNT(*) FROM campaign_completions cc WHERE cc.campaign_id = c.id) AS completion_count
+           (SELECT COUNT(*) FROM campaign_completions cc WHERE cc.campaign_id = c.id AND cc.chain_id = c.chain_id) AS completion_count
          FROM campaigns c
          WHERE ${where}
          ORDER BY c.created_at DESC
@@ -89,11 +93,11 @@ export async function GET(req: NextRequest) {
       ),
       pool.query(
         `SELECT
-           (SELECT COUNT(*) FROM campaigns WHERE status = 'active')          AS active_campaigns,
+           (SELECT COUNT(*) FROM campaigns WHERE status = 'active' AND chain_id = ${ARC_CHAIN_ID}) AS active_campaigns,
            (SELECT COUNT(*) FROM tester_reputation)                          AS total_testers,
            (SELECT COUNT(*) FROM campaign_completions WHERE status != 'flagged') AS total_completions,
            (SELECT COUNT(*) FROM campaign_completions
-            WHERE created_at > NOW() - INTERVAL '7 days')                   AS completions_this_week`
+            WHERE created_at > NOW() - INTERVAL '7 days') AS completions_this_week`
       ),
       wallet
         ? pool.query(
@@ -242,7 +246,7 @@ export async function POST(req: NextRequest) {
     let slug = baseSlug
     let suffix = 1
     while (true) {
-      const existing = await pool.query(`SELECT id FROM campaigns WHERE slug = $1`, [slug])
+      const existing = await pool.query(`SELECT id FROM campaigns WHERE slug = $1 AND chain_id = ${ARC_CHAIN_ID}`, [slug])
       if (!existing.rows.length) break
       slug = `${baseSlug}-${++suffix}`
     }
@@ -290,8 +294,8 @@ export async function POST(req: NextRequest) {
           total_slots, is_fcfs, min_rank,
           project_id, project_name, project_logo,
           creator_wallet, expires_at, invite_codes, invite_codes_note,
-          max_xp_per_completion, xp_mode, status)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,'pending_approval')
+          max_xp_per_completion, xp_mode, status, chain_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,'pending_approval',${ARC_CHAIN_ID})
        RETURNING id, slug`,
       [
         title.trim(),

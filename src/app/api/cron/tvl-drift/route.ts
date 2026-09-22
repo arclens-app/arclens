@@ -20,7 +20,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { PoolClient } from "pg"
 import { ethers } from "ethers"
-import { ARC_RPC_HTTP } from "@/lib/constants"
+import { ARC_CHAIN_ID, ARC_RPC_HTTP } from "@/lib/constants"
 import {
   ERC20_BALANCE_ABI,
   REORG_BUFFER,
@@ -57,7 +57,7 @@ function exceedsDriftTolerance(cached: bigint, actual: bigint): boolean {
 async function loadActiveStablecoins(c: PoolClient): Promise<StablecoinRow[]> {
   const r = await c.query<StablecoinRow>(
     `SELECT id, LOWER(address) AS address, symbol, decimals, peg_currency
-     FROM stablecoins WHERE active = true ORDER BY id`,
+     FROM stablecoins WHERE active = true AND chain_id = ${ARC_CHAIN_ID} ORDER BY id`,
   )
   return r.rows
 }
@@ -91,25 +91,25 @@ async function recordAlert(
   if (dedupeKey) {
     const merged = { ...(details || {}), dedupeKey }
     const existing = await c.query(
-      `SELECT id FROM indexer_alerts WHERE resolved_at IS NULL AND kind = $1 AND details->>'dedupeKey' = $2 LIMIT 1`,
+      `SELECT id FROM indexer_alerts WHERE resolved_at IS NULL AND kind = $1 AND details->>'dedupeKey' = $2 AND chain_id = ${ARC_CHAIN_ID} LIMIT 1`,
       [kind, dedupeKey],
     )
     if (existing.rows.length) {
       await c.query(
-        `UPDATE indexer_alerts SET severity = $1, message = $2, details = $3::jsonb, created_at = NOW() WHERE id = $4`,
+        `UPDATE indexer_alerts SET severity = $1, message = $2, details = $3::jsonb, created_at = NOW() WHERE id = $4 AND chain_id = ${ARC_CHAIN_ID}`,
         [severity, message, JSON.stringify(merged), existing.rows[0].id],
       )
       return
     }
     await c.query(
-      `INSERT INTO indexer_alerts (project_id, kind, severity, message, details) VALUES ($1, $2, $3, $4, $5::jsonb)`,
+      `INSERT INTO indexer_alerts (project_id, kind, severity, message, details, chain_id) VALUES ($1, $2, $3, $4, $5::jsonb, ${ARC_CHAIN_ID})`,
       [projectId, kind, severity, message, JSON.stringify(merged)],
     )
     return
   }
   await c.query(
-    `INSERT INTO indexer_alerts (project_id, kind, severity, message, details)
-     VALUES ($1, $2, $3, $4, $5::jsonb)`,
+    `INSERT INTO indexer_alerts (project_id, kind, severity, message, details, chain_id)
+     VALUES ($1, $2, $3, $4, $5::jsonb, ${ARC_CHAIN_ID})`,
     [projectId, kind, severity, message, details ? JSON.stringify(details) : null],
   )
 }
@@ -181,6 +181,7 @@ export async function GET(req: NextRequest) {
        WHERE pc.role = 'tvl'
          AND pc.verified_at IS NOT NULL
          AND pc.revoked_at IS NULL
+         AND pc.chain_id = ${ARC_CHAIN_ID}
          AND p.tvl_tracking_enabled = true`,
     )
 
@@ -244,8 +245,8 @@ export async function GET(req: NextRequest) {
                 p.${check.cached_col}::text AS cached,
                 COALESCE(SUM(r.amount_usd_e6), 0)::text AS actual
          FROM projects p
-         LEFT JOIN ${check.table} r ON r.project_id = p.id
-         WHERE p.tvl_tracking_enabled = true
+         LEFT JOIN ${check.table} r ON r.project_id = p.id AND r.chain_id = ${ARC_CHAIN_ID}
+         WHERE p.tvl_tracking_enabled = true AND p.metrics_chain_id = ${ARC_CHAIN_ID}
          GROUP BY p.id, p.${check.cached_col}
          HAVING p.${check.cached_col} IS DISTINCT FROM COALESCE(SUM(r.amount_usd_e6), 0)`,
       )
@@ -272,7 +273,7 @@ export async function GET(req: NextRequest) {
     const stale = await client.query<{ kind: string; stablecoin_id: number; last_block: string; updated_at: string }>(
       `SELECT kind, stablecoin_id, last_block::text, updated_at
        FROM indexer_cursors
-       WHERE $1::bigint - last_block > $2::bigint`,
+       WHERE $1::bigint - last_block > $2::bigint AND chain_id = ${ARC_CHAIN_ID}`,
       [String(stats.head), String(STALE_GAP)],
     )
     for (const row of stale.rows) {
@@ -295,7 +296,7 @@ export async function GET(req: NextRequest) {
               (SELECT MAX(f.effective_date)::text
                FROM forex_rates f WHERE f.currency = s.peg_currency) AS last_rate_date
        FROM stablecoins s
-       WHERE s.active = true AND s.peg_currency <> 'USD'`,
+       WHERE s.active = true AND s.peg_currency <> 'USD' AND s.chain_id = ${ARC_CHAIN_ID}`,
     )
     // ECB (our forex source) only publishes on weekdays, so a Friday rate is
     // legitimately ~72h old by Monday. Tolerate the weekend gap: 80h threshold

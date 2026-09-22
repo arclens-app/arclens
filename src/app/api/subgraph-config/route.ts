@@ -21,6 +21,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getPool } from "@/lib/dbPool"
 import { getSession } from "@/lib/session"
 import { enforce } from "@/lib/ratelimit"
+import { ARC_CHAIN_ID } from "@/lib/constants"
 
 const pool = getPool()
 
@@ -97,7 +98,7 @@ export async function GET(req: NextRequest) {
             subgraph_series_x, subgraph_series_y,
             subgraph_tvl_usd_e6::text AS tvl_e6, subgraph_volume_usd_e6::text AS vol_e6,
             subgraph_updated_at
-       FROM projects WHERE id = $1`,
+       FROM projects WHERE id = $1 AND subgraph_chain_id = ${ARC_CHAIN_ID}`,
     [project.id],
   )
   return NextResponse.json({ config: r.rows[0] || {} }, { headers: { "Cache-Control": "no-store" } })
@@ -130,8 +131,10 @@ export async function POST(req: NextRequest) {
     await pool.query(
       `UPDATE projects SET subgraph_url = NULL, subgraph_query = NULL,
          subgraph_tvl_path = NULL, subgraph_volume_path = NULL, subgraph_source_ts_path = NULL,
-         subgraph_series_query = NULL, subgraph_series_path = NULL, subgraph_series_x = NULL, subgraph_series_y = NULL
-       WHERE id = $1`,
+         subgraph_series_query = NULL, subgraph_series_path = NULL, subgraph_series_x = NULL, subgraph_series_y = NULL,
+         subgraph_tvl_usd_e6 = NULL, subgraph_volume_usd_e6 = NULL,
+         subgraph_source_ts = NULL, subgraph_series = NULL, subgraph_updated_at = NULL
+       WHERE id = $1 AND subgraph_chain_id = ${ARC_CHAIN_ID}`,
       [project.id],
     )
     return NextResponse.json({ success: true, cleared: true })
@@ -178,9 +181,12 @@ export async function POST(req: NextRequest) {
        subgraph_url = $2, subgraph_query = $3,
        subgraph_tvl_path = $4, subgraph_volume_path = $5, subgraph_source_ts_path = $6,
        subgraph_series_query = $7, subgraph_series_path = $8, subgraph_series_x = $9, subgraph_series_y = $10,
-       subgraph_tvl_usd_e6 = COALESCE($11, subgraph_tvl_usd_e6),
-       subgraph_volume_usd_e6 = COALESCE($12, subgraph_volume_usd_e6),
-       subgraph_updated_at = NOW()
+       subgraph_tvl_usd_e6 = $11,
+       subgraph_volume_usd_e6 = $12,
+       subgraph_source_ts = $13,
+       subgraph_series = NULL,
+       subgraph_updated_at = NOW(),
+       subgraph_chain_id = ${ARC_CHAIN_ID}
      WHERE id = $1`,
     [
       project.id, safe.url, query,
@@ -188,6 +194,7 @@ export async function POST(req: NextRequest) {
       seriesQuery || null, seriesPath || null, seriesX || null, seriesY || null,
       tvl != null ? BigInt(Math.round(tvl * 1e6)).toString() : null,
       vol != null ? BigInt(Math.round(vol * 1e6)).toString() : null,
+      ts,
     ],
   )
   return NextResponse.json({ success: true, extracted })

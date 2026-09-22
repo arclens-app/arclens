@@ -13,6 +13,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { timingSafeEqual } from "crypto"
 import { getPool } from "@/lib/dbPool"
+import { ARC_CHAIN_ID } from "@/lib/constants"
 
 const pool = getPool()
 
@@ -45,13 +46,13 @@ export async function GET(req: NextRequest) {
         SELECT DISTINCT ON (project_id)
           project_id, kind, severity, message, created_at
         FROM indexer_alerts
-        WHERE resolved_at IS NULL
+        WHERE resolved_at IS NULL AND chain_id = ${ARC_CHAIN_ID}
         ORDER BY project_id, created_at DESC
       ),
       live_per_project AS (
         SELECT project_id, COUNT(*)::int AS live_count
         FROM project_contracts
-        WHERE verified_at IS NOT NULL AND revoked_at IS NULL
+        WHERE verified_at IS NOT NULL AND revoked_at IS NULL AND chain_id = ${ARC_CHAIN_ID}
         GROUP BY project_id
       )
       SELECT
@@ -61,21 +62,21 @@ export async function GET(req: NextRequest) {
         pc.volume_method, pc.volume_event_signature, pc.volume_amount_arg,
         pc.volume_stablecoin_id,
         p.slug AS project_slug, p.name AS project_name,
-        p.tvl_usd_e6::text         AS project_tvl_usd_e6,
-        p.volume_cum_usd_e6::text  AS project_volume_cum_usd_e6,
-        p.revenue_cum_usd_e6::text AS project_revenue_cum_usd_e6,
-        p.tvl_last_indexed_at,
+        CASE WHEN p.metrics_chain_id = ${ARC_CHAIN_ID} THEN p.tvl_usd_e6::text ELSE NULL END AS project_tvl_usd_e6,
+        CASE WHEN p.metrics_chain_id = ${ARC_CHAIN_ID} THEN p.volume_cum_usd_e6::text ELSE NULL END AS project_volume_cum_usd_e6,
+        CASE WHEN p.metrics_chain_id = ${ARC_CHAIN_ID} THEN p.revenue_cum_usd_e6::text ELSE NULL END AS project_revenue_cum_usd_e6,
+        CASE WHEN p.metrics_chain_id = ${ARC_CHAIN_ID} THEN p.tvl_last_indexed_at ELSE NULL END AS tvl_last_indexed_at,
         s.symbol AS volume_stablecoin_symbol,
         la.kind AS last_alert_kind, la.severity AS last_alert_severity,
         la.message AS last_alert_message, la.created_at AS last_alert_at,
-        (SELECT COUNT(*)::int FROM volume_events  WHERE contract_id = pc.id) AS volume_event_count,
-        (SELECT COUNT(*)::int FROM revenue_events WHERE contract_id = pc.id) AS revenue_event_count
+        (SELECT COUNT(*)::int FROM volume_events WHERE contract_id = pc.id AND chain_id = ${ARC_CHAIN_ID}) AS volume_event_count,
+        (SELECT COUNT(*)::int FROM revenue_events WHERE contract_id = pc.id AND chain_id = ${ARC_CHAIN_ID}) AS revenue_event_count
       FROM project_contracts pc
       JOIN projects p ON p.id = pc.project_id
-      LEFT JOIN stablecoins s ON s.id = pc.volume_stablecoin_id
+      LEFT JOIN stablecoins s ON s.id = pc.volume_stablecoin_id AND s.chain_id = ${ARC_CHAIN_ID}
       LEFT JOIN last_alert la ON la.project_id = pc.project_id
       LEFT JOIN live_per_project lpp ON lpp.project_id = pc.project_id
-      WHERE pc.verified_at IS NOT NULL
+      WHERE pc.verified_at IS NOT NULL AND pc.chain_id = ${ARC_CHAIN_ID}
       ORDER BY
         CASE WHEN pc.revoked_at IS NULL THEN 0 ELSE 1 END,
         pc.created_at DESC

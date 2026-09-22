@@ -8,6 +8,7 @@ import type { DragEndEvent } from "@dnd-kit/core"
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
 import { CAMPAIGN_TYPES as TYPES, CONTRACT_REQUIRED, CONTRACT_HIDDEN, CAMPAIGN_TEMPLATES as TEMPLATES, matchesDefaultTemplate } from "@/lib/campaignTypes"
+import { APP_KIT_CHAIN, ARC_CHAIN_NAME, CAMPAIGN_USDC_ENABLED } from "@/lib/constants"
 
 type ProofType = "none" | "x_link" | "tx_hash" | "url" | "screenshot"
 interface Task { id: string; title: string; description: string; contract_address?: string; proof_type?: ProofType }
@@ -296,6 +297,7 @@ export default function CreateCampaignPage() {
 
     let depositTxHash: string | null = null
     if (rewardType === "usdc" && rewardUsdcAmount && totalSlots) {
+      if (!CAMPAIGN_USDC_ENABLED) { setError("USDC campaign funding is temporarily paused while ArcLens completes its network launch checks"); return }
       const payoutAddr = process.env.NEXT_PUBLIC_ARCLENS_PAYOUT_ADDRESS
       if (!payoutAddr) { setError("Payout address not configured"); return }
       if (!(window as any).ethereum) { setError("Connect your wallet to deposit USDC"); return }
@@ -306,7 +308,7 @@ export default function CreateCampaignPage() {
         const { AppKit } = await import("@circle-fin/app-kit")
         const adapter = await createAdapterFromProvider({ provider: (window as any).ethereum })
         const kit = new AppKit()
-        const result = await kit.send({ from: { adapter: adapter as any, chain: "Arc_Testnet" }, to: payoutAddr, amount: total, token: "USDC" })
+        const result = await kit.send({ from: { adapter: adapter as any, chain: APP_KIT_CHAIN as any }, to: payoutAddr, amount: total, token: "USDC" })
         depositTxHash = (result as any).txHash || (result as any).hash || ""
       } catch (e: any) {
         setError(e?.code === 4001 || String(e).includes("user rejected") ? "Transaction cancelled" : "Deposit failed: " + (e?.message || "Unknown error"))
@@ -461,7 +463,7 @@ export default function CreateCampaignPage() {
           <div style={{ fontSize: 10, fontFamily: mono, color: "#8aaeff", letterSpacing: "0.16em", textTransform: "uppercase", marginBottom: 12 }}>New Campaign</div>
           <h1 style={{ fontSize: 32, fontWeight: 600, letterSpacing: "-0.035em", color: t1, margin: "0 0 10px", lineHeight: 1.15 }}>What do you need tested?</h1>
           <p style={{ fontSize: 14, color: t2, margin: 0, lineHeight: 1.7, maxWidth: 580 }}>
-            Define your tasks and questions. ArcLens reviews it, then qualified testers on Arc Testnet complete the work and submit structured feedback.
+            Define your tasks and questions. ArcLens reviews it, then qualified participants on {ARC_CHAIN_NAME} complete the work and submit structured results.
           </p>
         </div>
 
@@ -708,11 +710,11 @@ export default function CreateCampaignPage() {
 
               <Field label="Description" required hint="What you're building, what stage it's at, what feedback matters most">
                 <textarea value={description} onChange={e => setDescription(e.target.value)} rows={5}
-                  placeholder={"Tell testers what your protocol does, where it is in development, and exactly what you need them to focus on.\n\nExample: We just shipped v2 of our AMM. The swap flow is live on Arc Testnet at [url]. We want to find gas inefficiencies and edge cases around slippage before launch."}
+                  placeholder={`Tell participants what your protocol does, where it is in development, and exactly what you need them to focus on.\n\nExample: We just shipped v2 of our AMM. The swap flow is live on ${ARC_CHAIN_NAME} at [url]. We want to validate the experience and identify edge cases around slippage.`}
                   style={{ ...inp, height: "auto", padding: "10px 12px", resize: "vertical", lineHeight: 1.7, fontFamily: "inherit", minHeight: 110 }} />
               </Field>
 
-              <Field label="App / testnet URL" hint="Link shown as a CTA button for testers to open the app">
+              <Field label="App URL" hint="Link shown as a CTA button for participants to open the app">
                 <input type="url" value={appUrl} onChange={e => setAppUrl(e.target.value)}
                   placeholder="https://app.yourproject.xyz"
                   style={inp} />
@@ -768,7 +770,7 @@ export default function CreateCampaignPage() {
                   <div style={{ padding: "10px 14px", background: "rgba(0,184,122,0.05)", border: "1px solid rgba(0,184,122,0.15)", borderRadius: 8, display: "flex", alignItems: "center", gap: 10 }}>
                     <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#00b87a", flexShrink: 0 }} />
                     <span style={{ fontSize: 11, color: "#00b87a", fontFamily: mono }}>
-                      Auto-verification active across {total} contract{total > 1 ? "s" : ""} — tester wallets checked against all on Arc Testnet
+                      Auto-verification active across {total} contract{total > 1 ? "s" : ""} — participant wallets checked against all on {ARC_CHAIN_NAME}
                     </span>
                   </div>
                 )
@@ -842,7 +844,7 @@ export default function CreateCampaignPage() {
                                 is NOT doing internal on-chain verification. If the
                                 campaign type uses internal verification (contract
                                 fields visible above), the founder doesn't need to
-                                ask for manual proofs — we auto-check Arc Testnet
+                                ask for manual proofs — we auto-check {ARC_CHAIN_NAME}
                                 logs. Proofs are for external-verification flows
                                 (aggregator DEXes / UX-only campaigns / etc). */}
                             {(externalVerify || CONTRACT_HIDDEN.has(type)) && (

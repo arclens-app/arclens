@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react"
 import ArcLayout from "@/components/ArcLayout"
 import { useArcStore } from "@/store/arc"
+import { ARC_CHAIN_NAME } from "@/lib/constants"
 
 const PROTECTED_NAMES = ["usdc","circle","arc bridge","arclens","uniswap","aave","compound","metamask","official","verified"]
 
@@ -124,7 +125,7 @@ export default function RegistryPage() {
       const codeRes  = await fetch("/api/rpc", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", method: "eth_getCode", params: [addr.trim(), "latest"], id: 1 }) })
       const codeData = await codeRes.json()
       if (!codeData.result || codeData.result === "0x") {
-        alert("This address has no contract code on Arc Testnet. Are you on the right network?"); return
+        alert(`This address has no contract code on ${ARC_CHAIN_NAME}. Are you on the right network?`); return
       }
 
       // Get deployer from Blockscout — FIX: was always setting null due to broken ternary
@@ -477,7 +478,7 @@ export default function RegistryPage() {
           <div style={{ background: surf, border: "1px solid " + border, borderRadius: "12px", overflow: "hidden" }}>
             <div style={{ padding: "13px 18px", borderBottom: "1px solid " + border, display: "flex", alignItems: "center", gap: "8px" }}>
               <div style={{ width: "5px", height: "5px", borderRadius: "50%", background: "#00d990" }} />
-              <div style={{ fontSize: "12.5px", fontWeight: 500 }}>Registered Contracts on Arc Testnet</div>
+              <div style={{ fontSize: "12.5px", fontWeight: 500 }}>Registered Contracts on {ARC_CHAIN_NAME}</div>
             </div>
             {loadingBrowse ? (
               <div style={{ padding: "48px", textAlign: "center", fontFamily: mono, fontSize: "11px", color: "#3a4870" }}>Loading...</div>

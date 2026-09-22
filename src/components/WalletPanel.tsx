@@ -10,15 +10,18 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import { JsonRpcProvider, Contract, formatUnits, parseUnits, isAddress } from "ethers"
-import { circleSendTransaction } from "@/lib/circleSign"
+import { circleRestorePin, circleSendTransaction } from "@/lib/circleSign"
+import { ARC_EXPLORER_URL, ARC_RPC_HTTP, CIRBTC_ADDRESS, EURC_ADDRESS, USDC_ADDRESS } from "@/lib/constants"
 
-const RPC = "https://rpc.testnet.arc.network"
-const EXPLORER_TX = (h: string) => `https://testnet.arcscan.app/tx/${h}`
+const RPC = ARC_RPC_HTTP
+const EXPLORER_TX = (h: string) => `${ARC_EXPLORER_URL}/tx/${h}`
 
-// Arc stablecoins (6-decimals). usd = rough USD value for the total line.
+// Supported Arc assets. cirBTC deliberately has no guessed dollar price: the
+// wallet reads its balance from chain but excludes it from the fiat total.
 const TOKENS = [
-  { symbol: "USDC", name: "USD Coin",  address: "0x3600000000000000000000000000000000000000", decimals: 6, usd: 1,    grad: ["#2775ca", "#4d96ff"] },
-  { symbol: "EURC", name: "Euro Coin", address: "0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a", decimals: 6, usd: 1.08, grad: ["#1f8f6f", "#2bd4a3"] },
+  { symbol: "USDC",   name: "USD Coin",               address: USDC_ADDRESS,   decimals: 6, usd: 1,    grad: ["#2775ca", "#4d96ff"] },
+  { symbol: "EURC",   name: "Euro Coin",              address: EURC_ADDRESS,   decimals: 6, usd: 1.08, grad: ["#1f8f6f", "#2bd4a3"] },
+  { symbol: "cirBTC", name: "Circle Wrapped Bitcoin", address: CIRBTC_ADDRESS, decimals: 8, usd: null, grad: ["#f7931a", "#ffbd55"] },
 ] as const
 
 // ── fixed premium-dark palette ───────────────────────────────────────────────
@@ -37,8 +40,8 @@ const GREEN = "#00c896"
 const SANS = "'Geist', ui-sans-serif, system-ui, sans-serif"
 const MONO = "'DM Mono', ui-monospace, SFMono-Regular, Menlo, monospace"
 
-type Bal = { symbol: string; name: string; amount: string; usd: number; grad: readonly [string, string] | string[] }
-type View = "overview" | "send" | "receive"
+type Bal = { symbol: string; name: string; amount: string; usd: number | null; grad: readonly [string, string] | string[] }
+type View = "overview" | "send" | "receive" | "security"
 
 interface Props {
   open: boolean
@@ -66,6 +69,9 @@ export default function WalletPanel({ open, onClose, walletAddr, walletType, ema
   const [sending, setSending] = useState(false)
   const [sendErr, setSendErr] = useState("")
   const [txHash, setTxHash]   = useState("")
+  const [recovering, setRecovering] = useState(false)
+  const [recoveryDone, setRecoveryDone] = useState(false)
+  const [recoveryErr, setRecoveryErr] = useState("")
 
   const loadBalances = useCallback(async () => {
     if (!walletAddr) return
@@ -86,7 +92,7 @@ export default function WalletPanel({ open, onClose, walletAddr, walletType, ema
   useEffect(() => { if (open) { setView("overview"); loadBalances() } }, [open, loadBalances])
 
   const fmt = (a: string, max = 2) => Number(a).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: max })
-  const totalUsd = balances.reduce((s, b) => s + Number(b.amount) * b.usd, 0)
+  const totalUsd = balances.reduce((s, b) => s + (b.usd == null ? 0 : Number(b.amount) * b.usd), 0)
   const tokenBal = balances.find(b => b.symbol === token.symbol)?.amount ?? "0"
 
   const resetSend = () => { setTo(""); setAmount(""); setConfirming(false); setSendErr(""); setTxHash("") }
@@ -113,6 +119,19 @@ export default function WalletPanel({ open, onClose, walletAddr, walletType, ema
     } catch (e: any) {
       setSendErr(e?.message || "Send failed — your funds are safe, nothing moved.")
     } finally { setSending(false) }
+  }
+
+  async function restorePin() {
+    if (!email) return setRecoveryErr("Reconnect with your email to recover your PIN.")
+    setRecovering(true); setRecoveryErr(""); setRecoveryDone(false)
+    try {
+      await circleRestorePin(email)
+      setRecoveryDone(true)
+    } catch (e: any) {
+      setRecoveryErr(e?.message || "PIN recovery was not completed.")
+    } finally {
+      setRecovering(false)
+    }
   }
 
   const copyAddr = () => navigator.clipboard.writeText(walletAddr).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1400) })
@@ -156,7 +175,7 @@ export default function WalletPanel({ open, onClose, walletAddr, walletType, ema
         {/* TOTAL */}
         {view === "overview" && (
           <div style={{ padding: "4px 22px 18px" }}>
-            <div style={{ fontFamily: MONO, fontSize: "10px", color: T3, letterSpacing: "0.14em", textTransform: "uppercase" }}>Total balance</div>
+            <div style={{ fontFamily: MONO, fontSize: "10px", color: T3, letterSpacing: "0.14em", textTransform: "uppercase" }}>Stablecoin balance</div>
             <div style={{ fontSize: "38px", fontWeight: 700, letterSpacing: "-0.03em", marginTop: "4px", lineHeight: 1 }}>
               <span style={{ color: T3 }}>$</span>{balLoading ? <span style={{ color: T3 }}>—</span> : totalUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
@@ -178,7 +197,9 @@ export default function WalletPanel({ open, onClose, walletAddr, walletType, ema
                     </div>
                     <div style={{ textAlign: "right" }}>
                       <div style={{ fontFamily: MONO, fontSize: "15px", fontWeight: 600 }}>{balLoading ? "—" : fmt(b.amount)}</div>
-                      <div style={{ fontFamily: MONO, fontSize: "10.5px", color: T3 }}>≈ ${ (Number(b.amount) * b.usd).toLocaleString(undefined, { maximumFractionDigits: 2 }) }</div>
+                      {b.usd == null
+                        ? <div style={{ fontFamily: MONO, fontSize: "10.5px", color: T3 }}>8-decimal Arc asset</div>
+                        : <div style={{ fontFamily: MONO, fontSize: "10.5px", color: T3 }}>≈ ${ (Number(b.amount) * b.usd).toLocaleString(undefined, { maximumFractionDigits: 2 }) }</div>}
                     </div>
                   </div>
                 ))}
@@ -191,6 +212,11 @@ export default function WalletPanel({ open, onClose, walletAddr, walletType, ema
                 <button onClick={() => setView("receive")} style={ghostBtn}><RecvIcon /> Receive</button>
               </div>
               {!isCircle && <div style={{ marginTop: "12px", fontSize: "11px", color: T3, lineHeight: 1.6 }}>Sending is handled by your own wallet. Receive works for everyone.</div>}
+              {isCircle && (
+                <button onClick={() => { setRecoveryErr(""); setRecoveryDone(false); setView("security") }} style={{ width: "100%", marginTop: 14, padding: "9px 0", background: "none", border: "none", color: T3, cursor: "pointer", fontFamily: MONO, fontSize: 10.5 }}>
+                  Wallet security &amp; PIN recovery
+                </button>
+              )}
             </>
           )}
 
@@ -198,9 +224,27 @@ export default function WalletPanel({ open, onClose, walletAddr, walletType, ema
             <>
               <BackBtn onClick={() => setView("overview")} />
               <div style={{ fontSize: "17px", fontWeight: 700, margin: "16px 0 6px" }}>Receive</div>
-              <div style={{ fontSize: "12.5px", color: T2, lineHeight: 1.6, marginBottom: "16px" }}>Send USDC or EURC on Arc to this address.</div>
+              <div style={{ fontSize: "12.5px", color: T2, lineHeight: 1.6, marginBottom: "16px" }}>Send USDC, EURC or cirBTC on Arc to this address.</div>
               <div style={{ padding: "16px", background: PANEL2, border: `1px solid ${BORDER}`, borderRadius: "14px", wordBreak: "break-all", fontFamily: MONO, fontSize: "13px", lineHeight: 1.7, color: T1 }}>{walletAddr}</div>
               <button onClick={copyAddr} style={{ ...ghostBtn, width: "100%", marginTop: "12px", justifyContent: "center" }}>{copied ? "Copied ✓" : "Copy address"}</button>
+            </>
+          )}
+
+          {view === "security" && (
+            <>
+              <BackBtn onClick={() => setView("overview")} />
+              <div style={{ fontSize: "17px", fontWeight: 700, margin: "16px 0 6px" }}>Wallet security</div>
+              <div style={{ fontSize: "12.5px", color: T2, lineHeight: 1.65, marginBottom: "16px" }}>
+                Forgot your Circle wallet PIN? Recover it securely using the security questions you created during wallet setup.
+              </div>
+              <div style={{ fontSize: "11.5px", color: T2, background: PANEL2, border: `1px solid ${BORDER}`, borderRadius: 12, padding: "12px 13px", lineHeight: 1.65, marginBottom: 14 }}>
+                Circle handles the recovery window. ArcLens cannot see your answers, PIN or private key.
+              </div>
+              {recoveryDone && <div style={{ ...errStyle, color: GREEN }}>Your PIN was restored successfully.</div>}
+              {recoveryErr && <div style={errStyle}>{recoveryErr}</div>}
+              <button onClick={restorePin} disabled={recovering} style={{ ...primaryBtn, width: "100%", opacity: recovering ? 0.7 : 1 }}>
+                {recovering ? "Opening secure recovery…" : "Recover my PIN"}
+              </button>
             </>
           )}
 
@@ -277,7 +321,7 @@ export default function WalletPanel({ open, onClose, walletAddr, walletType, ema
 // ── pieces ───────────────────────────────────────────────────────────────────
 function TokenBadge({ symbol, grad, size = 34 }: { symbol: string; grad: readonly [string, string] | string[]; size?: number }) {
   return (
-    <span style={{ width: size, height: size, borderRadius: "50%", background: `linear-gradient(135deg,${grad[0]},${grad[1]})`, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: size * 0.4, fontWeight: 700, flexShrink: 0, boxShadow: `0 2px 10px ${grad[0]}55` }}>{symbol[0]}</span>
+    <span style={{ width: size, height: size, borderRadius: "50%", background: `linear-gradient(135deg,${grad[0]},${grad[1]})`, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: size * 0.4, fontWeight: 700, flexShrink: 0, boxShadow: `0 2px 10px ${grad[0]}55` }}>{symbol === "cirBTC" ? "₿" : symbol[0]}</span>
   )
 }
 function BackBtn({ onClick }: { onClick: () => void }) {

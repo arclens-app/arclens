@@ -3,6 +3,7 @@ import { useEffect, useState, useRef } from "react"
 import { useSearchParams } from "next/navigation"
 import { Suspense } from "react"
 import ArcLayout from "@/components/ArcLayout"
+import { ARC_CHAIN_NAME } from "@/lib/constants"
 
 function timeAgo(ts: number) {
   const s = Math.floor(Date.now() / 1000) - ts
@@ -173,7 +174,7 @@ function SearchContent() {
         {/* SEARCH BAR */}
         <div style={{ marginBottom:"24px" }}>
           <div style={{ fontSize:"10px", fontFamily:mono, color:t3, letterSpacing:"0.1em", textTransform:"uppercase", marginBottom:"14px" }}>
-            Arc Testnet Search
+            {ARC_CHAIN_NAME} Search
           </div>
           <div style={{ display:"flex", gap:"10px" }}>
             <input ref={inputRef}
@@ -198,7 +199,7 @@ function SearchContent() {
               {loadingPreview ? (
                 <div style={{ padding:"14px 18px", display:"flex", alignItems:"center", gap:"10px" }}>
                   <div style={{ width:"8px", height:"8px", borderRadius:"50%", background:t3, animation:"shimmer 1.5s infinite" }}/>
-                  <span style={{ fontSize:"11px", fontFamily:mono, color:t3 }}>Looking up address on Arc Testnet...</span>
+                  <span style={{ fontSize:"11px", fontFamily:mono, color:t3 }}>Looking up address on {ARC_CHAIN_NAME}...</span>
                 </div>
               ) : addrPreview && (
                 <div onClick={() => window.location.href="/address/"+addrPreview.address}
@@ -286,7 +287,7 @@ function SearchContent() {
             <div style={{ padding:"13px 18px", borderBottom:"1px solid "+bdr, display:"flex", alignItems:"center", gap:"8px" }}>
               <div style={{ width:"5px", height:"5px", borderRadius:"50%", background:usdc }}/>
               <div style={{ fontSize:"12.5px", fontWeight:500 }}>
-                {loadingRows ? "Fetching from Arc Testnet..." : rows.length+" results"}
+                {loadingRows ? `Fetching from ${ARC_CHAIN_NAME}...` : rows.length+" results"}
               </div>
             </div>
             {loadingRows ? (
@@ -304,7 +305,7 @@ function SearchContent() {
                   {row.label==="holder" ? (
                     <>
                       <div style={{ fontSize:"11px", fontFamily:mono, color:"#8aaeff", marginBottom:"3px" }}>{short(row.from)}</div>
-                      <div style={{ fontSize:"10px", fontFamily:mono, color:t3 }}>USDC Holder · Arc Testnet</div>
+                      <div style={{ fontSize:"10px", fontFamily:mono, color:t3 }}>USDC Holder · {ARC_CHAIN_NAME}</div>
                     </>
                   ) : row.label==="contract" ? (
                     <>

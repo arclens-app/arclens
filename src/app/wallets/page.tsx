@@ -1,6 +1,7 @@
 "use client"
 import { useEffect, useState } from "react"
 import ArcLayout from "@/components/ArcLayout"
+import { ARC_CHAIN_NAME } from "@/lib/constants"
 
 async function rpc(method: string, params: unknown[] = []) {
   const res = await fetch("/api/rpc", {
@@ -196,14 +197,14 @@ export default function WalletActivityPage() {
         <div style={{ marginBottom:"24px" }}>
           <div style={{ fontSize:"10px", fontFamily:mono, color:"#323e62", letterSpacing:"0.1em", textTransform:"uppercase", marginBottom:"8px" }}>Analytics</div>
           <div style={{ fontSize:"28px", fontWeight:700, letterSpacing:"-0.04em", marginBottom:"5px" }}>Wallet Activity</div>
-          <div style={{ fontSize:"13px", color:"#6b7da8", fontWeight:300 }}>Live wallet analytics on Arc Testnet — top USDC holders, largest transfers, most active addresses.</div>
+          <div style={{ fontSize:"13px", color:"#6b7da8", fontWeight:300 }}>Live wallet analytics on {ARC_CHAIN_NAME} — top USDC holders, largest transfers, most active addresses.</div>
         </div>
 
         {/* STATS */}
         <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:"1px", background:border, border:"1px solid "+border, borderRadius:"12px", overflow:"hidden", marginBottom:"24px" }}>
           {[
             { label:"USDC Holders",      value:totalHolders||"...",      color:"#8aaeff", sub:"unique addresses holding USDC" },
-            { label:"Total USDC Supply", value:totalSupply||"...",        color:"#00d990", sub:"circulating on Arc Testnet" },
+            { label:"Total USDC Supply", value:totalSupply||"...",        color:"#00d990", sub:`circulating on ${ARC_CHAIN_NAME}` },
             { label:"Largest Transfer",  value:largestTransfer||"...",    color:"#c08828", sub:"in recent USDC transfers" },
           ].map((s: any) => (
             <div key={s.label} style={{ background:surf, padding:"18px 22px" }}>
@@ -237,7 +238,7 @@ export default function WalletActivityPage() {
           </div>
 
           {loading ? (
-            <div style={{ padding:"48px", textAlign:"center", fontFamily:mono, fontSize:"11px", color:"#323e62" }}>Scanning Arc Testnet...</div>
+            <div style={{ padding:"48px", textAlign:"center", fontFamily:mono, fontSize:"11px", color:"#323e62" }}>Scanning {ARC_CHAIN_NAME}...</div>
           ) : tab==="holders" ? (
             <>
               {holders.map((h: any) => (

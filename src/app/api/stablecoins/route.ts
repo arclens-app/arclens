@@ -5,6 +5,7 @@
 
 import { NextResponse } from "next/server"
 import { getPool } from "@/lib/dbPool"
+import { ARC_CHAIN_ID } from "@/lib/constants"
 
 const pool = getPool()
 
@@ -13,7 +14,8 @@ export async function GET() {
     const r = await pool.query(
       `SELECT id, symbol, name, LOWER(address) AS address,
               decimals, peg_currency
-       FROM stablecoins WHERE active = true ORDER BY id`,
+       FROM stablecoins WHERE active = true AND chain_id = $1 ORDER BY id`,
+      [ARC_CHAIN_ID],
     )
     return NextResponse.json(
       { stablecoins: r.rows },

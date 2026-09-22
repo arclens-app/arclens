@@ -5,6 +5,7 @@ import { attestOnChain, subjectFor } from "@/lib/registry"
 import { getPool } from "@/lib/dbPool"
 import { createUnsubscribeToken } from "@/lib/unsubscribeToken"
 import { attachSessionCookie, getSession } from "@/lib/session"
+import { ARC_CHAIN_ID } from "@/lib/constants"
 
 const pool = getPool()
 
@@ -116,7 +117,7 @@ export async function GET(req: NextRequest) {
     } else {
       return NextResponse.json({ error: "Missing token or wallet" }, { status: 400 })
     }
-    const reviews   = await pool.query(`SELECT id, wallet, category, rating, review_text, is_public, contact, badge, created_at FROM reviews WHERE project_id = $1 ORDER BY created_at DESC`, [projectRow.id])
+    const reviews   = await pool.query(`SELECT id, wallet, category, rating, review_text, is_public, contact, badge, created_at FROM reviews WHERE project_id = $1 AND chain_id = ${ARC_CHAIN_ID} ORDER BY created_at DESC`, [projectRow.id])
     const weekNum   = Math.floor(Date.now() / (7 * 24 * 60 * 60 * 1000))
 
     // Everything below feeds the dashboard's "needs your attention" panel and
@@ -136,8 +137,8 @@ export async function GET(req: NextRequest) {
       pool.query(
         `SELECT count(*)::int AS n, min(cc.created_at) AS oldest
            FROM campaign_completions cc
-           JOIN campaigns c ON c.id = cc.campaign_id
-          WHERE c.project_id = $1 AND cc.builder_rating IS NULL`, [projectRow.id]).catch(() => null),
+           JOIN campaigns c ON c.id = cc.campaign_id AND c.chain_id = ${ARC_CHAIN_ID}
+          WHERE c.project_id = $1 AND cc.builder_rating IS NULL AND cc.chain_id = ${ARC_CHAIN_ID}`, [projectRow.id]).catch(() => null),
       projectRow.website
         ? pool.query(`SELECT verdict, malicious, suspicious, scanned_at FROM url_scans WHERE url = $1 ORDER BY scanned_at DESC LIMIT 1`, [projectRow.website]).catch(() => null)
         : Promise.resolve(null),
@@ -267,7 +268,7 @@ export async function PUT(req: NextRequest) {
     try {
       const after = (await pool.query(
         `SELECT trust_level, recognition, slug, established,
-                (SELECT address FROM project_contracts WHERE project_id = projects.id AND verified_at IS NOT NULL AND revoked_at IS NULL LIMIT 1) AS proven
+                (SELECT address FROM project_contracts WHERE project_id = projects.id AND chain_id = ${ARC_CHAIN_ID} AND verified_at IS NOT NULL AND revoked_at IS NULL LIMIT 1) AS proven
            FROM projects WHERE id = $1`, [result.rows[0].id]
       )).rows[0]
       const subject = subjectFor({ provenContract: after?.proven, slug: after?.slug })

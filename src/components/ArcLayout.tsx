@@ -4,6 +4,7 @@ import { useArcStore } from "@/store/arc"
 import { detectWallets, EIP6963Provider } from "@/context/web3modal"
 import ArcLensAI from "@/components/ArcLensAI"
 import WalletPanel from "@/components/WalletPanel"
+import { ADD_CHAIN_PARAMS, ARC_CHAIN_ID, ARC_CHAIN_NAME, ARC_RPC_HTTP } from "@/lib/constants"
 
 const NAV = [
   { section: "", items: [
@@ -71,6 +72,7 @@ export default function ArcLayout({ children, active, lockDark }: { children: Re
   const [otpExpiresAt, setOtpExpiresAt] = useState<number | null>(null)
   const [now,          setNow]          = useState(Date.now())
   const [pinPhase,     setPinPhase]     = useState<"pin" | "finalizing">("pin")
+  const [circleWalletAction, setCircleWalletAction] = useState<"initialize" | "add_network">("initialize")
   const otpRefs = useRef<(HTMLInputElement | null)[]>([])
 
   const walletAddr  = useArcStore(s => s.walletAddr)
@@ -89,8 +91,19 @@ export default function ArcLayout({ children, active, lockDark }: { children: Re
     const saved = typeof window !== "undefined" ? localStorage.getItem("arclens-theme") : null
     if (saved === "light") setDark(false)
     else setDark(true)
-    const wt = typeof window !== "undefined" ? localStorage.getItem("arclens-wallet-type") : null
-    if (wt === "metamask" || wt === "circle") setWalletType(wt)
+    const storedChain = typeof window !== "undefined" ? localStorage.getItem("arclens-wallet-chain-id") : null
+    if (storedChain === String(ARC_CHAIN_ID)) {
+      const wt = localStorage.getItem("arclens-wallet-type")
+      if (wt === "metamask" || wt === "circle") setWalletType(wt)
+    } else {
+      // Keep the saved Circle email so the user can recover the same ArcLens
+      // account, but never restore or display a wallet from another network.
+      localStorage.removeItem("arclens-wallet")
+      localStorage.removeItem("arclens-wallet-type")
+      localStorage.removeItem("arclens-wallet-chain-id")
+      clearWallet()
+      setWalletType(null)
+    }
   }, [])
 
   // Preload Circle SDK + iframe at mount so the popup opens instantly when user connects
@@ -114,7 +127,8 @@ export default function ArcLayout({ children, active, lockDark }: { children: Re
 
     // Restore wallet from localStorage on page load
     const saved = localStorage.getItem("arclens-wallet")
-    if (saved) {
+    const savedChain = localStorage.getItem("arclens-wallet-chain-id")
+    if (saved && savedChain === String(ARC_CHAIN_ID)) {
       setWallet(saved)
       fetchWalletBal(saved)
       // Circle users have no popup, so silently keep the session warm.
@@ -161,6 +175,7 @@ export default function ArcLayout({ children, active, lockDark }: { children: Re
   async function afterConnect(addr: string, type: "metamask" | "circle") {
     localStorage.setItem("arclens-wallet", addr)
     localStorage.setItem("arclens-wallet-type", type)
+    localStorage.setItem("arclens-wallet-chain-id", String(ARC_CHAIN_ID))
     setWallet(addr)
     setWalletType(type)
     fetchWalletBal(addr)
@@ -339,9 +354,11 @@ export default function ArcLayout({ children, active, lockDark }: { children: Re
 
       // First-time user — needs PIN setup via Circle iframe (UCW security requirement)
       if (data.needsPinSetup && data.challengeId) {
+        const walletAction = data.walletAction === "add_network" ? "add_network" : "initialize"
+        setCircleWalletAction(walletAction)
         setPinPhase("pin")
         setConnectView("pin")
-        await runPinSetup(email, data.challengeId, data.userToken, data.encryptionKey)
+        await runPinSetup(email, data.challengeId, data.userToken, data.encryptionKey, walletAction)
       }
     } catch (e: any) {
       setOtpError(e?.message || "Network error. Try again.")
@@ -349,7 +366,13 @@ export default function ArcLayout({ children, active, lockDark }: { children: Re
     }
   }
 
-  async function runPinSetup(email: string, challengeId: string, userToken: string, encryptionKey: string) {
+  async function runPinSetup(
+    email: string,
+    challengeId: string,
+    userToken: string,
+    encryptionKey: string,
+    walletAction: "initialize" | "add_network",
+  ) {
     const appId = process.env.NEXT_PUBLIC_CIRCLE_APP_ID!
     try {
       const { W3SSdk } = await import("@circle-fin/w3s-pw-web-sdk")
@@ -360,6 +383,9 @@ export default function ArcLayout({ children, active, lockDark }: { children: Re
 
       const sdk = new W3SSdk()
       sdk.setAppSettings({ appId })
+      // Establish Circle's device session before executing a sensitive
+      // challenge. Without this handshake the hosted PIN UI can fail silently.
+      await sdk.getDeviceId()
       sdk.setAuthentication({ userToken, encryptionKey })
       sdk.setThemeColor({
         backdrop:        "#04091a",
@@ -383,7 +409,7 @@ export default function ArcLayout({ children, active, lockDark }: { children: Re
       sdk.execute(challengeId, async (error: any) => {
         sdkRef.current = null
         if (error) {
-          setOtpError(error.message || "PIN setup was cancelled or failed. Sign in again to retry.")
+          setOtpError(error.message || "Wallet authorization was cancelled or failed. Sign in again to retry.")
           setOtpVerifying(false)
           setOtpDigits(["", "", "", "", "", ""])
           setConnectView("email")
@@ -417,14 +443,16 @@ export default function ArcLayout({ children, active, lockDark }: { children: Re
           await new Promise(r => setTimeout(r, delays[i]))
         }
 
-        setOtpError("Your wallet is still being created. Please sign in again in a moment.")
+        setOtpError(walletAction === "add_network"
+          ? `Your ${ARC_CHAIN_NAME} wallet is still being enabled. Please sign in again in a moment.`
+          : "Your wallet is still being created. Please sign in again in a moment.")
         setOtpVerifying(false)
         setOtpDigits(["", "", "", "", "", ""])
         setPinPhase("pin")
         setConnectView("email")
       })
     } catch (e: any) {
-      setOtpError(e?.message || "PIN setup failed. Try again.")
+      setOtpError(e?.message || "Wallet authorization failed. Try again.")
       setOtpVerifying(false)
       setConnectView("otp")
     }
@@ -514,6 +542,7 @@ export default function ArcLayout({ children, active, lockDark }: { children: Re
     setWalletType(null)
     localStorage.removeItem("arclens-wallet")
     localStorage.removeItem("arclens-wallet-type")
+    localStorage.removeItem("arclens-wallet-chain-id")
     localStorage.removeItem("arclens-circle-email")
     // Best-effort: clear the server-side session cookie
     fetch("/api/auth/session", { method: "DELETE", credentials: "include" }).catch(() => {})
@@ -532,8 +561,8 @@ export default function ArcLayout({ children, active, lockDark }: { children: Re
     async function fetchStats() {
       try {
         const [blockRes, gasRes] = await Promise.all([
-          fetch("https://rpc.testnet.arc.network", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", method: "eth_blockNumber", params: [], id: 1 }) }),
-          fetch("https://rpc.testnet.arc.network", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", method: "eth_gasPrice", params: [], id: 2 }) }),
+          fetch(ARC_RPC_HTTP, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", method: "eth_blockNumber", params: [], id: 1 }) }),
+          fetch(ARC_RPC_HTTP, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", method: "eth_gasPrice", params: [], id: 2 }) }),
         ])
         const blockData = await blockRes.json()
         const gasData   = await gasRes.json()
@@ -590,7 +619,7 @@ export default function ArcLayout({ children, active, lockDark }: { children: Re
     if (!(window as any).ethereum) { alert("No wallet detected"); return }
     ;(window as any).ethereum.request({
       method: "wallet_addEthereumChain",
-      params: [{ chainId: "0x4cef52", chainName: "Arc Testnet", nativeCurrency: { name: "USDC", symbol: "USDC", decimals: 18 }, rpcUrls: ["https://rpc.testnet.arc.network"], blockExplorerUrls: ["https://arclenz.xyz"] }]
+      params: [ADD_CHAIN_PARAMS]
     })
   }
 
@@ -681,7 +710,7 @@ export default function ArcLayout({ children, active, lockDark }: { children: Re
         <div style={{ padding: "10px 14px", borderBottom: "1px solid " + bdr }}>
           <div style={{ display: "flex", alignItems: "center", gap: "6px", padding: "5px 8px", background: connected ? "rgba(0,184,122,0.06)" : "rgba(26,86,255,0.06)", borderRadius: "6px", border: "1px solid " + (connected ? "rgba(0,184,122,0.15)" : "rgba(26,86,255,0.12)") }}>
             <div style={{ width: "5px", height: "5px", borderRadius: "50%", background: connected ? usdc : t3, animation: connected ? "pulse 2s infinite" : "none", flexShrink: 0 }} />
-            <span style={{ fontSize: "10px", fontFamily: mono, color: connected ? usdc : t3, letterSpacing: "0.04em" }}>Arc Testnet · 2588</span>
+            <span style={{ fontSize: "10px", fontFamily: mono, color: connected ? usdc : t3, letterSpacing: "0.04em" }}>{ARC_CHAIN_NAME} · {ARC_CHAIN_ID}</span>
           </div>
         </div>
 
@@ -999,7 +1028,7 @@ export default function ArcLayout({ children, active, lockDark }: { children: Re
                   {connectView === "choose" ? "Connect" : connectView === "wallets" ? "Browser Wallets" : connectView === "email" ? "Email Wallet" : connectView === "otp" ? "Verify Email" : "Secure Setup"}
                 </div>
                 <div style={{ fontSize: "16px", fontWeight: 700, letterSpacing: "-0.03em", color: t1 }}>
-                  {connectView === "choose" ? "Connect to ArcLens" : connectView === "wallets" ? "Choose a wallet" : connectView === "email" ? "Enter your email" : connectView === "otp" ? "Enter your code" : "Set your PIN"}
+                  {connectView === "choose" ? "Connect to ArcLens" : connectView === "wallets" ? "Choose a wallet" : connectView === "email" ? "Enter your email" : connectView === "otp" ? "Enter your code" : circleWalletAction === "add_network" ? `Enable ${ARC_CHAIN_NAME}` : "Set your PIN"}
                 </div>
               </div>
               <button
@@ -1229,7 +1258,7 @@ export default function ArcLayout({ children, active, lockDark }: { children: Re
               </div>
             )}
 
-            {/* PIN setup view — first-time users only, Circle iframe takes over */}
+            {/* Circle secure authorization — new PIN for new users, existing PIN for an added network. */}
             {connectView === "pin" && (
               <div style={{ textAlign: "center", padding: "8px 0 4px" }}>
                 {otpError ? (
@@ -1246,12 +1275,16 @@ export default function ArcLayout({ children, active, lockDark }: { children: Re
                       <div style={{ width: "36px", height: "36px", borderRadius: "50%", border: "2px solid rgba(26,86,255,0.15)", borderTopColor: "#1a56ff", animation: "circleSpinAnim 0.8s linear infinite" }} />
                     </div>
                     <div style={{ fontSize: "14px", fontWeight: 600, color: t1, marginBottom: "6px" }}>
-                      {pinPhase === "finalizing" ? "Finalizing your wallet" : "Set up your wallet"}
+                      {pinPhase === "finalizing"
+                        ? (circleWalletAction === "add_network" ? `Enabling ${ARC_CHAIN_NAME}` : "Finalizing your wallet")
+                        : (circleWalletAction === "add_network" ? `Enable your ${ARC_CHAIN_NAME} wallet` : "Set up your wallet")}
                     </div>
                     <div style={{ fontSize: "12px", color: t3, lineHeight: 1.6, fontFamily: mono }}>
                       {pinPhase === "finalizing"
                         ? <>Almost there. This usually takes<br />a few seconds.</>
-                        : <>A secure window is opening so you can create your<br />PIN. You'll only need to do this once.</>}
+                        : circleWalletAction === "add_network"
+                          ? <>Use your existing Circle PIN to enable {ARC_CHAIN_NAME}.<br />Your wallet address stays the same.</>
+                          : <>A secure window is opening so you can create your<br />PIN. You'll only need to do this once.</>}
                     </div>
                     {pinPhase === "pin" && (
                       <button onClick={cancelCircle}

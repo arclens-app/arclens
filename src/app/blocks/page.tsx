@@ -1,6 +1,7 @@
 "use client"
 import { useEffect, useState } from "react"
 import ArcLayout from "@/components/ArcLayout"
+import { ARC_CHAIN_NAME, ARC_RPC_HTTP } from "@/lib/constants"
 
 interface Block {
   number: number
@@ -12,7 +13,7 @@ interface Block {
 }
 
 async function rpc(method: string, params: unknown[] = []) {
-  const res = await fetch("https://rpc.testnet.arc.network", {
+  const res = await fetch(ARC_RPC_HTTP, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ jsonrpc: "2.0", method, params, id: 1 }),
@@ -82,7 +83,7 @@ export default function BlocksPage() {
         <div style={{ marginBottom: "24px" }}>
           <div style={{ fontSize: "10px", fontFamily: mono, color: "#323e62", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "8px" }}>Explorer</div>
           <div style={{ fontSize: "28px", fontWeight: 700, letterSpacing: "-0.04em", marginBottom: "5px" }}>Blocks</div>
-          <div style={{ fontSize: "13px", color: "#6b7da8", fontWeight: 300 }}>Latest blocks on Arc Testnet. Block rewards collected in USDC.</div>
+          <div style={{ fontSize: "13px", color: "#6b7da8", fontWeight: 300 }}>Latest blocks on {ARC_CHAIN_NAME}. Block rewards collected in USDC.</div>
         </div>
         <div style={{ background: "var(--surf, #080c1a)", border: "1px solid " + border, borderRadius: "12px", overflow: "hidden" }}>
           <table style={{ width: "100%", borderCollapse: "collapse" }}>

@@ -180,12 +180,13 @@ export default function CampaignLeaderboardPage() {
             </div>
             {ranked.map((c, i) => {
               const rank       = i + 1
+              const pendingIdentity = c.tester_wallet.startsWith("pending:")
               const qs         = Math.round(Number(c.quality_score) || 0)
               const xp         = Number(c.xp_earned) || 0
               const scoreColor = qs > 70 ? "#00b87a" : qs > 40 ? "#e08810" : t2
               const rkColor    = rankColor(rank, t3)
               return (
-                <a key={c.tester_wallet} href={`/tester/${c.tester_wallet}`}
+                <a key={c.tester_wallet} href={pendingIdentity ? undefined : `/tester/${c.tester_wallet}`}
                   style={{ display: "grid", gridTemplateColumns: "44px 1fr auto auto", gap: 12, padding: "12px 18px",
                            borderBottom: i < ranked.length - 1 ? "1px solid " + bdr : "none",
                            textDecoration: "none", alignItems: "center", transition: "background 0.12s" }}
@@ -197,7 +198,7 @@ export default function CampaignLeaderboardPage() {
                   <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
                     <WalletAvatar wallet={c.tester_wallet} size={28} />
                     <span style={{ fontSize: 12, fontFamily: mono, color: t1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {c.tester_wallet.slice(0, 10)}…{c.tester_wallet.slice(-4)}
+                      {pendingIdentity ? "Tester" : `${c.tester_wallet.slice(0, 10)}…${c.tester_wallet.slice(-4)}`}
                     </span>
                   </div>
                   <div style={{ fontSize: 11, fontFamily: mono, color: "#c08828", textAlign: "right" }}>

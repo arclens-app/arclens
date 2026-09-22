@@ -11,6 +11,7 @@
 
 import { NextResponse } from "next/server"
 import { getPool } from "@/lib/dbPool"
+import { ARC_CHAIN_ID } from "@/lib/constants"
 
 const pool = getPool()
 
@@ -42,6 +43,7 @@ export async function GET() {
               tvl_tracking_enabled
        FROM projects
        WHERE approved = true AND live = true AND tvl_tracking_enabled = true
+         AND metrics_chain_id = ${ARC_CHAIN_ID}
        ORDER BY tvl_usd_e6 DESC NULLS LAST, name ASC`,
     )
 

@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react"
 import { useParams } from "next/navigation"
 import ArcLayout from "@/components/ArcLayout"
+import { ARC_CHAIN_NAME } from "@/lib/constants"
 
 function timeAgo(ts: string) {
   const s = Math.floor((Date.now() - new Date(ts).getTime()) / 1000)
@@ -55,7 +56,7 @@ export default function TxPage() {
         const transfersData = await transfersRes.json()
 
         if (txData.message || txData.errors) {
-          setError("Transaction not found on Arc Testnet")
+          setError(`Transaction not found on ${ARC_CHAIN_NAME}`)
           return
         }
 
@@ -139,7 +140,7 @@ export default function TxPage() {
 
         {loading && (
           <div style={{ padding:"80px", textAlign:"center", fontFamily:mono, fontSize:"12px", color:t3 }}>
-            Looking up transaction on Arc Testnet...
+            Looking up transaction on {ARC_CHAIN_NAME}...
           </div>
         )}
 

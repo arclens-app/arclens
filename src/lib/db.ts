@@ -40,6 +40,7 @@
 
 // Shared app-wide pool — see src/lib/dbPool.ts (do not construct pools here).
 import { getPool } from "./dbPool"
+import { ARC_CHAIN_ID } from "./constants"
 
 // â”€â”€â”€ TYPES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -81,8 +82,8 @@ export async function getContractIdentity(
 ): Promise<ContractIdentity | null> {
   const pool   = getPool()
   const result = await pool.query<ContractIdentity>(
-    "SELECT * FROM contracts WHERE address = $1",
-    [address.toLowerCase()]
+    "SELECT * FROM contracts WHERE address = $1 AND chain_id = $2",
+    [address.toLowerCase(), ARC_CHAIN_ID]
   )
   return result.rows[0] ?? null
 }
@@ -104,8 +105,8 @@ export async function getContractNames(
   const result = await pool.query<ContractNameResult>(
     `SELECT address, name, logo, verified, flagged
      FROM contract_names_cache
-     WHERE address = ANY($1)`,
-    [lower]
+     WHERE address = ANY($1) AND chain_id = $2`,
+    [lower, ARC_CHAIN_ID]
   )
 
   const map = new Map<string, ContractNameResult>()
@@ -124,10 +125,10 @@ export async function searchContractsByName(
   const pool   = getPool()
   const result = await pool.query<ContractIdentity>(
     `SELECT * FROM contracts
-     WHERE name ILIKE $1 AND NOT flagged
+     WHERE name ILIKE $1 AND NOT flagged AND chain_id = $2
      ORDER BY tx_count DESC
-     LIMIT $2`,
-    [`%${query}%`, limit]
+     LIMIT $3`,
+    [`%${query}%`, ARC_CHAIN_ID, limit]
   )
   return result.rows
 }
@@ -140,11 +141,11 @@ export async function getAllVerifiedContracts(
 ): Promise<ContractIdentity[]> {
   const pool = getPool()
   const query = category
-    ? `SELECT * FROM contracts WHERE verified = true AND type = $1 ORDER BY tx_count DESC LIMIT 100`
-    : `SELECT * FROM contracts WHERE verified = true ORDER BY tx_count DESC LIMIT 100`
+    ? `SELECT * FROM contracts WHERE verified = true AND type = $1 AND chain_id = $2 ORDER BY tx_count DESC LIMIT 100`
+    : `SELECT * FROM contracts WHERE verified = true AND chain_id = $1 ORDER BY tx_count DESC LIMIT 100`
   const result = await pool.query<ContractIdentity>(
     query,
-    category ? [category] : []
+    category ? [category, ARC_CHAIN_ID] : [ARC_CHAIN_ID]
   )
   return result.rows
 }
@@ -171,10 +172,10 @@ export async function saveContractClaim(data: {
   const pool   = getPool()
   const result = await pool.query<ContractIdentity>(
     `INSERT INTO contracts
-       (address, name, type, description, logo_url, website, twitter, github, audit_url, source_code, deployer)
+       (address, name, type, description, logo_url, website, twitter, github, audit_url, source_code, deployer, chain_id)
      VALUES
-       ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-     ON CONFLICT (address) DO UPDATE SET
+       ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+     ON CONFLICT (chain_id, address) DO UPDATE SET
        name        = EXCLUDED.name,
        type        = EXCLUDED.type,
        description = EXCLUDED.description,
@@ -197,6 +198,7 @@ export async function saveContractClaim(data: {
       data.audit_url ?? null,
       data.source_code ?? null,
       data.deployer ?? null,
+      ARC_CHAIN_ID,
     ]
   )
   return result.rows[0]
@@ -213,18 +215,18 @@ export async function markVerified(address: string): Promise<void> {
   await pool.query(
     `UPDATE contracts
      SET verified = true, verified_at = NOW()
-     WHERE address = $1`,
-    [lower]
+     WHERE address = $1 AND chain_id = $2`,
+    [lower, ARC_CHAIN_ID]
   )
 
   // Keep the fast lookup cache in sync
   await pool.query(
-    `INSERT INTO contract_names_cache (address, name, logo, verified, flagged)
-     SELECT address, name, logo_url, verified, flagged FROM contracts WHERE address = $1
-     ON CONFLICT (address) DO UPDATE SET
+    `INSERT INTO contract_names_cache (address, name, logo, verified, flagged, chain_id)
+     SELECT address, name, logo_url, verified, flagged, chain_id FROM contracts WHERE address = $1 AND chain_id = $2
+     ON CONFLICT (chain_id, address) DO UPDATE SET
        verified   = true,
        updated_at = NOW()`,
-    [lower]
+    [lower, ARC_CHAIN_ID]
   )
 }
 
@@ -239,13 +241,13 @@ export async function flagContract(
   const lower = address.toLowerCase()
 
   await pool.query(
-    `UPDATE contracts SET flagged = true, flag_reason = $2 WHERE address = $1`,
-    [lower, reason]
+    `UPDATE contracts SET flagged = true, flag_reason = $2 WHERE address = $1 AND chain_id = $3`,
+    [lower, reason, ARC_CHAIN_ID]
   )
 
   await pool.query(
-    `UPDATE contract_names_cache SET flagged = true WHERE address = $1`,
-    [lower]
+    `UPDATE contract_names_cache SET flagged = true WHERE address = $1 AND chain_id = $2`,
+    [lower, ARC_CHAIN_ID]
   )
 }
 
@@ -256,8 +258,7 @@ export async function flagContract(
 export async function incrementTxCount(address: string): Promise<void> {
   const pool = getPool()
   await pool.query(
-    `UPDATE contracts SET tx_count = tx_count + 1 WHERE address = $1`,
-    [address.toLowerCase()]
+    `UPDATE contracts SET tx_count = tx_count + 1 WHERE address = $1 AND chain_id = $2`,
+    [address.toLowerCase(), ARC_CHAIN_ID]
   )
 }
-

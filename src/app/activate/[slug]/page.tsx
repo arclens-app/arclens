@@ -185,6 +185,7 @@ export default function ActivatePage() {
         const sdk = new W3SSdk()
         sdkRef.current = sdk
         sdk.setAppSettings({ appId })
+        await sdk.getDeviceId()
         sdk.setAuthentication({ userToken, encryptionKey })
         return new Promise((resolve, reject) => {
           sdk.execute(challengeId, (err: any) => {

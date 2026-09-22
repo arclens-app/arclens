@@ -16,6 +16,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getPool } from "@/lib/dbPool"
 import { getSession } from "@/lib/session"
+import { ARC_CHAIN_ID } from "@/lib/constants"
 
 const pool = getPool()
 
@@ -39,8 +40,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
   try {
     const campRes = await pool.query(
-      `SELECT id, slug, title, creator_wallet, tasks, review_questions
-       FROM campaigns WHERE ${whereClause} LIMIT 1`,
+      `SELECT id, slug, title, creator_wallet, tasks, review_questions, chain_id
+       FROM campaigns WHERE ${whereClause}
+       ORDER BY (chain_id = ${ARC_CHAIN_ID}) DESC LIMIT 1`,
       [isNumeric ? Number(id) : id],
     )
     const camp = campRes.rows[0]
@@ -53,12 +55,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     const tasks:     { id: string; title: string }[] = Array.isArray(camp.tasks) ? camp.tasks : []
 
     const rows = await pool.query(
-      `SELECT tester_wallet, created_at, status, contract_verified,
+      `SELECT COALESCE(profile_wallet, '') AS tester_wallet, created_at, status, contract_verified,
               auto_score, builder_rating, quality_score, xp_earned,
               review_answers, task_proofs
-       FROM campaign_completions WHERE campaign_id = $1
+       FROM campaign_completions WHERE campaign_id = $1 AND chain_id = $2
        ORDER BY created_at ASC LIMIT 2000`,
-      [camp.id],
+      [camp.id, camp.chain_id],
     )
 
     const header = [

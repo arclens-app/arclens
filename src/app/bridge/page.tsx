@@ -1,6 +1,7 @@
 "use client"
 import { useEffect, useState, useCallback, useRef } from "react"
 import ArcLayout from "@/components/ArcLayout"
+import { ARC_IS_MAINNET } from "@/lib/constants"
 
 function timeAgo(ts: string) {
   const s = Math.floor((Date.now() - new Date(ts).getTime()) / 1000)
@@ -101,12 +102,11 @@ export default function BridgePage() {
   }, [])
 
   const loadBridgeData = useCallback(async () => {
+    if (ARC_IS_MAINNET) { setLoading(false); setRefreshing(false); return }
     try {
       // Try Iris API first
       try {
-        const irisRes = await fetch(
-          "https://iris-api-sandbox.circle.com/v2/messages?destinationDomain=26&limit=25"
-        )
+        const irisRes = await fetch("/api/iris?dir=in&limit=25")
         if (irisRes.ok) {
           const irisData = await irisRes.json()
           const msgs = irisData.messages || []
@@ -235,6 +235,17 @@ export default function BridgePage() {
   }, [])
 
   if (!mounted) return <div style={{ minHeight:"100vh", background:"var(--bg,#060812)" }} />
+  if (ARC_IS_MAINNET) return (
+    <ArcLayout active="bridge">
+      <div style={{ minHeight:"70vh", display:"grid", placeItems:"center", padding:"40px 24px" }}>
+        <div style={{ maxWidth:"520px", textAlign:"center" }}>
+          <div style={{ fontSize:"11px", fontFamily:"'DM Mono', monospace", color:"#6b7da8", letterSpacing:"0.12em", textTransform:"uppercase", marginBottom:"14px" }}>CCTP tracker</div>
+          <h1 style={{ fontSize:"28px", letterSpacing:"-0.04em", margin:"0 0 10px" }}>Mainnet tracking is not active</h1>
+          <p style={{ fontSize:"14px", lineHeight:1.7, color:"#6b7da8", margin:0 }}>ArcLens is not currently presenting CCTP activity on Arc mainnet. The testnet tracker remains preserved as historical data.</p>
+        </div>
+      </div>
+    </ArcLayout>
+  )
 
   const mono  = "'DM Mono', monospace"
   const bdr   = "var(--bdr, rgba(255,255,255,0.06))"

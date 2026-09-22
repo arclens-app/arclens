@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { enforce } from "@/lib/ratelimit"
 import { getSession } from "@/lib/session"
 import { getPool } from "@/lib/dbPool"
+import { APP_KIT_CHAIN, ARC_CHAIN_ID } from "@/lib/constants"
+import { payoutSafetyMessage, payoutsEnabledForActiveNetwork } from "@/lib/payoutSafety"
 
 const pool = getPool()
 
@@ -30,7 +32,7 @@ export async function POST(
     // Resolve slug or numeric id
     const isNumeric = /^\d+$/.test(id)
     const campRes = await pool.query(
-      `SELECT id, status, reward_type, reward_usdc_amount, deposit_tx_hash FROM campaigns WHERE ${isNumeric ? "id = $1" : "slug = $1"}`,
+      `SELECT id, status, reward_type, reward_usdc_amount, deposit_tx_hash FROM campaigns WHERE ${isNumeric ? "id = $1" : "slug = $1"} AND chain_id = ${ARC_CHAIN_ID}`,
       [isNumeric ? Number(id) : id]
     )
     const campaignId: number = campRes.rows[0]?.id
@@ -40,6 +42,9 @@ export async function POST(
     if (campaign.reward_type !== "usdc")   return NextResponse.json({ error: "This campaign does not offer USDC rewards" }, { status: 400 })
     if (!campaign.reward_usdc_amount)      return NextResponse.json({ error: "USDC reward amount not set" }, { status: 400 })
     if (!campaign.deposit_tx_hash)         return NextResponse.json({ error: "Campaign has not been funded by the founder yet" }, { status: 400 })
+    if (!payoutsEnabledForActiveNetwork()) {
+      return NextResponse.json({ error: payoutSafetyMessage() }, { status: 503 })
+    }
 
     const circleApiKey     = process.env.CIRCLE_API_KEY
     const circleSecret     = process.env.CIRCLE_ENTITY_SECRET
@@ -62,7 +67,7 @@ export async function POST(
       const compRes = await client.query(
         `SELECT id, auto_score, reward_delivered
          FROM campaign_completions
-         WHERE campaign_id = $1 AND tester_wallet = $2
+         WHERE campaign_id = $1 AND tester_wallet = $2 AND chain_id = ${ARC_CHAIN_ID}
          FOR UPDATE`,
         [campaignId, wallet]
       )
@@ -80,7 +85,7 @@ export async function POST(
         return NextResponse.json({ error: "Completion not scored yet" }, { status: 400 })
       }
       await client.query(
-        `UPDATE campaign_completions SET reward_delivered = true WHERE id = $1`,
+        `UPDATE campaign_completions SET reward_delivered = true WHERE id = $1 AND chain_id = ${ARC_CHAIN_ID}`,
         [completion.id]
       )
       await client.query("COMMIT")
@@ -102,7 +107,7 @@ export async function POST(
         const { createCircleWalletsAdapter } = await import("@circle-fin/adapter-circle-wallets")
         const adapter = createCircleWalletsAdapter({ apiKey: circleApiKey, entitySecret: circleSecret })
         result = await kit.send({
-          from:  { adapter: adapter as any, chain: "Arc_Testnet", address: payoutWalletAddr as `0x${string}` },
+          from:  { adapter: adapter as any, chain: APP_KIT_CHAIN as any, address: payoutWalletAddr as `0x${string}` },
           to:    wallet,
           amount: String(campaign.reward_usdc_amount),
           token: "USDC",
@@ -111,7 +116,7 @@ export async function POST(
         const { createAdapterFromPrivateKey } = await import("@circle-fin/adapter-viem-v2")
         const adapter = await createAdapterFromPrivateKey({ privateKey: payoutPrivKey as `0x${string}` } as any)
         result = await kit.send({
-          from:  { adapter: adapter as any, chain: "Arc_Testnet" },
+          from:  { adapter: adapter as any, chain: APP_KIT_CHAIN as any },
           to:    wallet,
           amount: String(campaign.reward_usdc_amount),
           token: "USDC",
@@ -120,7 +125,7 @@ export async function POST(
     } catch (payErr) {
       // Payout failed — restore the flag so the tester can retry
       try {
-        await pool.query(`UPDATE campaign_completions SET reward_delivered = false WHERE id = $1`, [completionId])
+        await pool.query(`UPDATE campaign_completions SET reward_delivered = false WHERE id = $1 AND chain_id = ${ARC_CHAIN_ID}`, [completionId])
       } catch (rollbackErr) {
         console.error("[Claim] CRITICAL: payout failed AND flag restore failed:", { payErr, rollbackErr, completionId })
       }

@@ -1,5 +1,6 @@
 import type { Metadata } from "next"
 import { getPool } from "@/lib/dbPool"
+import { ARC_CHAIN_ID, ARC_CHAIN_NAME } from "@/lib/constants"
 
 const pool = getPool()
 const BASE = process.env.NEXT_PUBLIC_BASE_URL || "https://arclenz.xyz"
@@ -14,7 +15,8 @@ export async function generateMetadata(
     const res = await pool.query(
       `SELECT title, tagline, description, type, campaign_logo, project_logo, project_name,
               slug, reward_type, reward_usdc_amount
-       FROM campaigns WHERE ${isNumeric ? "id = $1" : "slug = $1"}`,
+       FROM campaigns WHERE ${isNumeric ? "id = $1" : "slug = $1"}
+       ORDER BY (chain_id = ${ARC_CHAIN_ID}) DESC LIMIT 1`,
       [isNumeric ? Number(id) : id]
     )
     const c = res.rows[0]
@@ -27,7 +29,7 @@ export async function generateMetadata(
     const reward = c.reward_type === "usdc" && c.reward_usdc_amount
       ? `$${c.reward_usdc_amount} USDC per tester · `
       : ""
-    const description = `${reward}${c.tagline || c.description?.slice(0, 140) || "A verified testing campaign on Arc Testnet."}`
+    const description = `${reward}${c.tagline || c.description?.slice(0, 140) || `A verified testing campaign on ${ARC_CHAIN_NAME}.`}`
     const image       = c.campaign_logo || c.project_logo || null
     const url         = `${BASE}/trials/${c.slug || id}`
 

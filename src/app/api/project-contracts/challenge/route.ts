@@ -23,12 +23,12 @@ import crypto from "crypto"
 import { ethers } from "ethers"
 import { enforce } from "@/lib/ratelimit"
 import { getSession } from "@/lib/session"
-import { ARC_RPC_HTTP } from "@/lib/constants"
+import { ARC_EXPLORER_API, ARC_RPC_HTTP } from "@/lib/constants"
 import { dataArgTypes } from "@/lib/tvl"
 import { buildChallengeMessage, type ChallengePayload } from "@/lib/deployerSig"
 import { getPool } from "@/lib/dbPool"
 
-const ARCSCAN = "https://testnet.arcscan.app/api/v2"
+const ARCSCAN = ARC_EXPLORER_API
 
 async function fetchDeployer(addr: string): Promise<string | null> {
   try {

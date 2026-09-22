@@ -7,6 +7,7 @@ import { TrustBadge } from "@/components/TrustBadge"
 import { trustBadge } from "@/lib/trustBadge"
 import { safeExternalUrl } from "@/lib/submissionGuards"
 import AskLens from "@/components/AskLens"
+import { ARC_CHAIN_NAME } from "@/lib/constants"
 
 function imgSrc(url: string | null): string | null {
   if (!url) return null
@@ -276,7 +277,7 @@ export default function ProjectPage() {
     if (m) ph = m[1]
     ph = ph.replace(/^@+/, "").trim()
     const lead = ph ? `@${ph}` : project?.name
-    const text = `${lead} on Arc Testnet, listed in the @arclens_app ecosystem — ${project?.tagline}\n\n${url}`
+    const text = `${lead} on ${ARC_CHAIN_NAME}, listed in the @arclens_app ecosystem — ${project?.tagline}\n\n${url}`
     window.open(`https://x.com/intent/tweet?text=${encodeURIComponent(text)}`, "_blank")
   }
 
@@ -586,7 +587,7 @@ export default function ProjectPage() {
                 if (m) ph = m[1]
                 ph = ph.replace(/^@+/, "").trim()
                 const subject = ph ? `@${ph}` : project?.name
-                const text = `Just reviewed ${subject} on Arc Testnet via @arclens_app — arclenz.xyz/ecosystem/${id}?ref=share`
+                const text = `Just reviewed ${subject} on ${ARC_CHAIN_NAME} via @arclens_app — arclenz.xyz/ecosystem/${id}?ref=share`
                 window.open(`https://x.com/intent/tweet?text=${encodeURIComponent(text)}`, "_blank")
               }} style={{ height: "32px", padding: "0 14px", background: "#1a56ff", color: "#fff", fontSize: "12px", fontFamily: mono, border: "none", borderRadius: "6px", cursor: "pointer" }}>
                 Share on 𝕏
@@ -656,7 +657,7 @@ export default function ProjectPage() {
                 <div key={r.id} style={{ padding: "16px", background: surf2, borderRadius: "10px", border: "1px solid " + bdr }}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "10px", flexWrap: "wrap", gap: "8px" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                      <span style={{ fontSize: "11px", fontFamily: mono, color: t3 }}>{r.wallet.slice(0,6)}...{r.wallet.slice(-4)}</span>
+                      <span style={{ fontSize: "11px", fontFamily: mono, color: t3 }}>{r.wallet ? `${r.wallet.slice(0,6)}...${r.wallet.slice(-4)}` : "Arc user"}</span>
                       {r.badge === "verified" && <span style={{ fontSize: "8px", fontFamily: mono, padding: "2px 7px", borderRadius: "4px", background: "rgba(0,184,122,0.1)", color: usdc, border: "1px solid rgba(0,184,122,0.2)" }}>✓ VERIFIED USER</span>}
                       {r.badge === "arc_user" && <span style={{ fontSize: "8px", fontFamily: mono, padding: "2px 7px", borderRadius: "4px", background: "rgba(26,86,255,0.1)", color: "#8aaeff", border: "1px solid rgba(26,86,255,0.2)" }}>◆ ARC USER</span>}
                     </div>
@@ -694,12 +695,13 @@ export default function ProjectPage() {
               <div style={{ background: surf, border: "1px solid " + bdr, borderRadius: "14px", overflow: "hidden" }}>
                 {visible.map((row, i) => {
                   const rank       = i + 1
+                  const pendingIdentity = row.tester_wallet.startsWith("pending:")
                   const avgQ       = Math.round(Number(row.avg_quality) || 0)
                   const avgR       = Number(row.avg_rating) || 0
                   const scoreColor = avgQ > 70 ? usdc : avgQ > 40 ? "#e08810" : t2
                   const rkColor    = rank === 1 ? "#d4a447" : rank === 2 ? "#a5b0c5" : rank === 3 ? "#b88762" : t3
                   return (
-                    <a key={row.tester_wallet} href={`/tester/${row.tester_wallet}`}
+                    <a key={row.tester_wallet} href={pendingIdentity ? undefined : `/tester/${row.tester_wallet}`}
                       style={{ display: "flex", alignItems: "center", gap: "14px", padding: "13px 20px",
                         borderBottom: (i < visible.length - 1 || hasMore) ? "1px solid " + bdr : "none",
                         textDecoration: "none", transition: "background 0.12s" }}
@@ -710,7 +712,7 @@ export default function ProjectPage() {
                       </div>
                       <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: "8px" }}>
                         <span style={{ fontSize: "13px", fontFamily: mono, color: t1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                          {row.tester_wallet.slice(0, 8)}…{row.tester_wallet.slice(-4)}
+                          {pendingIdentity ? "Tester" : `${row.tester_wallet.slice(0, 8)}…${row.tester_wallet.slice(-4)}`}
                         </span>
                         {/* ArcLens rank chip — small, neutral. Tester is climbing
                             the platform-wide ladder naturally as they earn project XP

@@ -2,6 +2,7 @@
 import { useEffect, useState, useRef } from "react"
 import { safeExternalUrl } from "@/lib/submissionGuards"
 import ArcLayout from "@/components/ArcLayout"
+import { ARC_CHAIN_ID, ARC_CHAIN_NAME, ARC_RPC_HTTP } from "@/lib/constants"
 
 interface Project {
   id: number; name: string; tagline: string; category: string; slug?: string
@@ -11,7 +12,7 @@ interface Project {
 }
 
 async function rpc(method: string, params: unknown[] = []) {
-  const res = await fetch("https://rpc.testnet.arc.network", {
+  const res = await fetch(ARC_RPC_HTTP, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ jsonrpc: "2.0", method, params, id: 1 }),
@@ -461,7 +462,7 @@ export default function HomePage() {
     `${gasCost} to transfer any USDC amount`,
     `${tps} transactions per second`,
     `${finalityLive} average block time`,
-    `${builderCnt} builders live on testnet`,
+    `${builderCnt} builders live on ${ARC_CHAIN_NAME}`,
     "Gas paid in USDC — not ETH",
     "Sub-second confirmations, every time",
   ]
@@ -500,7 +501,7 @@ export default function HomePage() {
           }}>
             <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "5px 12px", background: "rgba(26,86,255,0.1)", border: "1px solid rgba(26,86,255,0.2)", borderRadius: "99px", marginBottom: "28px" }}>
               <div style={{ width: "5px", height: "5px", borderRadius: "50%", background: usdc, animation: "hpulse 2s infinite" }} />
-              <span style={{ fontSize: "10px", fontFamily: mono, color: link, letterSpacing: "0.08em" }}>Arc Testnet · Chain 5042002 · Live</span>
+              <span style={{ fontSize: "10px", fontFamily: mono, color: link, letterSpacing: "0.08em" }}>{ARC_CHAIN_NAME} · Chain {ARC_CHAIN_ID} · Live</span>
             </div>
 
             <h1 style={{ fontSize: "clamp(30px,3.8vw,58px)", fontWeight: 800, letterSpacing: "-0.05em", lineHeight: 1.04, color: "#e8ecff", margin: "0 0 22px" }}>

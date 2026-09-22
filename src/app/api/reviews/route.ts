@@ -2,6 +2,7 @@
 import { enforce } from "@/lib/ratelimit"
 import { getSession } from "@/lib/session"
 import { getPool } from "@/lib/dbPool"
+import { ARC_CHAIN_ID, ARC_CHAIN_NAME, ARC_EXPLORER_API, ARC_RPC_HTTP } from "@/lib/constants"
 
 const pool = getPool()
 
@@ -14,8 +15,8 @@ type ActivityResult = "active" | "inactive" | "unavailable"
 // activity and blocked real Arc users. Check the chain RPC and Arcscan in
 // parallel, and only call a wallet inactive when both services answered zero.
 async function getWalletActivity(wallet: string): Promise<ActivityResult> {
-  const rpcUrl = process.env.ARC_RPC_HTTP || "https://rpc.testnet.arc.network"
-  const explorerBase = process.env.ARC_EXPLORER_API || "https://testnet.arcscan.app/api/v2"
+  const rpcUrl = ARC_RPC_HTTP
+  const explorerBase = ARC_EXPLORER_API
 
   const [rpc, explorer] = await Promise.allSettled([
     fetch(rpcUrl, {
@@ -59,7 +60,7 @@ async function getWalletBadge(wallet: string, contract: string | null): Promise<
   if (contract) {
     try {
       const res = await fetch(
-        `https://testnet.arcscan.app/api/v2/addresses/${wallet}/transactions?filter=to&limit=10`,
+        `${ARC_EXPLORER_API}/addresses/${wallet}/transactions?filter=to&limit=10`,
         { cache: "no-store", signal: AbortSignal.timeout(4000) }
       )
       if (!res.ok) throw new Error(`Explorer returned ${res.status}`)
@@ -87,7 +88,7 @@ export async function GET(req: NextRequest) {
 
   try {
     const result = await pool.query(
-      `SELECT id, wallet, category, rating, review_text, badge, contact, created_at
+      `SELECT id, COALESCE(profile_wallet, '') AS wallet, category, rating, review_text, badge, contact, created_at
        FROM reviews
        WHERE project_id = $1 AND is_public = true
        ORDER BY created_at DESC
@@ -133,7 +134,7 @@ export async function POST(req: NextRequest) {
 
     // Check if wallet already reviewed this project
     const existing = await pool.query(
-      `SELECT id FROM reviews WHERE project_id = $1 AND wallet = $2`,
+      `SELECT id FROM reviews WHERE project_id = $1 AND wallet = $2 AND chain_id = ${ARC_CHAIN_ID}`,
       [project_id, wallet.toLowerCase()]
     )
     if (existing.rows.length > 0) {
@@ -141,7 +142,14 @@ export async function POST(req: NextRequest) {
     }
 
     // Get project contract for badge check
-    const proj = await pool.query(`SELECT contract FROM projects WHERE id = $1`, [project_id])
+    const proj = await pool.query(
+      `SELECT (SELECT address FROM project_contracts
+                WHERE project_id = projects.id AND chain_id = ${ARC_CHAIN_ID}
+                  AND verified_at IS NOT NULL AND revoked_at IS NULL
+                ORDER BY created_at ASC LIMIT 1) AS contract
+         FROM projects WHERE id = $1`,
+      [project_id],
+    )
     const contract = proj.rows[0]?.contract || null
 
     // Determine badge
@@ -151,12 +159,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "We couldn't verify your Arc activity right now. Please try again in a moment." }, { status: 503 })
     }
     if (badge === "unverified") {
-      return NextResponse.json({ error: "You need at least one transaction on Arc testnet to leave a review. Make any transaction on Arc first." }, { status: 400 })
+      return NextResponse.json({ error: `You need at least one transaction on ${ARC_CHAIN_NAME} to leave a review. Make any transaction on Arc first.` }, { status: 400 })
     }
 
     await pool.query(
-      `INSERT INTO reviews (project_id, wallet, category, rating, review_text, is_public, contact, badge)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      `INSERT INTO reviews (project_id, wallet, profile_wallet, category, rating, review_text, is_public, contact, badge, chain_id)
+       VALUES ($1, $2, $2, $3, $4, $5, $6, $7, $8, ${ARC_CHAIN_ID})`,
       [project_id, wallet.toLowerCase(), category, rating, review_text.trim(), is_public ?? true, contact || null, badge]
     )
 

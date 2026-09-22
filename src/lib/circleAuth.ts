@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server"
 import { getPool } from "@/lib/dbPool"
 import { getSession, readOtpProof } from "@/lib/session"
+import { ARC_CHAIN_ID } from "@/lib/constants"
 
 const pool = getPool()
 
@@ -26,9 +27,9 @@ export async function authorizeCircleUser(
   const result = await pool.query<CircleWalletUser>(
     `SELECT circle_user_id, wallet_id, wallet_address
        FROM circle_wallet_users
-      WHERE email = $1
+      WHERE email = $1 AND chain_id = $2
       LIMIT 1`,
-    [lower],
+    [lower, ARC_CHAIN_ID],
   )
   const user = result.rows[0]
   if (!user) return null

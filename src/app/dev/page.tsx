@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react"
 import ArcLayout from "@/components/ArcLayout"
 import { useArcStore } from "@/store/arc"
+import { ADD_CHAIN_PARAMS, ARC_CHAIN_ID, ARC_CHAIN_ID_HEX, ARC_CHAIN_NAME, ARC_IS_MAINNET, ARC_NETWORK, ARC_RPC_HTTP, CIRCLE_BLOCKCHAIN } from "@/lib/constants"
 
 async function rpc(method: string, params: unknown[] = []) {
   const res = await fetch("/api/rpc", {
@@ -49,7 +50,7 @@ export default function DevPage() {
         setStats([
           { label: "Latest Block",    value: "#" + blockNum.toLocaleString(), color: "#8aaeff", sub: "live" },
           { label: "ERC-20 Gas Cost", value: "$" + gasUSDC + " USDC",         color: "#00d990", sub: "stable" },
-          { label: "Chain ID",        value: "5042002",                       color: "#a080ff", sub: "arc-testnet" },
+          { label: "Chain ID",        value: String(ARC_CHAIN_ID),             color: "#a080ff", sub: `arc-${ARC_NETWORK}` },
           { label: "Finality",        value: "< 1 second",                    color: "#00d990", sub: "deterministic" },
         ])
       } catch { /* ignore */ }
@@ -77,6 +78,10 @@ export default function DevPage() {
   }
 
   async function claimFaucet() {
+    if (ARC_IS_MAINNET) {
+      setClaimResult({ ok: false, msg: "The faucet is only available on Arc testnet" })
+      return
+    }
     if (!faucetAddr || !/^0x[0-9a-fA-F]{40}$/.test(faucetAddr)) {
       setClaimResult({ ok: false, msg: "Please enter a valid wallet address" })
       return
@@ -93,7 +98,7 @@ export default function DevPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           address:    faucetAddr,
-          blockchain: "ARC-TESTNET",
+          blockchain: CIRCLE_BLOCKCHAIN,
           usdc:       faucetUsdc,
           eurc:       faucetEurc,
         }),
@@ -124,13 +129,7 @@ export default function DevPage() {
     try {
       await (window as any).ethereum.request({
         method: "wallet_addEthereumChain",
-        params: [{
-          chainId: "0x4cef52",
-          chainName: "Arc Testnet",
-          nativeCurrency: { name: "USDC", symbol: "USDC", decimals: 18 },
-          rpcUrls: ["https://rpc.testnet.arc.network"],
-          blockExplorerUrls: ["https://arclenz.xyz"],
-        }],
+        params: [ADD_CHAIN_PARAMS],
       })
       setNetAdded(true)
     } catch { /* user rejected */ }
@@ -150,13 +149,11 @@ export default function DevPage() {
   const arc    = "#1a56ff"
 
   const endpoints = [
-    { name: "HTTPS RPC",   url: "https://rpc.testnet.arc.network",  status: "live", ms: "~120ms" },
-    { name: "Alchemy RPC", url: "https://arc-testnet.g.alchemy.com/v2/...", status: "live", ms: "~80ms"  },
-    { name: "WebSocket",   url: "wss://5042002.rpc.thirdweb.com/ws", status: "live", ms: "~90ms"  },
+    { name: "HTTPS RPC",   url: ARC_RPC_HTTP, status: "live", ms: "live" },
   ]
 
   const snippets = [
-    { label: "Connect to Arc", code: `const provider = new ethers.JsonRpcProvider(\n  "https://rpc.testnet.arc.network",\n  { chainId: 5042002, name: "arc-testnet" }\n)` },
+    { label: "Connect to Arc", code: `const provider = new ethers.JsonRpcProvider(\n  "${ARC_RPC_HTTP}",\n  { chainId: ${ARC_CHAIN_ID}, name: "arc-${ARC_NETWORK}" }\n)` },
     { label: "Read USDC Balance", code: `const USDC = "0x3600000000000000000000000000000000000000"\nconst abi  = ["function balanceOf(address) view returns (uint256)"]\nconst usdc = new ethers.Contract(USDC, abi, provider)\nconst bal  = await usdc.balanceOf(address)\nconsole.log(ethers.formatUnits(bal, 6), "USDC")` },
     { label: "Send USDC", code: `const abi  = ["function transfer(address to, uint256 amount) returns (bool)"]\nconst usdc = new ethers.Contract(USDC, abi, signer)\nconst tx   = await usdc.transfer(recipient, ethers.parseUnits("1.00", 6))\nawait tx.wait() // Confirms in < 1 second` },
     { label: "Estimate Gas", code: `const feeData = await provider.getFeeData()\nconst gasGwei = Number(ethers.formatUnits(feeData.gasPrice, "gwei"))\n// Simple transfer: ~21,000 gas × gasGwei × 1e-9 USDC\n// ERC-20 transfer: ~46,000 gas\n// Contract call: ~85,000 gas` },
@@ -171,7 +168,7 @@ export default function DevPage() {
           <div>
             <div style={{ fontSize:"10px", fontFamily:mono, color:t3, letterSpacing:"0.1em", textTransform:"uppercase", marginBottom:"8px" }}>Developers</div>
             <div style={{ fontSize:"26px", fontWeight:700, letterSpacing:"-0.04em", marginBottom:"4px", color:t1 }}>Dev Console</div>
-            <div style={{ fontSize:"13px", color:t2, fontWeight:300 }}>Network config, RPC endpoints, code snippets and faucet for Arc builders.</div>
+            <div style={{ fontSize:"13px", color:t2, fontWeight:300 }}>Network configuration, RPC endpoints and code snippets for Arc builders.</div>
           </div>
           <button onClick={testRPC} disabled={pinging}
             style={{ height:"38px", padding:"0 18px", background:rpcPing?"rgba(0,184,122,0.08)":"rgba(26,86,255,0.08)", color:rpcPing?"#00d990":"#8aaeff", fontSize:"12px", fontFamily:mono, border:"1px solid "+(rpcPing?"rgba(0,184,122,0.2)":"rgba(26,86,255,0.2)"), borderRadius:"8px", cursor:pinging?"not-allowed":"pointer", whiteSpace:"nowrap", flexShrink:0, transition:"all .12s" }}>
@@ -183,7 +180,7 @@ export default function DevPage() {
         <div style={{ display:"flex", gap:"8px", marginBottom:"20px" }}>
           {([
             { id:"console", label:"Dev Console" },
-            { id:"faucet",  label:"Faucet" },
+            ...(!ARC_IS_MAINNET ? [{ id:"faucet" as const, label:"Faucet" }] : []),
           ] as const).map(t => (
             <button key={t.id} onClick={() => setDevTab(t.id)}
               style={{ height:"34px", padding:"0 18px", background:devTab===t.id?"#1a56ff":"transparent", color:devTab===t.id?"#fff":t2, fontSize:"12px", fontWeight:devTab===t.id?600:400, border:"1px solid "+(devTab===t.id?"#1a56ff":bdr), borderRadius:"7px", cursor:"pointer", fontFamily:"'Geist',sans-serif", transition:"all .12s" }}>
@@ -193,7 +190,7 @@ export default function DevPage() {
         </div>
 
         {/* ── FAUCET TAB ── */}
-        {devTab === "faucet" && (
+        {!ARC_IS_MAINNET && devTab === "faucet" && (
           <div>
             {/* Stats */}
             <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:"1px", background:bdr, borderRadius:"14px", overflow:"hidden", border:"1px solid "+bdr, marginBottom:"20px" }}>
@@ -201,7 +198,7 @@ export default function DevPage() {
                 { label:"Available",   value:"20 USDC", sub:"per request", color:usdc },
                 { label:"Also",        value:"20 EURC", sub:"per request", color:"#4070ff" },
                 { label:"Wait Time",   value:"2 hours", sub:"between claims", color:t2 },
-                { label:"Network",     value:"Arc Testnet", sub:"Chain ID 5042002", color:"#8aaeff" },
+                { label:"Network",     value:ARC_CHAIN_NAME, sub:`Chain ID ${ARC_CHAIN_ID}`, color:"#8aaeff" },
               ].map((s: any) => (
                 <div key={s.label} style={{ background:surf, padding:"16px 20px" }}>
                   <div style={{ fontSize:"9px", fontFamily:mono, color:t3, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:"8px" }}>{s.label}</div>
@@ -290,11 +287,11 @@ export default function DevPage() {
               <div style={{ position:"absolute", top:0, left:0, right:0, height:"2px", background:"linear-gradient(90deg, #1a56ff, #4070ff 40%, transparent)" }} />
               <div style={{ padding:"20px 22px", display:"flex", alignItems:"center", gap:"16px" }}>
                 <div style={{ flex:1 }}>
-                  <div style={{ fontSize:"14px", fontWeight:600, letterSpacing:"-0.02em", marginBottom:"4px", color:t1 }}>Add Arc Testnet to MetaMask</div>
-                  <div style={{ fontSize:"12px", color:t2, fontWeight:300 }}>One click to add Arc Testnet (Chain ID 5042002) with USDC as native gas token.</div>
+                  <div style={{ fontSize:"14px", fontWeight:600, letterSpacing:"-0.02em", marginBottom:"4px", color:t1 }}>Add {ARC_CHAIN_NAME} to MetaMask</div>
+                  <div style={{ fontSize:"12px", color:t2, fontWeight:300 }}>One click to add {ARC_CHAIN_NAME} (Chain ID {ARC_CHAIN_ID}) with USDC as native gas token.</div>
                 </div>
                 <div style={{ display:"flex", gap:"8px", flexShrink:0 }}>
-                  <button onClick={() => copy("https://rpc.testnet.arc.network", "rpc")}
+                  <button onClick={() => copy(ARC_RPC_HTTP, "rpc")}
                     style={{ height:"38px", padding:"0 16px", background:"transparent", color:copied==="rpc"?"#00d990":t2, fontSize:"12px", border:"1px solid "+bdr, borderRadius:"8px", cursor:"pointer", fontFamily:"'Geist',sans-serif", whiteSpace:"nowrap" }}>
                     {copied==="rpc"?"✓ Copied":"Copy RPC"}
                   </button>
@@ -313,15 +310,15 @@ export default function DevPage() {
                   <div style={{ width:"5px", height:"5px", borderRadius:"50%", background:"#8aaeff" }}/>
                   <span style={{ fontSize:"12.5px", fontWeight:500 }}>Network Config</span>
                 </div>
-                <button onClick={() => copy(JSON.stringify({chainId:"0x4cef52",chainName:"Arc Testnet",nativeCurrency:{name:"USDC",symbol:"USDC",decimals:18},rpcUrls:["https://rpc.testnet.arc.network"],blockExplorerUrls:["https://arclenz.xyz"]},null,2), "config")}
+                <button onClick={() => copy(JSON.stringify(ADD_CHAIN_PARAMS,null,2), "config")}
                   style={{ fontSize:"10px", fontFamily:mono, padding:"3px 10px", borderRadius:"5px", border:"1px solid "+bdr, background:"transparent", color:copied==="config"?"#00d990":t2, cursor:"pointer" }}>
                   {copied==="config"?"✓ Copied":"Copy JSON"}
                 </button>
               </div>
               {[
-                { label:"Network Name",     value:"Arc Testnet" },
-                { label:"Chain ID",         value:"5042002 (0x4cef52)" },
-                { label:"RPC URL",          value:"https://rpc.testnet.arc.network" },
+                { label:"Network Name",     value:ARC_CHAIN_NAME },
+                { label:"Chain ID",         value:`${ARC_CHAIN_ID} (${ARC_CHAIN_ID_HEX})` },
+                { label:"RPC URL",          value:ARC_RPC_HTTP },
                 { label:"Native Currency",  value:"USDC (18 decimals)" },
                 { label:"USDC Contract",    value:"0x3600000000000000000000000000000000000000" },
                 { label:"Block Explorer",   value:"https://arclenz.xyz" },

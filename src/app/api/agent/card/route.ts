@@ -8,11 +8,12 @@
 // to the minted agentId so the `registrations` array resolves on-chain ↔ off-chain.
 
 import { NextResponse } from "next/server"
+import { ARC_CHAIN_ID, ARC_IS_MAINNET } from "@/lib/constants"
 
 export const runtime = "nodejs"
 
-const CHAIN_ID = 5042002 // Arc Testnet
-const IDENTITY_REGISTRY = "0x8004A818BFB912233c491871b3d84c89A494BD9e"
+const IDENTITY_REGISTRY = process.env.ERC8004_IDENTITY_REGISTRY ||
+  (ARC_IS_MAINNET ? "" : "0x8004A818BFB912233c491871b3d84c89A494BD9e")
 const AGENT_WALLET = (process.env.LENS_WALLET_ADDRESS || process.env.PAYOUT_WALLET_ADDRESS || "").toLowerCase()
 const AGENT_ID = process.env.LENS_AGENT_ID || null
 
@@ -28,8 +29,8 @@ export async function GET() {
       { name: "chat", endpoint: "https://arclenz.xyz/lens" },
     ],
     active: true,
-    registrations: AGENT_ID
-      ? [{ agentId: Number(AGENT_ID), agentRegistry: `eip155:${CHAIN_ID}:${IDENTITY_REGISTRY}` }]
+    registrations: AGENT_ID && IDENTITY_REGISTRY
+      ? [{ agentId: Number(AGENT_ID), agentRegistry: `eip155:${ARC_CHAIN_ID}:${IDENTITY_REGISTRY}` }]
       : [],
     x402Support: true,
     supportedTrust: ["reputation"],

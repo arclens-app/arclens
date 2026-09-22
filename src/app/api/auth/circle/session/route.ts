@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server"
 import { getPool } from "@/lib/dbPool"
 import { enforce } from "@/lib/ratelimit"
 import { readOtpProof } from "@/lib/session"
+import { ARC_CHAIN_ID, CIRCLE_BLOCKCHAIN } from "@/lib/constants"
+import { getCircleEnvironmentError } from "@/lib/circleEnvironment"
+import { ensureCircleAccount, promoteCircleWallet } from "@/lib/accountIdentity"
 
 const pool = getPool()
 const BASE = "https://api.circle.com"
@@ -27,7 +30,7 @@ async function getUserToken(circleUserId: string) {
 }
 
 async function fetchCircleWallet(userToken: string) {
-  const res  = await fetch(`${BASE}/v1/w3s/wallets?pageSize=1`, { headers: apiHeaders(userToken) })
+  const res  = await fetch(`${BASE}/v1/w3s/wallets?blockchain=${encodeURIComponent(CIRCLE_BLOCKCHAIN)}&pageSize=1`, { headers: apiHeaders(userToken) })
   const data = await res.json()
   return data.data?.wallets?.[0] as { id: string; address: string } | undefined
 }
@@ -35,6 +38,8 @@ async function fetchCircleWallet(userToken: string) {
 export async function POST(req: NextRequest) {
   const blocked = await enforce(req, "circle-session", { limit: 10, windowMs: 60_000 })
   if (blocked) return blocked
+  const environmentError = getCircleEnvironmentError()
+  if (environmentError) return NextResponse.json({ error: environmentError }, { status: 503 })
   try {
     const { email } = await req.json()
     if (!email) return NextResponse.json({ error: "Email required" }, { status: 400 })
@@ -42,16 +47,19 @@ export async function POST(req: NextRequest) {
     if (readOtpProof(req) !== lower) {
       return NextResponse.json({ error: "Verify the code sent to your email first" }, { status: 401 })
     }
+    const accountId = await ensureCircleAccount(lower)
 
     const row = await pool.query(
-      "SELECT circle_user_id, wallet_id, wallet_address FROM circle_wallet_users WHERE email = $1",
-      [lower]
+      "SELECT circle_user_id, wallet_id, wallet_address FROM circle_wallet_users WHERE email = $1 AND chain_id = $2",
+      [lower, ARC_CHAIN_ID]
     )
 
     // ── PATH 1: Cached address + wallet_id → sign-in challenge (PIN required) ──
     if (row.rows.length && row.rows[0].wallet_id) {
       const { circle_user_id, wallet_id, wallet_address } = row.rows[0]
       const { userToken, encryptionKey } = await getUserToken(circle_user_id)
+      await pool.query("UPDATE circle_wallet_users SET account_id=$1 WHERE email=$2 AND chain_id=$3", [accountId, lower, ARC_CHAIN_ID])
+      if (wallet_address) await promoteCircleWallet(lower, wallet_address)
 
       const nonce   = crypto.randomUUID()
       const message = `ArcLens Sign-In\n\nWallet: ${wallet_address}\nNonce: ${nonce}`
@@ -90,9 +98,10 @@ export async function POST(req: NextRequest) {
       if (existingWallet) {
         // Store wallet_id + address so next time we use Path 1
         await pool.query(
-          "UPDATE circle_wallet_users SET wallet_id=$1, wallet_address=$2 WHERE email=$3",
-          [existingWallet.id, existingWallet.address.toLowerCase(), lower]
+          "UPDATE circle_wallet_users SET wallet_id=$1, wallet_address=$2, account_id=$3 WHERE email=$4 AND chain_id=$5",
+          [existingWallet.id, existingWallet.address.toLowerCase(), accountId, lower, ARC_CHAIN_ID]
         )
+        await promoteCircleWallet(lower, existingWallet.address)
 
         const nonce   = crypto.randomUUID()
         const message = `ArcLens Sign-In\n\nWallet: ${existingWallet.address}\nNonce: ${nonce}`
@@ -123,13 +132,28 @@ export async function POST(req: NextRequest) {
       }
 
       // No wallet on Circle either — user abandoned setup, re-initialize
-      const initRes  = await fetch(`${BASE}/v1/w3s/user/initialize`, {
+      // Check only this Circle environment. TEST and LIVE users are separate,
+      // even when ArcLens associates both records with the same email account.
+      const anyWalletRes = await fetch(`${BASE}/v1/w3s/wallets?pageSize=1`, {
+        headers: apiHeaders(userToken),
+      })
+      const anyWalletData = await anyWalletRes.json()
+      if (!anyWalletRes.ok) {
+        console.error("[circle/session] list existing wallets:", anyWalletData)
+        return NextResponse.json({ error: "Failed to load wallet" }, { status: 500 })
+      }
+      const hasExistingCircleWallet = !!anyWalletData.data?.wallets?.[0]
+
+      // Existing initialized users add a network; uninitialized users create
+      // their PIN and first wallet.
+      const walletEndpoint = hasExistingCircleWallet ? "user/wallets" : "user/initialize"
+      const initRes  = await fetch(`${BASE}/v1/w3s/${walletEndpoint}`, {
         method:  "POST",
         headers: apiHeaders(userToken),
         body:    JSON.stringify({
           idempotencyKey: crypto.randomUUID(),
           accountType:    "EOA",
-          blockchains:    ["ARC-TESTNET"],
+          blockchains:    [CIRCLE_BLOCKCHAIN],
         }),
       })
       const initData = await initRes.json()
@@ -137,7 +161,12 @@ export async function POST(req: NextRequest) {
         console.error("[circle/session] re-initialize:", initData)
         return NextResponse.json({ error: "Failed to create wallet setup", detail: initData }, { status: 500 })
       }
-      return NextResponse.json({ userToken, encryptionKey, challengeId: initData.data.challengeId })
+      return NextResponse.json({
+        userToken,
+        encryptionKey,
+        challengeId: initData.data.challengeId,
+        walletAction: hasExistingCircleWallet ? "add_network" : "initialize",
+      })
     }
 
     // ── PATH 3: Brand new user → create Circle account + initialize wallet ──
@@ -155,10 +184,10 @@ export async function POST(req: NextRequest) {
     }
 
     await pool.query(
-      `INSERT INTO circle_wallet_users (email, circle_user_id)
-       VALUES ($1, $2)
-       ON CONFLICT (email) DO NOTHING`,
-      [lower, circleUserId]
+      `INSERT INTO circle_wallet_users (email, circle_user_id, chain_id, account_id)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (chain_id, email) DO UPDATE SET account_id = EXCLUDED.account_id`,
+      [lower, circleUserId, ARC_CHAIN_ID, accountId]
     )
 
     const { userToken, encryptionKey } = await getUserToken(circleUserId)
@@ -169,7 +198,7 @@ export async function POST(req: NextRequest) {
       body:    JSON.stringify({
         idempotencyKey: crypto.randomUUID(),
         accountType:    "EOA",
-        blockchains:    ["ARC-TESTNET"],
+        blockchains:    [CIRCLE_BLOCKCHAIN],
       }),
     })
     const initData = await initRes.json()
@@ -178,7 +207,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Failed to create wallet setup", detail: initData }, { status: 500 })
     }
 
-    return NextResponse.json({ userToken, encryptionKey, challengeId: initData.data.challengeId })
+    return NextResponse.json({
+      userToken,
+      encryptionKey,
+      challengeId: initData.data.challengeId,
+      walletAction: "initialize",
+    })
   } catch (e) {
     console.error("[circle/session]", e)
     return NextResponse.json({ error: "Server error" }, { status: 500 })

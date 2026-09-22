@@ -1,6 +1,7 @@
 "use client"
 import { useEffect, useState } from "react"
 import ArcLayout from "@/components/ArcLayout"
+import { ARC_CHAIN_NAME } from "@/lib/constants"
 
 interface Builder {
   address: string
@@ -82,7 +83,7 @@ export default function BuildersPage() {
             </div>
           </div>
           <p style={{ margin: 0, fontSize: "13px", color: t2, lineHeight: 1.7 }}>
-            Developers and builders who have claimed their profile on Arc Testnet.
+            Developers and builders who have claimed their profile on {ARC_CHAIN_NAME}.
           </p>
         </div>
 

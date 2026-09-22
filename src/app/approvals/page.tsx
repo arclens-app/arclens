@@ -3,6 +3,7 @@ import { useEffect, useState } from "react"
 import ArcLayout from "@/components/ArcLayout"
 import { useArcStore } from "@/store/arc"
 import { circleSendTransaction } from "@/lib/circleSign"
+import { ARC_CHAIN_NAME, ARC_RPC_HTTP } from "@/lib/constants"
 
 interface Approval {
   id: string
@@ -30,7 +31,7 @@ function encodeAllowance(owner: string, spender: string): string {
 }
 
 async function rpcCall(method: string, params: unknown[] = []) {
-  const res = await fetch("https://rpc.testnet.arc.network", {
+  const res = await fetch(ARC_RPC_HTTP, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ jsonrpc: "2.0", method, params, id: 1 }),
@@ -213,7 +214,7 @@ export default function ApprovalsPage() {
         <div style={{ marginBottom: "24px" }}>
           <div style={{ fontSize: "10px", fontFamily: mono, color: "#323e62", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "8px" }}>Safety Tool</div>
           <div style={{ fontSize: "28px", fontWeight: 700, letterSpacing: "-0.04em", marginBottom: "5px" }}>Approval Manager</div>
-          <div style={{ fontSize: "13px", color: "#6b7da8", fontWeight: 300 }}>Real ERC-20 allowances from Arc Testnet. Every revoke is a real on-chain transaction signed by you in MetaMask.</div>
+          <div style={{ fontSize: "13px", color: "#6b7da8", fontWeight: 300 }}>Real ERC-20 allowances from {ARC_CHAIN_NAME}. Every revoke is a real on-chain transaction signed by you in MetaMask.</div>
         </div>
 
         <div style={{ background: "rgba(224,136,16,0.05)", border: "1px solid rgba(224,136,16,0.2)", borderRadius: "10px", padding: "14px 16px", marginBottom: "20px", display: "flex", gap: "12px" }}>
@@ -309,7 +310,7 @@ export default function ApprovalsPage() {
         {!scanned && !loading && (
           <div style={{ background: surf, border: "1px solid " + border, borderRadius: "12px", padding: "60px 40px", textAlign: "center" }}>
             <div style={{ fontSize: "32px", marginBottom: "14px" }}>🔍</div>
-            <div style={{ fontSize: "15px", fontWeight: 600, letterSpacing: "-0.02em", marginBottom: "8px" }}>Scan any Arc Testnet wallet</div>
+            <div style={{ fontSize: "15px", fontWeight: 600, letterSpacing: "-0.02em", marginBottom: "8px" }}>Scan any {ARC_CHAIN_NAME} wallet</div>
             <div style={{ fontSize: "13px", color: "#6b7da8", fontWeight: 300, maxWidth: "400px", margin: "0 auto", lineHeight: 1.7 }}>
               Connect your wallet or paste any address. We find every contract you have sent tokens to, then check live allowances on-chain. Revoke buttons trigger real MetaMask transactions.
             </div>

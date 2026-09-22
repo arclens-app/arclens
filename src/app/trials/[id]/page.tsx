@@ -9,6 +9,7 @@ import type { DragEndEvent } from "@dnd-kit/core"
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
 import { getTypeMeta } from "@/lib/campaignTypes"
+import { ARC_CHAIN_NAME } from "@/lib/constants"
 
 type ProofType = "none" | "x_link" | "tx_hash" | "url" | "screenshot"
 interface Task {
@@ -393,7 +394,7 @@ export default function CampaignDetailPage() {
       const data = await res.json()
       if (!res.ok) {
         if (data.contract_required) {
-          setSubmitError("You haven't interacted with this campaign's contract on Arc Testnet yet. Complete the on-chain steps first, then come back to submit.")
+          setSubmitError(`You haven't interacted with this campaign's contract on ${ARC_CHAIN_NAME} yet. Complete the on-chain steps first, then come back to submit.`)
         } else {
           setSubmitError(data.error || "Submission failed")
         }
@@ -708,7 +709,7 @@ export default function CampaignDetailPage() {
                         // as nonsense when handle matches project name).
                         const ph = normalizeXHandle(campaign.project_twitter)
                         const by = ph ? ` by @${ph}` : ""
-                        const text = `${campaign.title}${by} — an Arc Testnet campaign live on @arclens_app. Join in:`
+                        const text = `${campaign.title}${by} — a campaign live on ${ARC_CHAIN_NAME} via @arclens_app. Join in:`
                         return `https://x.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(window.location.origin + window.location.pathname + "?ref=share")}`
                       })()
                     : "#"
@@ -1896,11 +1897,12 @@ function TopContributorsLeaderboard({ completions }: { completions: Completion[]
       <div>
         {visible.map((c, i) => {
           const rank       = i + 1
+          const pendingIdentity = c.tester_wallet.startsWith("pending:")
           const qs         = Math.round(Number(c.quality_score) || 0)
           const scoreColor = qs > 70 ? "#00b87a" : qs > 40 ? "#e08810" : "var(--t2,#6b7da8)"
           const rkColor    = rankColor(rank, "var(--t3,#2e3a5c)")
           return (
-            <a key={c.tester_wallet} href={`/tester/${c.tester_wallet}`}
+            <a key={c.tester_wallet} href={pendingIdentity ? undefined : `/tester/${c.tester_wallet}`}
               style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 20px",
                        borderBottom: (i < visible.length - 1 || hasMore) ? "1px solid var(--bdr,rgba(255,255,255,0.06))" : "none",
                        textDecoration: "none" }}>
@@ -1909,7 +1911,7 @@ function TopContributorsLeaderboard({ completions }: { completions: Completion[]
               </div>
               <WalletAvatar wallet={c.tester_wallet} size={26} />
               <span style={{ fontSize: 12, fontFamily: mono, color: "var(--t1,#e8ecff)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {c.tester_wallet.slice(0, 8)}…{c.tester_wallet.slice(-4)}
+                {pendingIdentity ? "Tester" : `${c.tester_wallet.slice(0, 8)}…${c.tester_wallet.slice(-4)}`}
               </span>
               <div style={{ fontSize: 11, fontFamily: mono, color: "#c08828", flexShrink: 0 }}>
                 {"★".repeat(c.builder_rating || 0)}<span style={{ opacity: 0.25 }}>{"★".repeat(5 - (c.builder_rating || 0))}</span>

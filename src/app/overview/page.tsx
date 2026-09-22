@@ -2,9 +2,10 @@
 import { useEffect, useState, useRef } from "react"
 import ArcLayout from "@/components/ArcLayout"
 import { SkeletonRow, SkeletonStatsBand } from "@/components/ArcSkeleton"
+import { ARC_CHAIN_ID, ARC_CHAIN_NAME, ARC_RPC_HTTP } from "@/lib/constants"
 
 async function rpc(method: string, params: unknown[] = []) {
-  const res = await fetch("https://rpc.testnet.arc.network", {
+  const res = await fetch(ARC_RPC_HTTP, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ jsonrpc: "2.0", method, params, id: 1 }),
@@ -125,7 +126,7 @@ export default function Home() {
   const usdc  = "#00b87a"
 
   const stats = [
-    { label: "Latest Block",    value: "#" + blockNum,          color: "#8aaeff", sub: "Arc Testnet · live" },
+    { label: "Latest Block",    value: "#" + blockNum,          color: "#8aaeff", sub: `${ARC_CHAIN_NAME} · live` },
     { label: "Avg ERC-20 Cost", value: "$" + gasUSDC + " USDC", color: usdc,      sub: "Stable · predictable" },
     { label: "Live TPS",        value: tps,                      color: "#8aaeff", sub: "Transactions / second" },
     { label: "Gas Token",       value: "USDC",                   color: usdc,      sub: "Not ETH · not volatile" },
@@ -153,7 +154,7 @@ export default function Home() {
           <div style={{ marginBottom: "32px" }}>
             <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "4px 10px", background: "rgba(26,86,255,0.08)", border: "1px solid rgba(26,86,255,0.15)", borderRadius: "99px", marginBottom: "14px" }}>
               <div style={{ width: "5px", height: "5px", borderRadius: "50%", background: usdc, animation: "pulse 2s infinite" }} />
-              <span style={{ fontSize: "10px", fontFamily: mono, color: "#8aaeff", letterSpacing: "0.06em" }}>Arc Testnet · Economic OS · Chain 5042002</span>
+              <span style={{ fontSize: "10px", fontFamily: mono, color: "#8aaeff", letterSpacing: "0.06em" }}>{ARC_CHAIN_NAME} · Economic OS · Chain {ARC_CHAIN_ID}</span>
             </div>
             <div style={{ fontSize: "32px", fontWeight: 700, letterSpacing: "-0.045em", lineHeight: 1.1, marginBottom: "8px", color: t1 }}>
               Network Overview

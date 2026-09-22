@@ -4,6 +4,7 @@
 
 import { NextRequest, NextResponse } from "next/server"
 import { getPool } from "@/lib/dbPool"
+import { ARC_CHAIN_ID, ARC_EXPLORER_API } from "@/lib/constants"
 
 const pool = getPool()
 
@@ -25,10 +26,10 @@ export async function GET(
          fee_usdc, status,
          is_usdc_xfer, usdc_amount, usdc_to
        FROM indexed_transactions
-       WHERE from_addr = $1 OR to_addr = $1
+       WHERE chain_id = $2 AND (from_addr = $1 OR to_addr = $1)
        ORDER BY block_number DESC
-       LIMIT $2`,
-      [addr, limit]
+       LIMIT $3`,
+      [addr, ARC_CHAIN_ID, limit]
     )
 
     if (result.rows.length > 0) {
@@ -41,7 +42,7 @@ export async function GET(
           timestamp:   new Date(row.block_time).getTime() / 1000,
           from:        row.from_addr,
           to:          row.to_addr,
-          valueUSDC:   "$" + (Number(row.value_raw) / 1e6).toFixed(2),
+          valueUSDC:   "$" + (Number(row.value_raw) / 1e18).toFixed(2),
           gasUSDC:     "$" + Number(row.fee_usdc).toFixed(6),
           status:      row.status,
           isUSDC:      row.is_usdc_xfer,
@@ -52,7 +53,7 @@ export async function GET(
 
     // Fallback: Blockscout API (used until indexer has enough history)
     const bsRes  = await fetch(
-      `https://testnet.arcscan.app/api/v2/addresses/${addr}/transactions?filter=to%7Cfrom`
+      `${ARC_EXPLORER_API}/addresses/${addr}/transactions?filter=to%7Cfrom`
     )
     const bsData = await bsRes.json() as { items?: Record<string, unknown>[] }
 
@@ -85,7 +86,7 @@ export async function GET(
     // Last resort — Blockscout only
     try {
       const bsRes  = await fetch(
-        `https://testnet.arcscan.app/api/v2/addresses/${addr}/transactions?filter=to%7Cfrom`
+        `${ARC_EXPLORER_API}/addresses/${addr}/transactions?filter=to%7Cfrom`
       )
       const bsData = await bsRes.json() as { items?: Record<string, unknown>[] }
       return NextResponse.json({

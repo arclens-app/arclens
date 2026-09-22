@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { enforce } from "@/lib/ratelimit"
 import { authorizeCircleUser } from "@/lib/circleAuth"
+import { getCircleEnvironmentError } from "@/lib/circleEnvironment"
 const BASE = "https://api.circle.com"
 
 function apiHeaders(userToken?: string) {
@@ -15,6 +16,8 @@ function apiHeaders(userToken?: string) {
 export async function POST(req: NextRequest) {
   const blocked = await enforce(req, "circle-sign-msg", { limit: 20, windowMs: 60_000 })
   if (blocked) return blocked
+  const environmentError = getCircleEnvironmentError()
+  if (environmentError) return NextResponse.json({ error: environmentError }, { status: 503 })
   try {
     const { email, message } = await req.json()
     if (!email || !message) return NextResponse.json({ error: "email and message required" }, { status: 400 })

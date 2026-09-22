@@ -8,6 +8,8 @@ import { attestOnChain, subjectFor } from "@/lib/registry"
 import { loadPhishingList, hostOf, checkWebsite, analyzeContract, assessProject } from "@/lib/trustEngine"
 import { getPool } from "@/lib/dbPool"
 import { createUnsubscribeToken } from "@/lib/unsubscribeToken"
+import { APP_KIT_CHAIN, ARC_CHAIN_ID, ARC_CHAIN_NAME, ARC_EXPLORER_API } from "@/lib/constants"
+import { payoutSafetyMessage, payoutsEnabledForActiveNetwork } from "@/lib/payoutSafety"
 import { revalidatePath } from "next/cache"
 
 const pool = getPool()
@@ -92,7 +94,7 @@ async function sendCampaignEmail(campaignId: number, status: "approved" | "rejec
       `SELECT c.title, c.type, c.creator_wallet, c.slug AS campaign_slug, p.email, p.name AS project_name, p.slug AS project_slug
        FROM campaigns c
        LEFT JOIN projects p ON p.owner_wallet = c.creator_wallet AND p.approved = true
-       WHERE c.id = $1
+       WHERE c.id = $1 AND c.chain_id = ${ARC_CHAIN_ID}
        ORDER BY p.created_at DESC LIMIT 1`,
       [campaignId]
     )
@@ -372,7 +374,7 @@ async function sendCampaignUpdateEmail(campaignId: number, campaignTitle: string
       `SELECT c.slug AS campaign_slug, p.email, p.name AS project_name
        FROM campaigns c
        LEFT JOIN projects p ON p.owner_wallet = c.creator_wallet AND p.approved = true
-       WHERE c.id = $1 ORDER BY p.created_at DESC LIMIT 1`,
+       WHERE c.id = $1 AND c.chain_id = ${ARC_CHAIN_ID} ORDER BY p.created_at DESC LIMIT 1`,
       [campaignId]
     )
     const row = res.rows[0]
@@ -458,7 +460,7 @@ async function sendProjectEmail(projectId: number, status: "approved" | "rejecte
           <div style="${label}color:#00b87a;">Listing Approved</div>
           <h1 style="font-size:22px;font-weight:700;margin:10px 0 8px;color:#e8ecff;">${row.name} is now live on ArcLens</h1>
           <p style="font-size:14px;color:#6b7da8;line-height:1.8;margin:0 0 20px;">
-            Your project has been reviewed and approved. It is now publicly listed on the ArcLens Ecosystem Directory and visible to everyone building and exploring on Arc Testnet.
+            Your project has been reviewed and approved. It is now publicly listed on the ArcLens Ecosystem Directory and visible to everyone building and exploring on ${ARC_CHAIN_NAME}.
           </p>
           <p style="font-size:14px;color:#6b7da8;line-height:1.8;margin:0 0 28px;">
             To manage your listing — edit your description, update your logo, links, and project details — you will need to claim your project dashboard first. Click the button below, enter this email address, and we will send you a magic link to access and control your listing directly. Once your wallet is connected from the dashboard, you will not need the magic link again and can sign in directly going forward.
@@ -520,7 +522,7 @@ export async function GET(req: NextRequest) {
       ])
       let contracts: { rows: unknown[] } = { rows: [] }
       try {
-        const c = await pool.query("SELECT * FROM contracts ORDER BY created_at DESC")
+        const c = await pool.query(`SELECT * FROM contracts WHERE chain_id = ${ARC_CHAIN_ID} ORDER BY created_at DESC`)
         contracts = c
       } catch { }
       let pendingUpdates: unknown[] = []
@@ -555,8 +557,8 @@ export async function GET(req: NextRequest) {
                   c.creator_wallet, c.project_name, c.project_logo, c.campaign_logo,
                   c.total_slots, c.expires_at, c.status, c.created_at, c.deposit_tx_hash,
                   c.max_xp_per_completion, c.xp_mode,
-                  (SELECT COUNT(*) FROM campaign_completions WHERE campaign_id = c.id) AS completion_count
-           FROM campaigns c WHERE c.status = 'pending_approval' ORDER BY c.created_at DESC`
+                  (SELECT COUNT(*) FROM campaign_completions WHERE campaign_id = c.id AND chain_id = ${ARC_CHAIN_ID}) AS completion_count
+           FROM campaigns c WHERE c.status = 'pending_approval' AND c.chain_id = ${ARC_CHAIN_ID} ORDER BY c.created_at DESC`
         )
         pendingCampaigns = pc.rows
       } catch { }
@@ -564,7 +566,7 @@ export async function GET(req: NextRequest) {
       try {
         const ac = await pool.query(
           `SELECT id, title, status, creator_wallet, project_name, filled_slots, total_slots, created_at
-           FROM campaigns ORDER BY created_at DESC LIMIT 200`
+           FROM campaigns WHERE chain_id = ${ARC_CHAIN_ID} ORDER BY created_at DESC LIMIT 200`
         )
         allCampaigns = ac.rows
       } catch { }
@@ -623,18 +625,21 @@ export async function POST(req: NextRequest) {
       let refundFailed = false
       if (action === "approve") {
         // Deposit already paid at creation — approve goes straight to active
-        await pool.query("UPDATE campaigns SET status = 'active' WHERE id = $1", [id])
+        await pool.query(`UPDATE campaigns SET status = 'active' WHERE id = $1 AND chain_id = ${ARC_CHAIN_ID}`, [id])
         // Notify the founder AFTER the response — the admin's click shouldn't
         // wait on a Resend round-trip. runAfter (next/server after) is serverless-safe.
         runAfter(() => sendCampaignEmail(id, "approved"))
       } else if (action === "reject") {
         // Refund USDC to founder if campaign was pre-funded
         const camp = await pool.query(
-          "SELECT reward_type, deposit_tx_hash, creator_wallet, reward_usdc_amount, total_slots FROM campaigns WHERE id = $1",
+          `SELECT reward_type, deposit_tx_hash, creator_wallet, reward_usdc_amount, total_slots FROM campaigns WHERE id = $1 AND chain_id = ${ARC_CHAIN_ID}`,
           [id]
         )
         const c = camp.rows[0]
         if (c?.reward_type === "usdc" && c?.deposit_tx_hash && c?.creator_wallet) {
+          if (!payoutsEnabledForActiveNetwork()) {
+            return NextResponse.json({ error: `Cannot reject a funded campaign: ${payoutSafetyMessage()}` }, { status: 503 })
+          }
           try {
             const { AppKit } = await import("@circle-fin/app-kit")
             const kit   = new AppKit()
@@ -649,7 +654,7 @@ export async function POST(req: NextRequest) {
               const { createCircleWalletsAdapter } = await import("@circle-fin/adapter-circle-wallets")
               const adapter = createCircleWalletsAdapter({ apiKey: circleApiKey, entitySecret: circleSecret })
               await kit.send({
-                from:   { adapter: adapter as any, chain: "Arc_Testnet", address: payoutWalletAddr as `0x${string}` },
+                from:   { adapter: adapter as any, chain: APP_KIT_CHAIN as any, address: payoutWalletAddr as `0x${string}` },
                 to:     c.creator_wallet,
                 amount: total,
                 token:  "USDC",
@@ -658,7 +663,7 @@ export async function POST(req: NextRequest) {
               const { createAdapterFromPrivateKey } = await import("@circle-fin/adapter-viem-v2")
               const adapter = await createAdapterFromPrivateKey({ privateKey: payoutPrivKey as `0x${string}` } as any)
               await kit.send({
-                from:   { adapter: adapter as any, chain: "Arc_Testnet" },
+                from:   { adapter: adapter as any, chain: APP_KIT_CHAIN as any },
                 to:     c.creator_wallet,
                 amount: total,
                 token:  "USDC",
@@ -672,7 +677,7 @@ export async function POST(req: NextRequest) {
         }
         const reason = data?.reason?.trim() || null
         await pool.query(
-          "UPDATE campaigns SET status = 'rejected', rejection_reason = $2 WHERE id = $1",
+          `UPDATE campaigns SET status = 'rejected', rejection_reason = $2 WHERE id = $1 AND chain_id = ${ARC_CHAIN_ID}`,
           [id, reason]
         )
         runAfter(() => sendCampaignEmail(id, "rejected", reason || undefined))
@@ -681,11 +686,11 @@ export async function POST(req: NextRequest) {
     }
     if (action === "approve") {
       if (table === "contracts") {
-        await pool.query("UPDATE contracts SET verified = true WHERE address = $1", [id])
+        await pool.query(`UPDATE contracts SET verified = true WHERE address = $1 AND chain_id = ${ARC_CHAIN_ID}`, [id])
         await pool.query(
-          `INSERT INTO contract_names_cache (address, name, verified, flagged)
-           SELECT address, name, verified, flagged FROM contracts WHERE address = $1
-           ON CONFLICT (address) DO UPDATE SET verified = true, updated_at = NOW()`,
+          `INSERT INTO contract_names_cache (address, name, verified, flagged, chain_id)
+           SELECT address, name, verified, flagged, chain_id FROM contracts WHERE address = $1 AND chain_id = ${ARC_CHAIN_ID}
+           ON CONFLICT (chain_id, address) DO UPDATE SET verified = true, updated_at = NOW()`,
           [id]
         )
       } else if (table === "events") {
@@ -699,7 +704,7 @@ export async function POST(req: NextRequest) {
         try {
           const after = (await pool.query(
             `SELECT trust_level, recognition, slug, established,
-                    (SELECT address FROM project_contracts WHERE project_id = projects.id AND verified_at IS NOT NULL AND revoked_at IS NULL LIMIT 1) AS proven
+                    (SELECT address FROM project_contracts WHERE project_id = projects.id AND chain_id = ${ARC_CHAIN_ID} AND verified_at IS NOT NULL AND revoked_at IS NULL LIMIT 1) AS proven
                FROM projects WHERE id = $1`, [id]
           )).rows[0]
           const subject = subjectFor({ provenContract: after?.proven, slug: after?.slug })
@@ -710,8 +715,8 @@ export async function POST(req: NextRequest) {
     }
     if (action === "reject" || action === "delete") {
       if (table === "contracts") {
-        await pool.query("DELETE FROM contracts WHERE address = $1", [id])
-        await pool.query("DELETE FROM contract_names_cache WHERE address = $1", [id])
+        await pool.query(`DELETE FROM contracts WHERE address = $1 AND chain_id = ${ARC_CHAIN_ID}`, [id])
+        await pool.query(`DELETE FROM contract_names_cache WHERE address = $1 AND chain_id = ${ARC_CHAIN_ID}`, [id])
       } else if (table === "events") {
         await pool.query("DELETE FROM events WHERE id = $1", [id])
       } else {
@@ -797,7 +802,7 @@ export async function POST(req: NextRequest) {
       // so an unrelated edit never burns gas. Env-gated no-op until the registry is set.
       const after = (await pool.query(
         `SELECT trust_level, recognition, slug, established,
-                (SELECT address FROM project_contracts WHERE project_id = projects.id AND verified_at IS NOT NULL AND revoked_at IS NULL LIMIT 1) AS proven
+                (SELECT address FROM project_contracts WHERE project_id = projects.id AND chain_id = ${ARC_CHAIN_ID} AND verified_at IS NOT NULL AND revoked_at IS NULL LIMIT 1) AS proven
            FROM projects WHERE id = $1`, [id]
       )).rows[0]
       const subject = subjectFor({ provenContract: after?.proven, slug: after?.slug })
@@ -842,22 +847,22 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true })
     }
     if (action === "delete-campaign") {
-      await pool.query("DELETE FROM campaign_completions WHERE campaign_id = $1", [id])
+      await pool.query(`DELETE FROM campaign_completions WHERE campaign_id = $1 AND chain_id = ${ARC_CHAIN_ID}`, [id])
       await pool.query("DELETE FROM pending_campaign_updates WHERE campaign_id = $1", [id]).catch(() => {})
-      await pool.query("DELETE FROM campaigns WHERE id = $1", [id])
+      await pool.query(`DELETE FROM campaigns WHERE id = $1 AND chain_id = ${ARC_CHAIN_ID}`, [id])
       return NextResponse.json({ success: true })
     }
     // ── Campaign repair actions ──────────────────────────────────────────────
     if (action === "reactivate-campaign") {
-      await pool.query("UPDATE campaigns SET status = 'active' WHERE id = $1", [id])
+      await pool.query(`UPDATE campaigns SET status = 'active' WHERE id = $1 AND chain_id = ${ARC_CHAIN_ID}`, [id])
       return NextResponse.json({ success: true })
     }
     if (action === "sync-slots") {
       // Recalculate filled_slots from actual completions — fixes count drift
       await pool.query(
         `UPDATE campaigns SET filled_slots = (
-           SELECT COUNT(*) FROM campaign_completions WHERE campaign_id = $1
-         ) WHERE id = $1`,
+           SELECT COUNT(*) FROM campaign_completions WHERE campaign_id = $1 AND chain_id = ${ARC_CHAIN_ID}
+         ) WHERE id = $1 AND chain_id = ${ARC_CHAIN_ID}`,
         [id]
       )
       return NextResponse.json({ success: true })
@@ -866,18 +871,18 @@ export async function POST(req: NextRequest) {
       const testerWallet = data?.tester_wallet?.trim()?.toLowerCase()
       if (!testerWallet) return NextResponse.json({ error: "tester_wallet required" }, { status: 400 })
       const del = await pool.query(
-        "DELETE FROM campaign_completions WHERE campaign_id = $1 AND tester_wallet = $2 RETURNING id",
+        `DELETE FROM campaign_completions WHERE campaign_id = $1 AND tester_wallet = $2 AND chain_id = ${ARC_CHAIN_ID} RETURNING id`,
         [id, testerWallet]
       )
       if (del.rowCount) {
-        await pool.query("UPDATE campaigns SET filled_slots = GREATEST(0, filled_slots - 1) WHERE id = $1", [id])
+        await pool.query(`UPDATE campaigns SET filled_slots = GREATEST(0, filled_slots - 1) WHERE id = $1 AND chain_id = ${ARC_CHAIN_ID}`, [id])
       }
       return NextResponse.json({ success: true, removed: del.rowCount })
     }
     if (action === "reset-campaign") {
       // Clear all completions and reset slot count — keeps campaign active
-      await pool.query("DELETE FROM campaign_completions WHERE campaign_id = $1", [id])
-      await pool.query("UPDATE campaigns SET filled_slots = 0, status = 'active' WHERE id = $1", [id])
+      await pool.query(`DELETE FROM campaign_completions WHERE campaign_id = $1 AND chain_id = ${ARC_CHAIN_ID}`, [id])
+      await pool.query(`UPDATE campaigns SET filled_slots = 0, status = 'active' WHERE id = $1 AND chain_id = ${ARC_CHAIN_ID}`, [id])
       return NextResponse.json({ success: true })
     }
     if (action === "approve-campaign-update") {
@@ -887,7 +892,7 @@ export async function POST(req: NextRequest) {
         const ch = u.proposed_changes as Record<string, any>
         const keys = Object.keys(ch)
         const setClauses = keys.map((k, i) => `${k} = $${i + 2}`).join(", ")
-        await pool.query(`UPDATE campaigns SET ${setClauses} WHERE id = $1`, [u.campaign_id, ...keys.map(k => ch[k])])
+        await pool.query(`UPDATE campaigns SET ${setClauses} WHERE id = $1 AND chain_id = ${ARC_CHAIN_ID}`, [u.campaign_id, ...keys.map(k => ch[k])])
         await pool.query(`UPDATE pending_campaign_updates SET status = 'approved' WHERE id = $1`, [id])
         runAfter(() => sendCampaignUpdateEmail(u.campaign_id, u.campaign_title, "approved"))
       }
@@ -983,7 +988,7 @@ export async function POST(req: NextRequest) {
       const proj = (await pool.query(`SELECT id, website, contract, contracts FROM projects WHERE id::text = $1 OR slug = $1`, [String(id)])).rows[0]
       if (!proj) return NextResponse.json({ error: "Project not found" }, { status: 404 })
       const regs = (await pool.query(
-        `SELECT address, role, (verified_at IS NOT NULL) AS verified FROM project_contracts WHERE project_id = $1 AND revoked_at IS NULL`,
+        `SELECT address, role, (verified_at IS NOT NULL) AS verified FROM project_contracts WHERE project_id = $1 AND revoked_at IS NULL AND chain_id = ${ARC_CHAIN_ID}`,
         [proj.id]
       )).rows
       // All listed contracts — registered (proven) + primary + extras, deduped.
@@ -1007,10 +1012,10 @@ export async function POST(req: NextRequest) {
     // caller wallets (real users, not the project's own) + not risk-flagged. The
     // grant itself is manual (set-established), so wash-trading can't auto-earn it.
     if (action === "check-established") {
-      const ARCSCAN = "https://testnet.arcscan.app/api/v2"
+      const ARCSCAN = ARC_EXPLORER_API
       const proj = (await pool.query(
         `SELECT id, contract, owner_wallet, trust_profile,
-                (SELECT address FROM project_contracts WHERE project_id = projects.id AND revoked_at IS NULL LIMIT 1) AS reg
+                (SELECT address FROM project_contracts WHERE project_id = projects.id AND chain_id = ${ARC_CHAIN_ID} AND revoked_at IS NULL LIMIT 1) AS reg
            FROM projects WHERE id::text = $1 OR slug = $1`, [String(id)]
       )).rows[0]
       if (!proj) return NextResponse.json({ error: "Project not found" }, { status: 404 })
@@ -1059,7 +1064,7 @@ export async function POST(req: NextRequest) {
       try {
         const p = (await pool.query(
           `SELECT trust_level, recognition, slug, established,
-                  (SELECT address FROM project_contracts WHERE project_id = projects.id AND verified_at IS NOT NULL AND revoked_at IS NULL LIMIT 1) AS proven
+                  (SELECT address FROM project_contracts WHERE project_id = projects.id AND chain_id = ${ARC_CHAIN_ID} AND verified_at IS NOT NULL AND revoked_at IS NULL LIMIT 1) AS proven
              FROM projects WHERE id::text = $1 OR slug = $1 LIMIT 1`, [String(id)]
         )).rows[0]
         const subject = subjectFor({ provenContract: p?.proven, slug: p?.slug })

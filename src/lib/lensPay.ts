@@ -1,4 +1,6 @@
 import { getPool } from "@/lib/dbPool"
+import { APP_KIT_CHAIN, ARC_CHAIN_ID, CIRCLE_BLOCKCHAIN } from "@/lib/constants"
+import { payoutsEnabledForActiveNetwork } from "@/lib/payoutSafety"
 // src/lib/lensPay.ts
 //
 // The Lens AI nanopayment engine — the heart of the Lepton hackathon build.
@@ -69,7 +71,8 @@ let _usdcTokenId = USDC_TOKEN_ID                                     // resolved
 // Live when the Circle dev-controlled wallet creds are present (own wallet id or
 // a payout address), or a payout private-key fallback. Otherwise we simulate.
 export function payoutsLive(): boolean {
-  return !!((CIRCLE_API_KEY && CIRCLE_ENTITY && (LENS_WALLET_ID || PAYOUT_ADDR)) || PAYOUT_PRIVKEY)
+  return payoutsEnabledForActiveNetwork() &&
+    !!((CIRCLE_API_KEY && CIRCLE_ENTITY && (LENS_WALLET_ID || PAYOUT_ADDR)) || PAYOUT_PRIVKEY)
 }
 
 // ── Premium: pay-per-call (NOT a subscription) ──────────────────────────────
@@ -103,6 +106,7 @@ const MIN_PAYOUT_E6 = Number(process.env.LENS_MIN_PAYOUT_E6 || 100) // $0.0001
 const premiumReady = pool.query(`
   CREATE TABLE IF NOT EXISTS lens_premium (
     id BIGSERIAL PRIMARY KEY, asker_id TEXT, amount_e6 BIGINT NOT NULL, tx_hash TEXT,
+    chain_id BIGINT NOT NULL DEFAULT ${ARC_CHAIN_ID},
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())
 `).catch(e => console.error("[lensPay] premium init:", e?.message || e))
 
@@ -117,7 +121,7 @@ export async function verifyPremiumPayment(proof: string): Promise<boolean> {
 export async function recordPremiumCall(askerId: string | null, amountE6 = PREMIUM_PRICE_E6, txHash: string | null = null): Promise<void> {
   try {
     await premiumReady
-    await pool.query(`INSERT INTO lens_premium (asker_id, amount_e6, tx_hash) VALUES ($1,$2,$3)`, [askerId, amountE6, txHash])
+    await pool.query(`INSERT INTO lens_premium (asker_id, amount_e6, tx_hash, chain_id) VALUES ($1,$2,$3,${ARC_CHAIN_ID})`, [askerId, amountE6, txHash])
   } catch { /* never block the answer on accounting */ }
 }
 
@@ -158,12 +162,13 @@ const tableReady = pool.query(`
     tx_hash         TEXT,
     tx_id           TEXT,
     reason          TEXT,
+    chain_id        BIGINT NOT NULL DEFAULT ${ARC_CHAIN_ID},
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )
 `).then(() => Promise.all([
   pool.query(`ALTER TABLE lens_payouts ADD COLUMN IF NOT EXISTS asker_id TEXT`),
-  pool.query(`CREATE INDEX IF NOT EXISTS lens_payouts_dedup ON lens_payouts (asker_id, builder_wallet, created_at)`),
-  pool.query(`CREATE INDEX IF NOT EXISTS lens_payouts_made  ON lens_payouts (created_at)`),
+  pool.query(`CREATE INDEX IF NOT EXISTS lens_payouts_chain_dedup ON lens_payouts (chain_id, asker_id, builder_wallet, created_at)`),
+  pool.query(`CREATE INDEX IF NOT EXISTS lens_payouts_chain_made ON lens_payouts (chain_id, created_at)`),
 ])).catch(e => console.error("[lensPay] table init:", e?.message || e))
 
 const fmtUsd = (e6: number) => `$${(e6 / 1e6).toFixed(4)}`
@@ -194,8 +199,9 @@ async function daySpentE6(): Promise<number> {
   await tableReady
   const r = await pool.query(
     `SELECT COALESCE(SUM(amount_e6),0)::bigint AS s
-       FROM lens_payouts
-      WHERE status IN ('complete','pending','simulated')
+      FROM lens_payouts
+      WHERE chain_id = ${ARC_CHAIN_ID}
+        AND status IN ('complete','pending','simulated')
         AND created_at > NOW() - INTERVAL '24 hours'`,
   )
   return Number(r.rows[0]?.s || 0)
@@ -230,7 +236,9 @@ export async function payoutForAnswer(args: {
   const r = await pool.query(
     `SELECT slug, name, LOWER(owner_wallet) AS wallet,
             trust_level, recognition, established, logo_url, tagline,
-            tvl_usd_e6::text AS tvl_e6, volume_cum_usd_e6::text AS vol_e6, revenue_cum_usd_e6::text AS rev_e6,
+            CASE WHEN metrics_chain_id = ${ARC_CHAIN_ID} THEN tvl_usd_e6::text ELSE '0' END AS tvl_e6,
+            CASE WHEN metrics_chain_id = ${ARC_CHAIN_ID} THEN volume_cum_usd_e6::text ELSE '0' END AS vol_e6,
+            CASE WHEN metrics_chain_id = ${ARC_CHAIN_ID} THEN revenue_cum_usd_e6::text ELSE '0' END AS rev_e6,
             COALESCE((trust_profile->>'hard_risk')::bool, false) AS hard_risk
        FROM projects
       WHERE approved AND live AND LOWER(slug) = ANY($1::text[])`,
@@ -244,7 +252,8 @@ export async function payoutForAnswer(args: {
   {
     const d = await pool.query(
       `SELECT DISTINCT builder_wallet FROM lens_payouts
-        WHERE asker_id = $1 AND created_at > NOW() - make_interval(hours => $2::int)`,
+        WHERE asker_id = $1 AND chain_id = ${ARC_CHAIN_ID}
+          AND created_at > NOW() - make_interval(hours => $2::int)`,
       [askerId, DEDUP_HOURS],
     )
     for (const row of d.rows) recent.add(String(row.builder_wallet).toLowerCase())
@@ -307,8 +316,8 @@ export async function payoutForAnswer(args: {
     // budget consumed; the builder collects when they connect a wallet.
     if (!p.wallet) {
       await pool.query(
-        `INSERT INTO lens_payouts (conversation_id, asker_id, builder_wallet, project_slug, project_name, trust_label, amount_e6, status, reason)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,'accrued','accrued — pending claim')`,
+        `INSERT INTO lens_payouts (conversation_id, asker_id, builder_wallet, project_slug, project_name, trust_label, amount_e6, status, reason, chain_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,'accrued','accrued — pending claim',${ARC_CHAIN_ID})`,
         [args.conversationId, askerId, dedupKey, p.slug, p.name, label, amount],
       )
       recent.add(dedupKey)
@@ -327,8 +336,8 @@ export async function payoutForAnswer(args: {
     // crash happens mid-settle we never lose a debt — a sweeper can finish it.
     const status0 = live ? "pending" : "simulated"
     const ins = await pool.query<{ id: number }>(
-      `INSERT INTO lens_payouts (conversation_id, asker_id, builder_wallet, project_slug, project_name, trust_label, amount_e6, status, reason)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
+      `INSERT INTO lens_payouts (conversation_id, asker_id, builder_wallet, project_slug, project_name, trust_label, amount_e6, status, reason, chain_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,${ARC_CHAIN_ID}) RETURNING id`,
       [args.conversationId, askerId, p.wallet, p.slug, p.name, label, amount, status0, "grounded answer"],
     )
     const payoutId = ins.rows[0].id
@@ -339,10 +348,10 @@ export async function payoutForAnswer(args: {
       try {
         const res = await sendUsdc(p.wallet, amount)
         txHash = res.txHash; status = res.status
-        await pool.query(`UPDATE lens_payouts SET status=$2, tx_hash=$3, tx_id=$4 WHERE id=$1`, [payoutId, status, txHash, res.txId])
+        await pool.query(`UPDATE lens_payouts SET status=$2, tx_hash=$3, tx_id=$4 WHERE id=$1 AND chain_id=${ARC_CHAIN_ID}`, [payoutId, status, txHash, res.txId])
       } catch (e: any) {
         console.error("[lensPay] send failed:", e?.message || e)
-        await pool.query(`UPDATE lens_payouts SET status='failed', reason=$2 WHERE id=$1`, [payoutId, String(e?.message || e).slice(0, 200)])
+        await pool.query(`UPDATE lens_payouts SET status='failed', reason=$2 WHERE id=$1 AND chain_id=${ARC_CHAIN_ID}`, [payoutId, String(e?.message || e).slice(0, 200)])
         skipped.push({ name: p.name, slug: p.slug, reason: "payment failed (will retry)" })
         continue
       }
@@ -386,7 +395,7 @@ export async function settleAccruedOnClaim(
 
   const rows = (await pool.query<{ id: number; amount_e6: string }>(
     `SELECT id, amount_e6::text FROM lens_payouts
-      WHERE LOWER(project_slug) = $1 AND status = 'accrued'
+      WHERE LOWER(project_slug) = $1 AND status = 'accrued' AND chain_id = ${ARC_CHAIN_ID}
       ORDER BY created_at ASC`,
     [s],
   )).rows
@@ -417,7 +426,7 @@ export async function settleAccruedOnClaim(
       `UPDATE lens_payouts
           SET status = $2, tx_hash = $3, tx_id = $4, builder_wallet = $5,
               reason = 'settled on wallet claim'
-        WHERE id = $1`,
+        WHERE id = $1 AND chain_id = ${ARC_CHAIN_ID}`,
       [row.id, status, txHash, txId, w],
     )
     settled++
@@ -450,7 +459,7 @@ async function sendUsdc(to: string, amountE6: number): Promise<{ txHash: string 
       }
       const tx: any = await client.createTransaction({
         walletId: LENS_WALLET_ID,
-        ...(_usdcTokenId ? { tokenId: _usdcTokenId } : { tokenAddress: USDC_ADDRESS, blockchain: "ARC-TESTNET" }),
+        ...(_usdcTokenId ? { tokenId: _usdcTokenId } : { tokenAddress: USDC_ADDRESS, blockchain: CIRCLE_BLOCKCHAIN }),
         destinationAddress: to,
         amounts: [amount],
         fee: { type: "level", config: { feeLevel: "MEDIUM" } },
@@ -480,11 +489,11 @@ async function sendUsdc(to: string, amountE6: number): Promise<{ txHash: string 
   if (CIRCLE_API_KEY && CIRCLE_ENTITY && PAYOUT_ADDR) {
     const { createCircleWalletsAdapter } = await import("@circle-fin/adapter-circle-wallets")
     const adapter = createCircleWalletsAdapter({ apiKey: CIRCLE_API_KEY, entitySecret: CIRCLE_ENTITY })
-    result = await kit.send({ from: { adapter: adapter as any, chain: "Arc_Testnet", address: PAYOUT_ADDR as `0x${string}` }, to, amount, token: "USDC" })
+    result = await kit.send({ from: { adapter: adapter as any, chain: APP_KIT_CHAIN as any, address: PAYOUT_ADDR as `0x${string}` }, to, amount, token: "USDC" })
   } else {
     const { createAdapterFromPrivateKey } = await import("@circle-fin/adapter-viem-v2")
     const adapter = await createAdapterFromPrivateKey({ privateKey: PAYOUT_PRIVKEY as `0x${string}` } as any)
-    result = await kit.send({ from: { adapter: adapter as any, chain: "Arc_Testnet" }, to, amount, token: "USDC" })
+    result = await kit.send({ from: { adapter: adapter as any, chain: APP_KIT_CHAIN as any }, to, amount, token: "USDC" })
   }
   const txHash = result?.txHash || result?.hash || null
   return { txHash, txId: txHash || "", status: txHash ? "complete" : "pending" }
@@ -505,9 +514,9 @@ export async function getPayoutStats(): Promise<{
         COALESCE(SUM(amount_e6) FILTER (WHERE status='accrued'),0)::bigint credited_total,
         COUNT(DISTINCT builder_wallet) FILTER (WHERE status='accrued')::int builders_credited,
         COUNT(DISTINCT project_slug)::int builders_total
-      FROM lens_payouts WHERE status IN ('complete','pending','simulated','accrued')`),
+      FROM lens_payouts WHERE status IN ('complete','pending','simulated','accrued') AND chain_id = ${ARC_CHAIN_ID}`),
     pool.query(`SELECT project_name, project_slug, amount_e6, tx_hash, status, created_at::text
-                  FROM lens_payouts WHERE status IN ('complete','pending','simulated','accrued')
+                  FROM lens_payouts WHERE status IN ('complete','pending','simulated','accrued') AND chain_id = ${ARC_CHAIN_ID}
                  ORDER BY created_at DESC LIMIT 14`),
   ])
   const a = agg.rows[0] || {}
@@ -542,6 +551,7 @@ export async function getBuilderBoard(limit = 25): Promise<Array<{
        FROM lens_payouts lp
        LEFT JOIN projects p ON p.slug = lp.project_slug
       WHERE lp.status IN ('complete','pending','simulated','accrued') AND lp.project_slug IS NOT NULL
+        AND lp.chain_id = ${ARC_CHAIN_ID}
       GROUP BY lp.project_slug
       ORDER BY earned DESC, cites DESC
       LIMIT $1`,
@@ -561,7 +571,7 @@ export async function getProjectEarnings(slug: string): Promise<{
   const r = await pool.query(
     `SELECT COUNT(*)::int AS cites, COALESCE(SUM(amount_e6),0)::bigint AS earned, MAX(created_at)::text AS last_cited
        FROM lens_payouts
-      WHERE LOWER(project_slug) = LOWER($1) AND status IN ('complete','pending','simulated')`,
+      WHERE LOWER(project_slug) = LOWER($1) AND status IN ('complete','pending','simulated') AND chain_id = ${ARC_CHAIN_ID}`,
     [slug],
   )
   const x = r.rows[0] || {}

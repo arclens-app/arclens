@@ -4,6 +4,7 @@ import { getPool } from "@/lib/dbPool"
 import { validateEmail, validateWebsite, hostFromUrl, domainResolves } from "@/lib/submissionGuards"
 import { extractTags } from "@/lib/projectTags"
 import { sendSubmissionCode, verifySubmissionCode } from "@/lib/submissionOtp"
+import { ARC_CHAIN_ID } from "@/lib/constants"
 
 const pool = getPool()
 
@@ -53,7 +54,14 @@ export async function GET() {
               -- hour) and saves shipping ~300 chars x 310 rows to every visitor.
               description AS description_full,
               category, logo_url,
-              website, twitter, github, discord, contract,
+              website, twitter, github, discord,
+              COALESCE(
+                (SELECT pc.address FROM project_contracts pc
+                  WHERE pc.project_id = projects.id AND pc.chain_id = ${ARC_CHAIN_ID}
+                    AND pc.verified_at IS NOT NULL AND pc.revoked_at IS NULL
+                  ORDER BY pc.created_at ASC LIMIT 1),
+                CASE WHEN ${ARC_CHAIN_ID} = 5042002 THEN projects.contract ELSE NULL END
+              ) AS contract,
               featured, color, launched_at, slug, badge,
               trust_level, recognition, established,
               json_build_object('hard_risk', COALESCE((trust_profile->>'hard_risk')::bool, false)) AS trust_profile,
@@ -65,11 +73,11 @@ export async function GET() {
               -- revenue_ath_day*, volume_ath_day*, tvl_last_indexed_at) are shown
               -- only on the detail page, which fetches them via /api/ecosystem/[id].
               -- Shipping them for all ~300 rows here was pure egress waste.
-              tvl_tracking_enabled,
-              tvl_usd_e6::text          AS tvl_usd_e6,
-              tvl_ath_usd_e6::text      AS tvl_ath_usd_e6,
-              revenue_cum_usd_e6::text  AS revenue_cum_usd_e6,
-              volume_cum_usd_e6::text   AS volume_cum_usd_e6
+              CASE WHEN metrics_chain_id = ${ARC_CHAIN_ID} THEN tvl_tracking_enabled ELSE false END AS tvl_tracking_enabled,
+              CASE WHEN metrics_chain_id = ${ARC_CHAIN_ID} THEN tvl_usd_e6::text END         AS tvl_usd_e6,
+              CASE WHEN metrics_chain_id = ${ARC_CHAIN_ID} THEN tvl_ath_usd_e6::text END     AS tvl_ath_usd_e6,
+              CASE WHEN metrics_chain_id = ${ARC_CHAIN_ID} THEN revenue_cum_usd_e6::text END AS revenue_cum_usd_e6,
+              CASE WHEN metrics_chain_id = ${ARC_CHAIN_ID} THEN volume_cum_usd_e6::text END  AS volume_cum_usd_e6
        FROM projects
        WHERE approved = true AND live = true
        ORDER BY featured DESC, COALESCE(view_count, 0) DESC, created_at DESC`

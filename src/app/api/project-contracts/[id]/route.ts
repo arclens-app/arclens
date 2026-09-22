@@ -14,6 +14,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getSession } from "@/lib/session"
 import { getPool } from "@/lib/dbPool"
+import { ARC_CHAIN_ID } from "@/lib/constants"
 
 const pool = getPool()
 
@@ -33,8 +34,8 @@ export async function PATCH(
     `SELECT pc.id, pc.label, pc.deployer_address, p.owner_wallet
      FROM project_contracts pc
      JOIN projects p ON p.id = pc.project_id
-     WHERE pc.id = $1`,
-    [idNum],
+     WHERE pc.id = $1 AND pc.chain_id = $2`,
+    [idNum, ARC_CHAIN_ID],
   )
   if (r.rows.length === 0) {
     return NextResponse.json({ error: "Not found" }, { status: 404 })
@@ -75,8 +76,8 @@ export async function PATCH(
 
     const labelVal = editable.label != null ? String(editable.label).slice(0, 80) : null
     await pool.query(
-      `UPDATE project_contracts SET label = $2 WHERE id = $1`,
-      [idNum, labelVal],
+      `UPDATE project_contracts SET label = $2 WHERE id = $1 AND chain_id = $3`,
+      [idNum, labelVal, ARC_CHAIN_ID],
     )
     return NextResponse.json({ success: true })
   } catch (e: any) {
@@ -107,8 +108,8 @@ export async function DELETE(
     `SELECT pc.id, pc.deployer_address, p.owner_wallet
      FROM project_contracts pc
      JOIN projects p ON p.id = pc.project_id
-     WHERE pc.id = $1`,
-    [idNum],
+     WHERE pc.id = $1 AND pc.chain_id = $2`,
+    [idNum, ARC_CHAIN_ID],
   )
   if (r.rows.length === 0) {
     return NextResponse.json({ error: "Not found" }, { status: 404 })
@@ -128,8 +129,8 @@ export async function DELETE(
     `UPDATE project_contracts
      SET revoked_at = NOW(),
          revoke_reason = COALESCE(revoke_reason, 'founder-removed')
-     WHERE id = $1`,
-    [idNum],
+     WHERE id = $1 AND chain_id = $2`,
+    [idNum, ARC_CHAIN_ID],
   )
 
   // If this was the last live contract for the project, fully clear the
@@ -137,8 +138,8 @@ export async function DELETE(
   // API don't keep showing stale numbers.
   const projectId = r.rows[0]?.id
     ? (await pool.query(
-        `SELECT project_id FROM project_contracts WHERE id = $1`,
-        [idNum],
+        `SELECT project_id FROM project_contracts WHERE id = $1 AND chain_id = $2`,
+        [idNum, ARC_CHAIN_ID],
       )).rows[0]?.project_id
     : null
   if (projectId) {
@@ -159,10 +160,11 @@ export async function DELETE(
          AND NOT EXISTS (
            SELECT 1 FROM project_contracts pc
            WHERE pc.project_id = p.id
+             AND pc.chain_id = $2
              AND pc.verified_at IS NOT NULL
              AND pc.revoked_at IS NULL
          )`,
-      [projectId],
+      [projectId, ARC_CHAIN_ID],
     )
   }
 

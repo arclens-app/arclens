@@ -2,6 +2,7 @@
 import { useEffect, useState, useRef } from "react"
 import { useParams } from "next/navigation"
 import ArcLayout from "@/components/ArcLayout"
+import { ARC_CHAIN_ID, ARC_CHAIN_NAME } from "@/lib/constants"
 
 function short(a: string) { return a ? a.slice(0,8)+"..."+a.slice(-6) : "" }
 function shortHash(h: string) { return h ? h.slice(0,12)+"..."+h.slice(-6) : "" }
@@ -226,7 +227,7 @@ export default function AddressPage() {
         {/* HEADER */}
         <div style={{ marginBottom:"24px" }}>
           <div style={{ fontSize:"10px", fontFamily:mono, color:t3, letterSpacing:"0.1em", textTransform:"uppercase", marginBottom:"10px" }}>
-            {isContract ? "Smart Contract" : "Wallet Address"} · Arc Testnet
+            {isContract ? "Smart Contract" : "Wallet Address"} · {ARC_CHAIN_NAME}
           </div>
 
           {contractName && <div style={{ fontSize:"22px", fontWeight:700, letterSpacing:"-0.04em", color:t1, marginBottom:"10px" }}>{contractName}</div>}
@@ -257,7 +258,7 @@ export default function AddressPage() {
             <div style={{ background:surf, padding:"16px 24px", minWidth:"140px" }}>
               <div style={{ fontSize:"9px", fontFamily:mono, color:t3, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:"8px" }}>Transactions</div>
               <div style={{ fontSize:"24px", fontWeight:700, letterSpacing:"-0.04em", color:"#8aaeff" }}>{loading?"...":txCount||"—"}</div>
-              <div style={{ fontSize:"9.5px", fontFamily:mono, color:t3, marginTop:"4px" }}>on Arc Testnet</div>
+              <div style={{ fontSize:"9.5px", fontFamily:mono, color:t3, marginTop:"4px" }}>on {ARC_CHAIN_NAME}</div>
             </div>
             <div style={{ width:"1px", background:bdr }}/>
             {/* Type */}
@@ -302,7 +303,7 @@ export default function AddressPage() {
             ) : txs.length === 0 ? (
               <div style={{ padding:"48px", textAlign:"center" }}>
                 <div style={{ fontSize:"13px", fontWeight:500, marginBottom:"6px", color:t1 }}>No transactions yet</div>
-                <div style={{ fontSize:"11px", fontFamily:mono, color:t3 }}>This address has no recorded transactions on Arc Testnet</div>
+                <div style={{ fontSize:"11px", fontFamily:mono, color:t3 }}>This address has no recorded transactions on {ARC_CHAIN_NAME}</div>
               </div>
             ) : txs.map((tx, i) => (
               <div key={tx.hash+i}
@@ -396,7 +397,7 @@ export default function AddressPage() {
               {[
                 { label:"Full Address",   value:addr },
                 { label:"Account Type",   value:isContract?"Smart Contract":"Wallet (user account)" },
-                { label:"Network",        value:"Arc Testnet (Chain ID 5042002)" },
+                { label:"Network",        value:`${ARC_CHAIN_NAME} (Chain ID ${ARC_CHAIN_ID})` },
                 { label:"USDC Balance",   value:usdcBal },
                 { label:"Transactions",   value:txCount||"—" },
                 ...(contractName?[{ label:"Contract Name", value:contractName }]:[]),

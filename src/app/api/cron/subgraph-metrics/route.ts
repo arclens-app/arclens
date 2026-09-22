@@ -11,6 +11,7 @@
 
 import { NextRequest, NextResponse } from "next/server"
 import { getPool } from "@/lib/dbPool"
+import { ARC_CHAIN_ID } from "@/lib/constants"
 
 export const runtime = "nodejs"
 export const maxDuration = 60
@@ -76,7 +77,8 @@ export async function GET(req: NextRequest) {
               subgraph_source_ts_path, subgraph_series_query, subgraph_series_path,
               subgraph_series_x, subgraph_series_y
        FROM projects
-       WHERE subgraph_url IS NOT NULL AND subgraph_url <> '' AND approved AND live`,
+       WHERE subgraph_url IS NOT NULL AND subgraph_url <> '' AND approved AND live
+         AND subgraph_chain_id = ${ARC_CHAIN_ID}`,
     )).rows
     stats.configured = rows.length
 
@@ -113,8 +115,9 @@ export async function GET(req: NextRequest) {
              subgraph_volume_usd_e6 = COALESCE($3, subgraph_volume_usd_e6),
              subgraph_source_ts     = COALESCE($4, subgraph_source_ts),
              subgraph_series        = COALESCE($5::jsonb, subgraph_series),
-             subgraph_updated_at    = NOW()
-           WHERE id = $1`,
+             subgraph_updated_at    = NOW(),
+             subgraph_chain_id      = ${ARC_CHAIN_ID}
+           WHERE id = $1 AND subgraph_chain_id = ${ARC_CHAIN_ID}`,
           [
             p.id,
             tvlE6?.toString() ?? null,

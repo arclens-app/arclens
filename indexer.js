@@ -1,7 +1,9 @@
 "use strict";
 const { Pool } = require("pg");
 
-const ARC_RPC = process.env.ARC_RPC_HTTP || "https://testnet.arcscan.app/api/eth-rpc";
+const ARC_NETWORK = (process.env.ARC_NETWORK || process.env.NEXT_PUBLIC_ARC_NETWORK || "testnet").toLowerCase() === "mainnet" ? "mainnet" : "testnet";
+const ARC_CHAIN_ID = ARC_NETWORK === "mainnet" ? 5042 : 5042002;
+const ARC_RPC = process.env.ARC_RPC_HTTP || (ARC_NETWORK === "mainnet" ? "https://rpc.mainnet.arc.io" : "https://rpc.testnet.arc.io");
 const DATABASE_URL = process.env.DATABASE_URL || "";
 const POLL_INTERVAL = 2000;
 const BATCH_SIZE = 5;
@@ -21,7 +23,8 @@ async function rpc(method, params = []) {
 async function ensureSchema() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS indexed_transactions (
-      hash         TEXT PRIMARY KEY,
+      chain_id     INTEGER NOT NULL DEFAULT 5042002,
+      hash         TEXT NOT NULL,
       block_number BIGINT NOT NULL,
       block_time   TIMESTAMPTZ NOT NULL,
       from_addr    TEXT NOT NULL,
@@ -32,28 +35,29 @@ async function ensureSchema() {
       status       TEXT DEFAULT 'confirmed',
       is_usdc_xfer BOOLEAN DEFAULT false,
       usdc_amount  NUMERIC,
-      usdc_to      TEXT
+      usdc_to      TEXT,
+      PRIMARY KEY (chain_id, hash)
     );
-    CREATE INDEX IF NOT EXISTS idx_itx_from  ON indexed_transactions (from_addr);
-    CREATE INDEX IF NOT EXISTS idx_itx_to    ON indexed_transactions (to_addr);
-    CREATE INDEX IF NOT EXISTS idx_itx_block ON indexed_transactions (block_number DESC);
+    CREATE INDEX IF NOT EXISTS idx_itx_from  ON indexed_transactions (chain_id, from_addr);
+    CREATE INDEX IF NOT EXISTS idx_itx_to    ON indexed_transactions (chain_id, to_addr);
+    CREATE INDEX IF NOT EXISTS idx_itx_block ON indexed_transactions (chain_id, block_number DESC);
     CREATE TABLE IF NOT EXISTS indexer_state (
       key   TEXT PRIMARY KEY,
       value TEXT NOT NULL
     );
-    INSERT INTO indexer_state (key, value) VALUES ('last_block', '0')
+    INSERT INTO indexer_state (key, value) VALUES ('last_block:${ARC_CHAIN_ID}', '0')
     ON CONFLICT (key) DO NOTHING;
   `);
-  console.log("[Indexer] Schema ready");
+  console.log(`[Indexer] Schema ready for Arc ${ARC_NETWORK} (${ARC_CHAIN_ID})`);
 }
 
 async function getLastBlock() {
-  const res = await pool.query("SELECT value FROM indexer_state WHERE key = 'last_block'");
+  const res = await pool.query("SELECT value FROM indexer_state WHERE key = $1", [`last_block:${ARC_CHAIN_ID}`]);
   return parseInt(res.rows[0]?.value || "0");
 }
 
 async function setLastBlock(n) {
-  await pool.query("UPDATE indexer_state SET value = $1 WHERE key = 'last_block'", [n.toString()]);
+  await pool.query("UPDATE indexer_state SET value = $1 WHERE key = $2", [n.toString(), `last_block:${ARC_CHAIN_ID}`]);
 }
 
 const USDC_CONTRACT = "0x3600000000000000000000000000000000000000";
@@ -82,6 +86,7 @@ async function indexBlock(blockNumber) {
     const decoded  = isUSDC ? decodeUSDC(tx.input) : null;
 
     rows.push([
+      ARC_CHAIN_ID,
       tx.hash,
       blockNum,
       blockTime,
@@ -100,15 +105,15 @@ async function indexBlock(blockNumber) {
   if (rows.length === 0) return 0;
 
   const placeholders = rows.map((_, i) => {
-    const b = i * 12;
-    return `($${b+1},$${b+2},$${b+3},$${b+4},$${b+5},$${b+6},$${b+7},$${b+8},$${b+9},$${b+10},$${b+11},$${b+12})`;
+    const b = i * 13;
+    return `($${b+1},$${b+2},$${b+3},$${b+4},$${b+5},$${b+6},$${b+7},$${b+8},$${b+9},$${b+10},$${b+11},$${b+12},$${b+13})`;
   }).join(",");
 
   await pool.query(
     `INSERT INTO indexed_transactions
-       (hash,block_number,block_time,from_addr,to_addr,value_raw,gas_used,gas_price,status,is_usdc_xfer,usdc_amount,usdc_to)
+       (chain_id,hash,block_number,block_time,from_addr,to_addr,value_raw,gas_used,gas_price,status,is_usdc_xfer,usdc_amount,usdc_to)
      VALUES ${placeholders}
-     ON CONFLICT (hash) DO NOTHING`,
+     ON CONFLICT (chain_id, hash) DO NOTHING`,
     rows.flat()
   );
 

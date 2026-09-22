@@ -18,7 +18,7 @@ import { ethers } from "ethers"
 import crypto from "crypto"
 import { enforce } from "@/lib/ratelimit"
 import { getSession } from "@/lib/session"
-import { ARC_RPC_HTTP } from "@/lib/constants"
+import { ARC_CHAIN_ID, ARC_EXPLORER_API, ARC_RPC_HTTP } from "@/lib/constants"
 import { canonicalEventSignature, dataArgTypes } from "@/lib/tvl"
 import { getPool } from "@/lib/dbPool"
 import {
@@ -30,7 +30,7 @@ import {
 
 const pool = getPool()
 
-const ARCSCAN = "https://testnet.arcscan.app/api/v2"
+const ARCSCAN = ARC_EXPLORER_API
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
 async function fetchDeployer(addr: string): Promise<string | null> {
@@ -192,9 +192,9 @@ export async function GET(req: NextRequest) {
       `SELECT id, project_id, address, role, label, start_block,
               deployer_address, verified_at, revoked_at, revoke_reason, created_at
        FROM project_contracts
-       WHERE project_id = $1
+       WHERE project_id = $1 AND chain_id = $2
        ORDER BY created_at DESC`,
-      [project.id],
+      [project.id, ARC_CHAIN_ID],
     )
     return NextResponse.json({ contracts: r.rows })
   } catch (e) {
@@ -360,8 +360,8 @@ export async function POST(req: NextRequest) {
     if (payload.role === "volume") {
       volumeMethodFinal = payload.volume_method === "outflow_transfer" ? "outflow_transfer" : "swap_event"
       const scRes = await pool.query(
-        `SELECT id FROM stablecoins WHERE id = $1 AND active = true`,
-        [payload.volume_stablecoin_id],
+        `SELECT id FROM stablecoins WHERE id = $1 AND active = true AND chain_id = $2`,
+        [payload.volume_stablecoin_id, ARC_CHAIN_ID],
       )
       if (scRes.rows.length === 0) {
         return NextResponse.json({ error: "volume_stablecoin_id not in active registry" }, { status: 400 })
@@ -398,9 +398,9 @@ export async function POST(req: NextRequest) {
       `INSERT INTO project_contracts
          (project_id, address, role, label, start_block,
           deployer_address, signed_message, deployer_sig, verified_at,
-          volume_method, volume_event_signature, volume_event_topic, volume_amount_arg, volume_stablecoin_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), $9, $10, $11, $12, $13)
-       ON CONFLICT (project_id, address, role) DO UPDATE SET
+          volume_method, volume_event_signature, volume_event_topic, volume_amount_arg, volume_stablecoin_id, chain_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), $9, $10, $11, $12, $13, $14)
+       ON CONFLICT (chain_id, project_id, address, role) DO UPDATE SET
          label                  = COALESCE(EXCLUDED.label, project_contracts.label),
          start_block            = EXCLUDED.start_block,
          revoked_at             = NULL,
@@ -426,6 +426,7 @@ export async function POST(req: NextRequest) {
         payload.role === "volume" && volumeMethodFinal === "swap_event" ? volumeTopic : null,
         payload.role === "volume" && volumeMethodFinal === "swap_event" ? payload.volume_amount_arg ?? null : null,
         payload.role === "volume" ? payload.volume_stablecoin_id ?? null : null,
+        ARC_CHAIN_ID,
       ],
     )
 

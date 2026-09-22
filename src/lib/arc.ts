@@ -7,6 +7,7 @@ import {
   ARC_RPC_HTTP,
   ARC_RPC_WS,
   ARC_CHAIN_ID,
+  ARC_NETWORK,
   USDC_ADDRESS,
   formatUSDC,
 } from "./constants"
@@ -18,7 +19,7 @@ export function getProvider(): ethers.JsonRpcProvider {
   if (!_httpProvider) {
     _httpProvider = new ethers.JsonRpcProvider(ARC_RPC_HTTP, {
       chainId: ARC_CHAIN_ID,
-      name:    "arc-testnet",
+      name:    `arc-${ARC_NETWORK}`,
     })
   }
   return _httpProvider
@@ -28,10 +29,13 @@ export function getProvider(): ethers.JsonRpcProvider {
 let _wsProvider: ethers.WebSocketProvider | null = null
 
 export function getWsProvider(): ethers.WebSocketProvider {
+  if (!ARC_RPC_WS) {
+    throw new Error(`No WebSocket RPC is configured for Arc ${ARC_NETWORK}`)
+  }
   if (!_wsProvider) {
     _wsProvider = new ethers.WebSocketProvider(ARC_RPC_WS, {
       chainId: ARC_CHAIN_ID,
-      name:    "arc-testnet",
+      name:    `arc-${ARC_NETWORK}`,
     })
 
     ;(_wsProvider.websocket as WebSocket).addEventListener("close", () => {

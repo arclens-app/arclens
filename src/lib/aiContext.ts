@@ -6,6 +6,7 @@
 import type { SessionData } from "@/lib/session"
 import { getPool } from "@/lib/dbPool"
 import { rateLimit } from "@/lib/ratelimit"
+import { ARC_CHAIN_ID } from "@/lib/constants"
 
 const pool = getPool()
 
@@ -117,7 +118,7 @@ export async function inferRole(route: string, session: SessionData | null): Pro
 
   // Tester check — has the wallet completed any campaigns?
   const tr = await pool.query(
-    `SELECT 1 FROM campaign_completions WHERE LOWER(tester_wallet) = $1 LIMIT 1`,
+    `SELECT 1 FROM campaign_completions WHERE LOWER(tester_wallet) = $1 AND chain_id = ${ARC_CHAIN_ID} LIMIT 1`,
     [session.addr.toLowerCase()],
   )
   if (tr.rowCount && tr.rowCount > 0) return "tester"
@@ -137,9 +138,11 @@ export async function loadPageData(route: string): Promise<Record<string, any> |
     if (projMatch) {
       const slug = projMatch[1]
       const r = await pool.query(
-        `SELECT id, slug, name, tagline, category, tvl_tracking_enabled,
-                tvl_usd_e6::text AS tvl_usd_e6, volume_cum_usd_e6::text AS volume_cum_usd_e6,
-                revenue_cum_usd_e6::text AS revenue_cum_usd_e6
+        `SELECT id, slug, name, tagline, category,
+                (tvl_tracking_enabled AND metrics_chain_id = ${ARC_CHAIN_ID}) AS tvl_tracking_enabled,
+                CASE WHEN metrics_chain_id = ${ARC_CHAIN_ID} THEN tvl_usd_e6::text ELSE '0' END AS tvl_usd_e6,
+                CASE WHEN metrics_chain_id = ${ARC_CHAIN_ID} THEN volume_cum_usd_e6::text ELSE '0' END AS volume_cum_usd_e6,
+                CASE WHEN metrics_chain_id = ${ARC_CHAIN_ID} THEN revenue_cum_usd_e6::text ELSE '0' END AS revenue_cum_usd_e6
          FROM projects
          WHERE (slug = $1 OR id::text = $1) AND approved = true AND live = true
          LIMIT 1`,
@@ -157,7 +160,7 @@ export async function loadPageData(route: string): Promise<Record<string, any> |
         `SELECT id, slug, title, tagline, status, total_slots, filled_slots,
                 reward_type, reward_usdc_amount, ended_at, ended_reason
          FROM campaigns
-         WHERE ${isNumeric ? "id = $1" : "slug = $1"}
+         WHERE ${isNumeric ? "id = $1" : "slug = $1"} AND chain_id = ${ARC_CHAIN_ID}
          LIMIT 1`,
         [isNumeric ? Number(id) : id],
       )

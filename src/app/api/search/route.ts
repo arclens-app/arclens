@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { enforce } from "@/lib/ratelimit"
+import { ARC_CHAIN_NAME } from "@/lib/constants"
 
 export async function POST(req: NextRequest) {
   const blocked = await enforce(req, "search", { limit: 60, windowMs: 60_000 })
@@ -12,7 +13,7 @@ export async function POST(req: NextRequest) {
         intent: "",
         target: null,
         filter: "recent_transfers",
-        explanation: "Showing recent USDC transfers on Arc Testnet.",
+        explanation: `Showing recent USDC transfers on ${ARC_CHAIN_NAME}.`,
         suggestions: ["bridge activity", "large USDC transfers", "top USDC holders"],
       })
     }
@@ -21,23 +22,23 @@ export async function POST(req: NextRequest) {
     // here but it added latency without measurable value — removed.)
     const q = query.toLowerCase()
     let filter = "recent_transfers"
-    let explanation = "Showing recent USDC transfers on Arc Testnet."
+    let explanation = `Showing recent USDC transfers on ${ARC_CHAIN_NAME}.`
 
     if (q.includes("bridge") || q.includes("cross-chain")) {
       filter = "bridge"
-      explanation = "Showing recent CCTP V2 bridge activity to and from Arc Testnet."
+      explanation = `Showing recent CCTP V2 bridge activity to and from ${ARC_CHAIN_NAME}.`
     } else if (q.includes("large") || q.includes("whale") || q.includes("big")) {
       filter = "large_transfers"
-      explanation = "Showing the largest USDC transfers on Arc Testnet."
+      explanation = `Showing the largest USDC transfers on ${ARC_CHAIN_NAME}.`
     } else if (q.includes("holder") || q.includes("rich") || q.includes("top wallet")) {
       filter = "top_holders"
-      explanation = "Showing the top USDC holders on Arc Testnet."
+      explanation = `Showing the top USDC holders on ${ARC_CHAIN_NAME}.`
     } else if (q.includes("deploy") || q.includes("contract") || q.includes("new")) {
       filter = "contract_deploys"
-      explanation = "Showing recent smart contract deployments on Arc Testnet."
+      explanation = `Showing recent smart contract deployments on ${ARC_CHAIN_NAME}.`
     } else if (q.includes("whale") || q.includes("active")) {
       filter = "whale_wallets"
-      explanation = "Showing the most active wallets on Arc Testnet."
+      explanation = `Showing the most active wallets on ${ARC_CHAIN_NAME}.`
     }
 
     return NextResponse.json({
@@ -55,7 +56,7 @@ export async function POST(req: NextRequest) {
       intent: "",
       target: null,
       filter: "recent_transfers",
-      explanation: "Showing recent USDC transfers on Arc Testnet.",
+      explanation: `Showing recent USDC transfers on ${ARC_CHAIN_NAME}.`,
       suggestions: ["bridge activity", "large USDC transfers", "top USDC holders"],
     })
   }

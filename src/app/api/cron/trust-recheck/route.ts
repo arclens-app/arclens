@@ -14,6 +14,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { loadPhishingList, hostOf, checkWebsite, analyzeContract, assessProject, type ContractRow } from "@/lib/trustEngine"
 import { attestOnChain, revokeOnChain, subjectFor } from "@/lib/registry"
 import { getPool } from "@/lib/dbPool"
+import { ARC_CHAIN_ID } from "@/lib/constants"
 
 const pool = getPool()
 
@@ -39,7 +40,7 @@ export async function GET(req: NextRequest) {
     // All non-revoked contracts, grouped by project (one query, not N).
     const pc = (await pool.query(
       `SELECT project_id, address, role, (verified_at IS NOT NULL) AS verified
-         FROM project_contracts WHERE revoked_at IS NULL`
+         FROM project_contracts WHERE revoked_at IS NULL AND chain_id = ${ARC_CHAIN_ID}`
     )).rows
     const byProject = new Map<number, ContractRow[]>()
     for (const r of pc) {

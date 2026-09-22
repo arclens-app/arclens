@@ -12,6 +12,7 @@
 
 import { NextRequest, NextResponse } from "next/server"
 import { getPool } from "@/lib/dbPool"
+import { ARC_CHAIN_ID } from "@/lib/constants"
 
 const pool = getPool()
 
@@ -45,6 +46,7 @@ export async function GET(
        FROM projects
        WHERE (slug = $1 OR id::text = $1)
          AND approved = true AND live = true
+         AND metrics_chain_id = ${ARC_CHAIN_ID}
        LIMIT 1`,
       [slug],
     )
@@ -66,7 +68,7 @@ export async function GET(
          SELECT block_number, block_time, total_usd_e6::text AS total_usd_e6,
                 ROW_NUMBER() OVER (ORDER BY block_number ASC) AS rn,
                 COUNT(*)     OVER ()                          AS n
-         FROM tvl_snapshots WHERE project_id = $1
+         FROM tvl_snapshots WHERE project_id = $1 AND chain_id = ${ARC_CHAIN_ID}
        )
        SELECT block_number, block_time, total_usd_e6
        FROM s
@@ -77,12 +79,12 @@ export async function GET(
 
     const revenueSeries = await pool.query(
       `SELECT day::text, total_usd_e6::text, event_count
-       FROM revenue_daily WHERE project_id = $1 ORDER BY day ASC`,
+       FROM revenue_daily WHERE project_id = $1 AND chain_id = ${ARC_CHAIN_ID} ORDER BY day ASC`,
       [p.id],
     )
     const volumeSeries = await pool.query(
       `SELECT day::text, total_usd_e6::text, event_count
-       FROM volume_daily WHERE project_id = $1 ORDER BY day ASC`,
+       FROM volume_daily WHERE project_id = $1 AND chain_id = ${ARC_CHAIN_ID} ORDER BY day ASC`,
       [p.id],
     )
 
@@ -92,8 +94,9 @@ export async function GET(
               pc.volume_event_signature, pc.volume_amount_arg,
               s.symbol AS volume_stablecoin
        FROM project_contracts pc
-       LEFT JOIN stablecoins s ON s.id = pc.volume_stablecoin_id
+       LEFT JOIN stablecoins s ON s.id = pc.volume_stablecoin_id AND s.chain_id = ${ARC_CHAIN_ID}
        WHERE pc.project_id = $1
+         AND pc.chain_id = ${ARC_CHAIN_ID}
          AND pc.verified_at IS NOT NULL
          AND pc.revoked_at IS NULL
        ORDER BY pc.role, pc.id`,

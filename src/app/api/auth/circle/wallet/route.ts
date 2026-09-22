@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server"
 import { enforce } from "@/lib/ratelimit"
 import { readOtpProof, attachSessionCookie } from "@/lib/session"
 import { getPool } from "@/lib/dbPool"
+import { ARC_CHAIN_ID, CIRCLE_BLOCKCHAIN } from "@/lib/constants"
+import { getCircleEnvironmentError } from "@/lib/circleEnvironment"
+import { promoteCircleWallet } from "@/lib/accountIdentity"
 
 const pool = getPool()
 const BASE = "https://api.circle.com"
@@ -18,6 +21,8 @@ function apiHeaders(userToken?: string) {
 export async function POST(req: NextRequest) {
   const blocked = await enforce(req, "circle-wallet", { limit: 30, windowMs: 60_000 })
   if (blocked) return blocked
+  const environmentError = getCircleEnvironmentError()
+  if (environmentError) return NextResponse.json({ error: environmentError }, { status: 503 })
   try {
     const { email } = await req.json()
     if (!email) return NextResponse.json({ error: "Email required" }, { status: 400 })
@@ -27,8 +32,8 @@ export async function POST(req: NextRequest) {
     }
 
     const row = await pool.query(
-      "SELECT circle_user_id, wallet_id, wallet_address FROM circle_wallet_users WHERE email = $1",
-      [lower]
+      "SELECT circle_user_id, wallet_id, wallet_address FROM circle_wallet_users WHERE email = $1 AND chain_id = $2",
+      [lower, ARC_CHAIN_ID]
     )
     if (!row.rows.length)
       return NextResponse.json({ error: "User not found" }, { status: 404 })
@@ -36,6 +41,7 @@ export async function POST(req: NextRequest) {
     // Cached already
     if (row.rows[0].wallet_address) {
       const addr = String(row.rows[0].wallet_address).toLowerCase()
+      await promoteCircleWallet(lower, addr)
       const res  = NextResponse.json({ address: addr })
       // Only mint a session when this same browser just proved the email via OTP.
       // (Returning the address itself is harmless — wallet addresses are public.)
@@ -57,7 +63,7 @@ export async function POST(req: NextRequest) {
     }
     const { userToken } = tokenData.data
 
-    const walletsRes  = await fetch(`${BASE}/v1/w3s/wallets?pageSize=1`, { headers: apiHeaders(userToken) })
+    const walletsRes  = await fetch(`${BASE}/v1/w3s/wallets?blockchain=${encodeURIComponent(CIRCLE_BLOCKCHAIN)}&pageSize=1`, { headers: apiHeaders(userToken) })
     const walletsData = await walletsRes.json()
     if (!walletsRes.ok) {
       console.error("[circle/wallet] wallets:", walletsData)
@@ -73,9 +79,10 @@ export async function POST(req: NextRequest) {
 
     // Cache address + wallet_id for future operations
     await pool.query(
-      "UPDATE circle_wallet_users SET wallet_address=$1, wallet_id=$2 WHERE email=$3",
-      [address, walletId, lower]
+      "UPDATE circle_wallet_users SET wallet_address=$1, wallet_id=$2 WHERE email=$3 AND chain_id=$4",
+      [address, walletId, lower, ARC_CHAIN_ID]
     )
+    await promoteCircleWallet(lower, address)
 
     const res = NextResponse.json({ address })
     attachSessionCookie(res, { addr: address, type: "circle" })
