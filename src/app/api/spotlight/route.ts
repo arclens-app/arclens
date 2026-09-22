@@ -14,33 +14,59 @@ import { getPool } from "@/lib/dbPool"
 
 const pool = getPool()
 
-const tableReady = pool.query(`
-  CREATE TABLE IF NOT EXISTS spotlight_items (
-    id          BIGSERIAL PRIMARY KEY,
-    kind        TEXT NOT NULL DEFAULT 'custom',   -- campaign | event | project | custom
-    title       TEXT NOT NULL,
-    subtitle    TEXT,
-    image_url   TEXT,
-    link_url    TEXT,
-    cta_text    TEXT,
-    accent      TEXT,
-    project_id  BIGINT,
-    status      TEXT NOT NULL DEFAULT 'pending',  -- pending | active | rejected
-    priority    INT  NOT NULL DEFAULT 0,
-    starts_at   TIMESTAMPTZ,
-    ends_at     TIMESTAMPTZ,
-    created_by  TEXT,
-    image_pos   TEXT,                                -- CSS object-position focal point
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
-  )
-`).then(() => pool.query(`ALTER TABLE spotlight_items ADD COLUMN IF NOT EXISTS image_pos TEXT`))
-  .catch(e => console.error("[spotlight] table init:", e?.message || e))
+let tableReady: Promise<unknown> | null = null
+
+function ensureTable(): Promise<unknown> {
+  if (!tableReady) {
+    tableReady = pool.query(`
+      CREATE TABLE IF NOT EXISTS spotlight_items (
+        id          BIGSERIAL PRIMARY KEY,
+        kind        TEXT NOT NULL DEFAULT 'custom',   -- campaign | event | project | custom
+        title       TEXT NOT NULL,
+        subtitle    TEXT,
+        image_url   TEXT,
+        link_url    TEXT,
+        cta_text    TEXT,
+        accent      TEXT,
+        project_id  BIGINT,
+        status      TEXT NOT NULL DEFAULT 'pending',  -- pending | active | rejected
+        priority    INT  NOT NULL DEFAULT 0,
+        starts_at   TIMESTAMPTZ,
+        ends_at     TIMESTAMPTZ,
+        created_by  TEXT,
+        image_pos   TEXT,                             -- CSS object-position focal point
+        created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `).then(() => pool.query(`ALTER TABLE spotlight_items ADD COLUMN IF NOT EXISTS image_pos TEXT`))
+      .catch(e => console.error("[spotlight] table init:", e?.message || e))
+  }
+  return tableReady
+}
 
 // Public: the live items for the rotating banner. Trust-gated — a project-backed
 // item only shows while that project is approved, live, and NOT risk-flagged.
-export async function GET() {
+export async function GET(req: NextRequest) {
+  // The public feed has no query options. Accepting ignored query strings lets
+  // an attacker manufacture unlimited CDN cache keys (`?x=1`, `?x=2`, ...),
+  // forcing a fresh function + Postgres read for every variation. Reject them
+  // before either the rate-limit table or spotlight table is touched.
+  if (req.nextUrl.searchParams.size > 0) {
+    return NextResponse.json(
+      { error: "Query parameters are not supported" },
+      { status: 400, headers: { "Cache-Control": "no-store" } },
+    )
+  }
+
+  // This normally runs only when the canonical CDN entry is cold. It is a
+  // second line of defence if the edge cache is deliberately bypassed.
+  const blocked = await enforce(req, "spotlight-read", { limit: 30, windowMs: 60_000 })
+  if (blocked) {
+    blocked.headers.set("Cache-Control", "no-store")
+    return blocked
+  }
+
   try {
-    await tableReady
+    await ensureTable()
     const r = await pool.query(
       `SELECT s.id, s.kind, s.title, s.subtitle, s.image_url, s.image_pos, s.link_url, s.cta_text, s.accent
          FROM spotlight_items s
@@ -82,7 +108,7 @@ export async function POST(req: NextRequest) {
   if (!slug) return NextResponse.json({ error: "Which project is this for?" }, { status: 400 })
 
   try {
-    await tableReady
+    await ensureTable()
     // Auth: magic-link token OR a signed-in wallet that owns the project.
     let projectId: number | null = null
     let createdBy = ""

@@ -14,13 +14,20 @@ import { getPool } from "@/lib/dbPool"
 
 const pool = getPool()
 
-const tableReady = pool.query(`
-  CREATE TABLE IF NOT EXISTS rate_limits (
-    key          TEXT PRIMARY KEY,
-    count        INTEGER     NOT NULL DEFAULT 0,
-    window_start TIMESTAMPTZ NOT NULL DEFAULT NOW()
-  )
-`).catch(e => console.error("[ratelimit] init:", e))
+let tableReady: Promise<unknown> | null = null
+
+function ensureTable(): Promise<unknown> {
+  if (!tableReady) {
+    tableReady = pool.query(`
+      CREATE TABLE IF NOT EXISTS rate_limits (
+        key          TEXT PRIMARY KEY,
+        count        INTEGER     NOT NULL DEFAULT 0,
+        window_start TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `).catch(e => console.error("[ratelimit] init:", e))
+  }
+  return tableReady
+}
 
 export interface RateLimitResult {
   allowed:   boolean
@@ -41,7 +48,7 @@ export async function rateLimit(
   windowMs: number
 ): Promise<RateLimitResult> {
   try {
-    await tableReady
+    await ensureTable()
     const windowSec = Math.max(1, Math.floor(windowMs / 1000))
     const bucket    = Math.floor(Date.now() / 1000 / windowSec)
     const bucketKey = `${key}:${bucket}`

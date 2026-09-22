@@ -7,6 +7,56 @@ import { SpotlightCard } from "@/components/Spotlight"
 const CATEGORIES = ["Infrastructure","DeFi","AI","Payments","NFT","Gaming","Social","Developer Tools","Bridge","Identity","Wallet","Exchange","Lending","Analytics","Other"]
 const BADGES = ["", "official", "verified", "claimed"]
 
+const ADMIN_RESPONSIVE_CSS = `
+  .admin-mobile-bar, .admin-drawer-backdrop { display: none; }
+  @media (max-width: 820px) {
+    .admin-shell { display: block !important; min-height: 100dvh !important; }
+    .admin-mobile-bar {
+      position: sticky; top: 0; z-index: 90; display: flex; align-items: center;
+      gap: 10px; min-height: 58px; padding: 8px 12px;
+      background: var(--surf, #0a0e1a);
+      background: color-mix(in srgb, var(--surf, #0a0e1a) 94%, transparent);
+      border-bottom: 1px solid var(--bdr, rgba(255,255,255,0.06));
+      backdrop-filter: blur(16px);
+    }
+    .admin-menu-button {
+      width: 40px; height: 40px; flex: 0 0 40px; display: inline-flex;
+      align-items: center; justify-content: center; border-radius: 9px;
+      border: 1px solid var(--bdr, rgba(255,255,255,0.08));
+      background: var(--surf2, #0e1224); color: var(--t1, #e8ecff);
+      font-size: 20px; cursor: pointer;
+    }
+    .admin-sidebar {
+      width: min(86vw, 320px) !important; height: 100dvh !important;
+      position: fixed !important; inset: 0 auto 0 0 !important; z-index: 110;
+      transform: translateX(-105%); transition: transform 220ms cubic-bezier(.22,1,.36,1);
+      box-shadow: 18px 0 48px rgba(0,0,0,.45);
+    }
+    .admin-sidebar.is-open { transform: translateX(0); }
+    .admin-drawer-backdrop.is-open {
+      display: block; position: fixed; inset: 0; z-index: 100;
+      border: 0; background: rgba(0,0,0,.62); backdrop-filter: blur(2px);
+    }
+    .admin-main { padding: 16px 14px 40px !important; overflow-x: hidden !important; }
+    .admin-desktop-heading { display: none !important; }
+    .admin-login-card { width: calc(100% - 32px) !important; padding: 24px !important; }
+    .admin-grid-collapse { grid-template-columns: 1fr !important; }
+    .admin-flex-collapse { flex-direction: column !important; align-items: stretch !important; }
+    .admin-flex-wrap { flex-wrap: wrap !important; }
+    .admin-modal-overlay { padding: 12px !important; align-items: flex-end !important; }
+    .admin-modal-panel {
+      margin: 0 !important; padding: 18px !important; width: 100% !important;
+      max-height: calc(100dvh - 24px) !important; border-radius: 14px !important;
+    }
+    .admin-toast { left: 12px !important; right: 12px !important; top: 70px !important; }
+    .admin-empty-state { padding: 40px 18px !important; }
+    .admin-main input, .admin-main select, .admin-main textarea, .admin-main img { max-width: 100%; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .admin-sidebar { transition: none; }
+  }
+`
+
 interface Project {
   id: number; name: string; tagline: string; category: string; description: string
   logo_url: string|null; email: string|null; website: string|null; twitter: string|null
@@ -45,6 +95,7 @@ interface AdminCampaign {
 
 export default function AdminPage() {
   const [mounted, setMounted]         = useState(false)
+  const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [authed, setAuthed]           = useState(false)
   const [pw, setPw]                   = useState("")
   const [password, setPassword]       = useState("")
@@ -180,6 +231,20 @@ export default function AdminPage() {
   const bdr   = "var(--bdr, rgba(255,255,255,0.06))"
 
   useEffect(() => { setMounted(true) }, [])
+
+  useEffect(() => {
+    if (!mobileNavOpen) return
+    const previousOverflow = document.body.style.overflow
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMobileNavOpen(false)
+    }
+    document.body.style.overflow = "hidden"
+    window.addEventListener("keydown", closeOnEscape)
+    return () => {
+      document.body.style.overflow = previousOverflow
+      window.removeEventListener("keydown", closeOnEscape)
+    }
+  }, [mobileNavOpen])
 
   function showToast(ok: boolean, text: string) {
     setToast({ ok, text })
@@ -661,8 +726,9 @@ export default function AdminPage() {
 
   if (!authed) return (
     <ArcLayout active="">
+      <style>{ADMIN_RESPONSIVE_CSS}</style>
       <div style={{ minHeight:"80vh", display:"flex", alignItems:"center", justifyContent:"center" }}>
-        <div style={{ background:surf, border:"1px solid " + bdr, borderRadius:"16px", padding:"40px", width:"360px" }}>
+        <div className="admin-login-card" style={{ background:surf, border:"1px solid " + bdr, borderRadius:"16px", padding:"40px", width:"360px" }}>
           <div style={{ fontSize:"11px", fontFamily:mono, color:t3, textTransform:"uppercase", letterSpacing:"0.1em", marginBottom:"8px" }}>Arclens</div>
           <div style={{ fontSize:"22px", fontWeight:700, letterSpacing:"-0.04em", marginBottom:"6px", color:t1 }}>Admin Panel</div>
           <div style={{ fontSize:"12px", color:t2, marginBottom:"28px" }}>Enter your admin password to continue</div>
@@ -706,6 +772,20 @@ export default function AdminPage() {
     { id: "locations" as const, label: "Locations",       count: missingLoc,       urgent: missingLoc > 0 },
   ]
 
+  const tabTitle = tab === "pending"          ? "Project Submissions"
+    : tab === "updates"          ? "Founder Field Updates"
+    : tab === "campaign-updates" ? "Campaign Edit Requests"
+    : tab === "campaigns"        ? "Campaign Reviews"
+    : tab === "events"           ? "Events"
+    : tab === "projects"         ? "All Projects"
+    : tab === "contracts"        ? "Contract Registry"
+    : tab === "stats"            ? "Stats Dashboard"
+    : tab === "trust"            ? "Trust — Alerts & Disputes"
+    : tab === "tracked"          ? "Tracked Contracts"
+    : tab === "ai"               ? "Lens AI"
+    : tab === "spotlight"        ? "Ecosystem Spotlight"
+    : "Location Mapping"
+
   const sidebarBtnStyle = (active: boolean): React.CSSProperties => ({
     width: "100%", height: "36px", display: "flex", alignItems: "center", justifyContent: "space-between",
     padding: "0 10px", borderRadius: "7px", border: "none", cursor: "pointer", marginBottom: "2px",
@@ -716,10 +796,22 @@ export default function AdminPage() {
 
   return (
     <ArcLayout active="">
-      <div style={{ display:"flex", minHeight:"100vh" }}>
+      <style>{ADMIN_RESPONSIVE_CSS}</style>
+      <div className="admin-shell" style={{ display:"flex", minHeight:"100vh" }}>
+
+        <div className="admin-mobile-bar">
+          <button className="admin-menu-button" type="button" aria-label="Open admin navigation" aria-expanded={mobileNavOpen} onClick={() => setMobileNavOpen(true)}>☰</button>
+          <div style={{ flex:1, minWidth:0 }}>
+            <div style={{ fontSize:"13px", fontWeight:700, color:t1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{tabTitle}</div>
+            <div style={{ fontSize:"9px", fontFamily:mono, color:t3, marginTop:"2px" }}>ArcLens Admin</div>
+          </div>
+          {totalPending > 0 && <span style={{ flexShrink:0, fontSize:"9px", fontFamily:mono, color:"#e03348", border:"1px solid rgba(224,51,72,.25)", background:"rgba(224,51,72,.08)", borderRadius:"99px", padding:"4px 7px" }}>{totalPending} pending</span>}
+        </div>
+
+        <button className={`admin-drawer-backdrop${mobileNavOpen ? " is-open" : ""}`} type="button" aria-label="Close admin navigation" onClick={() => setMobileNavOpen(false)} />
 
         {/* ── SIDEBAR ── */}
-        <div style={{ width:"220px", background:surf, borderRight:"1px solid "+bdr, display:"flex", flexDirection:"column", flexShrink:0, position:"sticky", top:0, height:"100vh", overflowY:"auto" }}>
+        <div className={`admin-sidebar${mobileNavOpen ? " is-open" : ""}`} style={{ width:"220px", background:surf, borderRight:"1px solid "+bdr, display:"flex", flexDirection:"column", flexShrink:0, position:"sticky", top:0, height:"100vh", overflowY:"auto" }}>
 
           {/* Brand */}
           <div style={{ padding:"20px 16px 16px", borderBottom:"1px solid "+bdr }}>
@@ -736,7 +828,7 @@ export default function AdminPage() {
           <div style={{ padding:"16px 10px 8px" }}>
             <div style={{ fontSize:"9px", fontFamily:mono, color:t3, textTransform:"uppercase", letterSpacing:"0.1em", padding:"0 6px 8px" }}>Review Queue</div>
             {queueTabs.map(t => (
-              <button key={t.id} onClick={() => { setTab(t.id); setSearch("") }} style={sidebarBtnStyle(tab === t.id)}>
+              <button key={t.id} onClick={() => { setTab(t.id); setSearch(""); setMobileNavOpen(false) }} style={sidebarBtnStyle(tab === t.id)}>
                 <span>{t.label}</span>
                 {t.count > 0 && (
                   <span style={{ fontSize:"10px", fontFamily:mono, padding:"1px 6px", borderRadius:"10px",
@@ -754,7 +846,7 @@ export default function AdminPage() {
           <div style={{ padding:"8px 10px" }}>
             <div style={{ fontSize:"9px", fontFamily:mono, color:t3, textTransform:"uppercase", letterSpacing:"0.1em", padding:"0 6px 8px", marginTop:"8px" }}>Manage</div>
             {manageTabs.map(t => (
-              <button key={t.id} onClick={() => { setTab(t.id); setSearch("") }} style={sidebarBtnStyle(tab === t.id)}>
+              <button key={t.id} onClick={() => { setTab(t.id); setSearch(""); setMobileNavOpen(false) }} style={sidebarBtnStyle(tab === t.id)}>
                 <span>{t.label}</span>
                 <span style={{ fontSize:"10px", fontFamily:mono, color: t.urgent ? "#e08810" : t3 }}>{t.count}</span>
               </button>
@@ -794,24 +886,12 @@ export default function AdminPage() {
         </div>
 
         {/* ── MAIN CONTENT ── */}
-        <div style={{ flex:1, padding:"28px 32px 48px", overflowY:"auto", minWidth:0 }}>
+        <div className="admin-main" style={{ flex:1, padding:"28px 32px 48px", overflowY:"auto", minWidth:0 }}>
 
           {/* Tab header */}
-          <div style={{ marginBottom:"24px" }}>
+          <div className="admin-desktop-heading" style={{ marginBottom:"24px" }}>
             <div style={{ fontSize:"18px", fontWeight:700, letterSpacing:"-0.03em", color:t1 }}>
-              {tab === "pending"          ? "Project Submissions"
-               : tab === "updates"          ? "Founder Field Updates"
-               : tab === "campaign-updates" ? "Campaign Edit Requests"
-               : tab === "campaigns"        ? "Campaign Reviews"
-               : tab === "events"           ? "Events"
-               : tab === "projects"         ? "All Projects"
-               : tab === "contracts"        ? "Contract Registry"
-               : tab === "stats"            ? "Stats Dashboard"
-               : tab === "trust"            ? "Trust — Alerts & Disputes"
-               : tab === "tracked"          ? "Tracked Contracts"
-               : tab === "ai"               ? "Lens AI"
-               : tab === "spotlight"        ? "Ecosystem Spotlight"
-               : "Location Mapping"}
+              {tabTitle}
             </div>
             <div style={{ fontSize:"11px", fontFamily:mono, color:t3, marginTop:"4px" }}>
               {tab === "pending"          ? `${submissions.length} awaiting approval`
@@ -832,7 +912,7 @@ export default function AdminPage() {
 
           {/* Toast */}
           {toast && (
-            <div style={{ position:"fixed", top:"20px", right:"24px", zIndex:9999, padding:"12px 18px", borderRadius:"10px",
+            <div className="admin-toast" style={{ position:"fixed", top:"20px", right:"24px", zIndex:9999, padding:"12px 18px", borderRadius:"10px",
               background: toast.ok ? "rgba(0,184,122,0.12)" : "rgba(224,51,72,0.12)",
               border: `1px solid ${toast.ok ? "rgba(0,184,122,0.3)" : "rgba(224,51,72,0.3)"}`,
               color: toast.ok ? "#00d990" : "#e03348", fontSize:"13px", fontFamily:"'Geist',sans-serif",
@@ -1155,7 +1235,7 @@ export default function AdminPage() {
                             {/* All field changes stacked */}
                             <div style={{ display:"flex", flexDirection:"column", gap:"8px", marginBottom:"14px" }}>
                               {g.fields.map((u: any) => (
-                                <div key={u.id} style={{ display:"grid", gridTemplateColumns:"90px 1fr 1fr", gap:"8px", alignItems:"start" }}>
+                                <div className="admin-grid-collapse" key={u.id} style={{ display:"grid", gridTemplateColumns:"90px 1fr 1fr", gap:"8px", alignItems:"start" }}>
                                   <span style={{ fontSize:"9px", fontFamily:mono, color:"#8aaeff", padding:"4px 0", textAlign:"center", background:"rgba(26,86,255,0.08)", borderRadius:"5px", border:"1px solid rgba(26,86,255,0.18)" }}>
                                     {u.field}
                                   </span>
@@ -1215,7 +1295,7 @@ export default function AdminPage() {
                             </div>
                             <div style={{ display:"flex", flexDirection:"column", gap:"8px", marginBottom:"14px" }}>
                               {Object.entries(ch).map(([field, value]) => (
-                                <div key={field} style={{ display:"grid", gridTemplateColumns:"120px 1fr", gap:"10px", alignItems:"start" }}>
+                                <div className="admin-grid-collapse" key={field} style={{ display:"grid", gridTemplateColumns:"120px 1fr", gap:"10px", alignItems:"start" }}>
                                   <span style={{ fontSize:"10px", fontFamily:mono, color:"#8aaeff", padding:"3px 8px", background:"rgba(26,86,255,0.1)", borderRadius:"4px", border:"1px solid rgba(26,86,255,0.2)", textAlign:"center", height:"fit-content" }}>{field}</span>
                                   {/* Render arrays of objects (tasks / review_questions) as a
                                       readable list instead of "[object Object]". */}
@@ -1403,7 +1483,7 @@ export default function AdminPage() {
                       </div>
                       {expandedContract === c.address && (
                         <div style={{ borderTop:"1px solid "+bdr, padding:"14px 18px", background:"rgba(0,0,0,0.2)" }}>
-                          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px", marginBottom:"10px" }}>
+                          <div className="admin-grid-collapse" style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px", marginBottom:"10px" }}>
                             {[{label:"Deployer",value:c.deployer},{label:"Website",value:c.website},{label:"Twitter",value:c.twitter},{label:"Email",value:c.email}].map(f => (
                               <div key={f.label}>
                                 <div style={{ fontSize:"9px", fontFamily:mono, color:t3, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:"3px" }}>{f.label}</div>
@@ -1443,7 +1523,7 @@ export default function AdminPage() {
                         <span style={{ fontSize:"13px", fontWeight:600, color:t1 }}>Create Official Event</span>
                         <span style={{ fontSize:"11px", color:t2 }}>— auto-approved and marked official</span>
                       </div>
-                      <div style={{ padding:"20px", display:"grid", gridTemplateColumns:"1fr 1fr", gap:"12px" }}>
+                      <div className="admin-grid-collapse" style={{ padding:"20px", display:"grid", gridTemplateColumns:"1fr 1fr", gap:"12px" }}>
                         <div style={{ gridColumn:"1 / -1", display:"flex", alignItems:"center", gap:"16px" }}>
                           <label style={{ cursor:"pointer" }}>
                             <div style={{ width:"72px", height:"72px", borderRadius:"10px", border:"2px dashed rgba(26,86,255,0.3)", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", overflow:"hidden", background:eventLogoPreview?"transparent":"rgba(26,86,255,0.04)", flexShrink:0 }}>
@@ -2465,7 +2545,7 @@ export default function AdminPage() {
                                 {new Date(c.created_at).toLocaleString()}
                               </span>
                             </div>
-                            <div style={{ display:"grid", gridTemplateColumns:"180px 1fr", gap:"6px 14px", fontSize:"11.5px", fontFamily:mono, marginBottom:"10px" }}>
+                            <div className="admin-grid-collapse" style={{ display:"grid", gridTemplateColumns:"180px 1fr", gap:"6px 14px", fontSize:"11.5px", fontFamily:mono, marginBottom:"10px" }}>
                               <div style={{ color:t3 }}>Address</div>
                               <div style={{ color:t1, wordBreak:"break-all" }}>
                                 <a href={`https://testnet.arcscan.app/address/${c.address}`} target="_blank" rel="noopener noreferrer" style={{ color:"#8aaeff", textDecoration:"none" }}>
@@ -2555,9 +2635,9 @@ export default function AdminPage() {
       {/* Restore dialog — deliberately mirrors the hide dialog so the two halves
           of the same decision feel like one tool. */}
       {restoreFor && (
-        <div onClick={() => setRestoreFor(null)}
+        <div className="admin-modal-overlay" onClick={() => setRestoreFor(null)}
           style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.72)", zIndex:200, display:"flex", alignItems:"center", justifyContent:"center", backdropFilter:"blur(4px)" }}>
-          <div onClick={e => e.stopPropagation()}
+          <div className="admin-modal-panel" onClick={e => e.stopPropagation()}
             style={{ width:"100%", maxWidth:"520px", margin:"0 16px", background:surf, border:"1px solid "+bdr, borderRadius:"14px", padding:"26px" }}>
             <div style={{ fontSize:"16px", fontWeight:600, color:t1, marginBottom:"4px" }}>Restore: {restoreFor.name}</div>
             <div style={{ fontSize:"11px", fontFamily:mono, color:t3, marginBottom:"20px" }}>
@@ -2574,7 +2654,7 @@ export default function AdminPage() {
               Email the founder
             </label>
 
-            <div style={{ display:"flex", gap:"10px" }}>
+            <div className="admin-flex-collapse" style={{ display:"flex", gap:"10px" }}>
               <button disabled={acting}
                 onClick={async () => {
                   const p = restoreFor
@@ -2597,9 +2677,9 @@ export default function AdminPage() {
       {/* Hide dialog — pick why, optionally add a note, and the founder gets an
           email explaining what to fix and that the listing is recoverable. */}
       {hideFor && (
-        <div onClick={() => setHideFor(null)}
+        <div className="admin-modal-overlay" onClick={() => setHideFor(null)}
           style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.72)", zIndex:200, display:"flex", alignItems:"center", justifyContent:"center", backdropFilter:"blur(4px)" }}>
-          <div onClick={e => e.stopPropagation()}
+          <div className="admin-modal-panel" onClick={e => e.stopPropagation()}
             style={{ width:"100%", maxWidth:"520px", margin:"0 16px", background:surf, border:"1px solid "+bdr, borderRadius:"14px", padding:"26px", maxHeight:"86vh", overflowY:"auto" }}>
             <div style={{ fontSize:"16px", fontWeight:600, color:t1, marginBottom:"4px" }}>Hide: {hideFor.name}</div>
             <div style={{ fontSize:"11px", fontFamily:mono, color:t3, marginBottom:"20px" }}>
@@ -2640,7 +2720,7 @@ export default function AdminPage() {
               Email the founder
             </label>
 
-            <div style={{ display:"flex", gap:"10px" }}>
+            <div className="admin-flex-collapse" style={{ display:"flex", gap:"10px" }}>
               <button disabled={acting}
                 onClick={async () => {
                   const p = hideFor
@@ -2661,8 +2741,8 @@ export default function AdminPage() {
       )}
 
       {editing && (
-        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.75)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:1000, padding:"20px" }}>
-          <div style={{ background:"var(--surf,#0a0e1a)", border:"1px solid var(--bdr,rgba(255,255,255,0.06))", borderRadius:"16px", padding:"28px", width:"100%", maxWidth:"560px", maxHeight:"90vh", overflowY:"auto" }}>
+        <div className="admin-modal-overlay" style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.75)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:1000, padding:"20px" }}>
+          <div className="admin-modal-panel" style={{ background:"var(--surf,#0a0e1a)", border:"1px solid var(--bdr,rgba(255,255,255,0.06))", borderRadius:"16px", padding:"28px", width:"100%", maxWidth:"560px", maxHeight:"90vh", overflowY:"auto" }}>
             <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"20px" }}>
               <div style={{ fontSize:"16px", fontWeight:600, color:t1 }}>Edit: {editing.name}</div>
               <button onClick={() => setEditing(null)} style={{ background:"none", border:"none", color:t2, cursor:"pointer", fontSize:"20px", lineHeight:1 }}>×</button>
@@ -2727,7 +2807,7 @@ export default function AdminPage() {
               </select>
             </div>
             <div style={{ fontSize:"11px", fontFamily:mono, color:t2, textTransform:"uppercase", letterSpacing:"0.1em", margin:"6px 0 12px", paddingTop:"14px", borderTop:"1px solid var(--bdr,rgba(255,255,255,0.08))" }}>Trust &amp; verification</div>
-            <div style={{ display:"flex", gap:"16px", marginBottom:"18px" }}>
+            <div className="admin-flex-collapse" style={{ display:"flex", gap:"16px", marginBottom:"18px" }}>
               <div style={{ flex:1 }}>
                 <label style={{ display:"block", fontSize:"10px", fontFamily:mono, color:t3, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:"4px" }}>Trust level <span style={{ textTransform:"none", letterSpacing:0, color:t3 }}>· automatic</span></label>
                 <div style={{ height:"36px", display:"flex", alignItems:"center", gap:"8px", background:"var(--surf2,#0e1224)", border:"1px solid var(--bdr,rgba(255,255,255,0.06))", borderRadius:"7px", padding:"0 10px", fontSize:"12px", fontFamily:mono, color:t2 }}>
@@ -2781,7 +2861,7 @@ export default function AdminPage() {
                 Verified — independent audit
                 {(editForm as any).audit_status === "pending" && <span style={{ marginLeft:"8px", color:"#e08810", textTransform:"none", letterSpacing:0 }}>· founder submitted, awaiting review</span>}
               </div>
-              <div style={{ display:"flex", gap:"10px", marginBottom:"10px" }}>
+              <div className="admin-flex-collapse" style={{ display:"flex", gap:"10px", marginBottom:"10px" }}>
                 <input value={(editForm as any).auditor || ""} onChange={e=>setEditForm(p=>({...p, auditor:e.target.value}))} placeholder="Auditor (e.g. Hacken, CertiK)"
                   style={{ flex:1, height:"34px", background:"var(--surf,#070b18)", border:"1px solid var(--bdr,rgba(255,255,255,0.1))", borderRadius:"6px", padding:"0 10px", fontSize:"12px", fontFamily:mono, color:t1, outline:"none" }} />
                 <input value={(editForm as any).audit_url || ""} onChange={e=>setEditForm(p=>({...p, audit_url:e.target.value}))} placeholder="Report URL"
@@ -2843,7 +2923,7 @@ export default function AdminPage() {
                 </label>
               ))}
             </div>
-            <div style={{ display:"flex", gap:"10px" }}>
+            <div className="admin-flex-collapse" style={{ display:"flex", gap:"10px" }}>
               <button onClick={saveEdit} disabled={acting}
                 style={{ flex:1, height:"40px", background:"#1a56ff", color:"#fff", fontSize:"13px", fontWeight:600, border:"none", borderRadius:"8px", cursor:"pointer", fontFamily:"'Geist',sans-serif" }}>
                 {acting?"Saving...":"Save Changes"}
@@ -2881,7 +2961,7 @@ function ActionBtn({ onClick, disabled, color, children }: { onClick: () => void
 
 function EmptyState({ icon, title, sub }: { icon: string; title: string; sub: string }) {
   return (
-    <div style={{ padding:"64px", textAlign:"center" }}>
+    <div className="admin-empty-state" style={{ padding:"64px", textAlign:"center" }}>
       <div style={{ fontSize:"32px", marginBottom:"12px" }}>{icon}</div>
       <div style={{ fontSize:"15px", fontWeight:600, color:"var(--t1,#e8ecff)", marginBottom:"6px" }}>{title}</div>
       <div style={{ fontSize:"12px", color:"var(--t2,#6b7da8)", fontFamily:"'DM Mono',monospace" }}>{sub}</div>
