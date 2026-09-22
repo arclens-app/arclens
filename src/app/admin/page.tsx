@@ -43,6 +43,19 @@ const ADMIN_RESPONSIVE_CSS = `
     .admin-grid-collapse { grid-template-columns: 1fr !important; }
     .admin-flex-collapse { flex-direction: column !important; align-items: stretch !important; }
     .admin-flex-wrap { flex-wrap: wrap !important; }
+    .admin-submission-card {
+      display: grid !important;
+      grid-template-columns: 44px minmax(0, 1fr) !important;
+      align-items: start !important;
+      gap: 12px !important;
+      padding: 16px !important;
+    }
+    .admin-submission-meta { min-width: 0 !important; }
+    .admin-submission-meta span { max-width: 100%; overflow-wrap: anywhere; }
+    .admin-submission-actions {
+      grid-column: 1 / -1; width: 100%; flex-wrap: wrap; margin-top: 4px;
+    }
+    .admin-submission-actions > button { flex: 1 1 88px; }
     .admin-modal-overlay { padding: 12px !important; align-items: flex-end !important; }
     .admin-modal-panel {
       margin: 0 !important; padding: 18px !important; width: 100% !important;
@@ -1128,14 +1141,14 @@ export default function AdminPage() {
                       />
                       {submissions.filter((s:any) => matchesSearch(s, search)).map((s: any) => (
                         <div key={s.id}>
-                        <div style={{ background:surf, border:"1px solid "+bdr, borderRadius:"12px", padding:"18px 22px", display:"flex", alignItems:"center", gap:"16px" }}>
+                        <div className="admin-submission-card" style={{ background:surf, border:"1px solid "+bdr, borderRadius:"12px", padding:"18px 22px", display:"flex", alignItems:"center", gap:"16px" }}>
                           <div style={{ width:"44px", height:"44px", borderRadius:"10px", background:"rgba(26,86,255,0.08)", border:"1px solid rgba(26,86,255,0.15)", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", overflow:"hidden" }}>
                             {s.logo_url
                               ? <img src={`/api/image-proxy?url=${encodeURIComponent(s.logo_url)}`} alt={s.name} style={{ width:"100%", height:"100%", objectFit:"cover" }} onError={e=>(e.currentTarget.style.display="none")} />
                               : <span style={{ fontSize:"16px", fontWeight:700, color:"#8aaeff" }}>{s.name?.[0]}</span>
                             }
                           </div>
-                          <div style={{ flex:1, minWidth:0 }}>
+                          <div className="admin-submission-meta" style={{ flex:1, minWidth:0 }}>
                             <div style={{ fontSize:"14px", fontWeight:600, color:t1, marginBottom:"2px" }}>{s.name}</div>
                             <div style={{ fontSize:"12px", color:t2, marginBottom:"4px" }}>{s.tagline}</div>
                             <div style={{ display:"flex", gap:"8px", flexWrap:"wrap" }}>
@@ -1152,7 +1165,7 @@ export default function AdminPage() {
                               : <div style={{ fontSize:"11px", fontFamily:mono, color:t3, marginTop:"6px" }}>Founder: not provided</div>}
                             {s.description && <div style={{ fontSize:"11.5px", color:t2, marginTop:"6px", lineHeight:1.5 }}>{s.description}</div>}
                           </div>
-                          <div style={{ display:"flex", gap:"8px", flexShrink:0 }}>
+                          <div className="admin-submission-actions" style={{ display:"flex", gap:"8px", flexShrink:0 }}>
                             <ActionBtn onClick={() => act(s.id, "approve")} disabled={acting} color="green">Approve</ActionBtn>
                             <ActionBtn onClick={() => startEdit(s)} color="blue">Edit</ActionBtn>
                             <ActionBtn onClick={() => { setRejectingProjectId(s.id); setRejectProjectReason("") }} disabled={acting} color="red">Reject</ActionBtn>
