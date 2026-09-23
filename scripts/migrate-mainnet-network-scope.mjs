@@ -53,6 +53,13 @@ ALTER TABLE lens_premium         ADD COLUMN IF NOT EXISTS chain_id INTEGER NOT N
 ALTER TABLE projects             ADD COLUMN IF NOT EXISTS metrics_chain_id INTEGER NOT NULL DEFAULT ${TESTNET_CHAIN_ID};
 ALTER TABLE projects             ADD COLUMN IF NOT EXISTS subgraph_chain_id INTEGER NOT NULL DEFAULT ${TESTNET_CHAIN_ID};
 
+-- A deployment record proves that a project is live on the selected network
+-- without opting that contract into TVL, volume or revenue indexing.
+ALTER TABLE project_contracts DROP CONSTRAINT IF EXISTS project_contracts_role_check;
+ALTER TABLE project_contracts
+  ADD CONSTRAINT project_contracts_role_check
+  CHECK (role IN ('deployment', 'tvl', 'revenue', 'treasury', 'volume'));
+
 -- ArcLens identity is separate from any one wallet. The normalized email is
 -- private login data; public APIs never return this table. Circle TEST and LIVE
 -- wallet rows for the same verified email point to the same account.

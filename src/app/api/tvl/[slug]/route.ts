@@ -97,6 +97,7 @@ export async function GET(
        LEFT JOIN stablecoins s ON s.id = pc.volume_stablecoin_id AND s.chain_id = ${ARC_CHAIN_ID}
        WHERE pc.project_id = $1
          AND pc.chain_id = ${ARC_CHAIN_ID}
+         AND pc.role <> 'deployment'
          AND pc.verified_at IS NOT NULL
          AND pc.revoked_at IS NULL
        ORDER BY pc.role, pc.id`,

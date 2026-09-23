@@ -29,6 +29,7 @@ interface Project {
   slug: string | null
   created_at?: string
   view_count?: number
+  has_mainnet_contract?: boolean
   // Derived server-side from the FULL description (see lib/projectTags) — the
   // description shipped here is truncated, so these are how search reaches text
   // the browser never receives.
@@ -73,6 +74,7 @@ interface TrendingProject {
   color: string | null
   view_count: number
   tx_count: number
+  has_mainnet_contract?: boolean
 }
 
 function imgSrc(url: string | null): string | null {
@@ -93,6 +95,7 @@ export default function EcosystemPage() {
   const [projects, setProjects]       = useState<Project[]>([])
   const [loading, setLoading]         = useState(true)
   const [filter, setFilter]           = useState("All")
+  const [mainnetOnly, setMainnetOnly] = useState(false)
   const [search, setSearch]           = useState("")
   const [showForm, setShowForm]       = useState(false)
   const [form, setForm]               = useState({ name: "", tagline: "", description: "", category: "DeFi", website: "", twitter: "", github: "", discord: "", contract: "", email: "", city: "", country: "", founder: "" })
@@ -155,19 +158,23 @@ export default function EcosystemPage() {
       // "do you have any USDC vaults?" can be answered with a URL.
       const q = params.get("q")
       if (q) setSearch(q)
+      if (params.get("mainnet") === "1") setMainnetOnly(true)
     }
   }, [])
 
-  // Mirror the search into the URL without adding history entries, so back
-  // still leaves the page rather than stepping through every keystroke.
+  // Mirror shareable directory controls into the URL without adding history
+  // entries, so back still leaves the page rather than stepping through every
+  // keystroke or filter change.
   useEffect(() => {
     if (!mounted || typeof window === "undefined") return
     const params = new URLSearchParams(window.location.search)
     if (search.trim()) params.set("q", search.trim())
     else params.delete("q")
+    if (mainnetOnly) params.set("mainnet", "1")
+    else params.delete("mainnet")
     const qs = params.toString()
     window.history.replaceState(null, "", qs ? `?${qs}` : window.location.pathname)
-  }, [search, mounted])
+  }, [search, mainnetOnly, mounted])
 
   useEffect(() => {
     if (!mounted) return
@@ -395,6 +402,7 @@ export default function EcosystemPage() {
 
   const filtered = projects.filter(p => {
     const matchCat    = filter === "All" || (p.category || "").trim().toLowerCase() === filter.trim().toLowerCase()
+    const matchMainnet = !mainnetOnly || !!p.has_mainnet_contract
     let matchSearch = true
     if (terms.length) {
       let total = 0
@@ -422,7 +430,7 @@ export default function EcosystemPage() {
       : sortBy === "revenue"   ? !!(p.tvl_tracking_enabled && p.revenue_cum_usd_e6 && p.revenue_cum_usd_e6 !== "0")
       : sortBy === "volume"    ? !!(p.tvl_tracking_enabled && p.volume_cum_usd_e6 && p.volume_cum_usd_e6 !== "0")
       : true
-    return matchCat && matchSearch && matchSort
+    return matchCat && matchMainnet && matchSearch && matchSort
   }).sort((a, b) => {
     // While searching, relevance wins over every other ordering — otherwise the
     // featured/rotation ranking pushes weak matches above exact ones.
@@ -456,6 +464,7 @@ export default function EcosystemPage() {
 
   const totalPages  = Math.max(1, Math.ceil(filtered.length / pageSize))
   const paginated   = filtered.slice((page - 1) * pageSize, page * pageSize)
+  const visibleTrending = mainnetOnly ? trending.filter(project => project.has_mainnet_contract) : trending
 
   // Picking a category is a "browse this type" action, so it always shows every
   // project in that type. We reset the sort to "all" because the metric tabs
@@ -464,6 +473,7 @@ export default function EcosystemPage() {
   function setFilterAndReset(val: string) { setFilter(val); setSortBy("all"); setPage(1) }
   function setSortAndReset(val: typeof sortBy) { setSortBy(val); setPage(1) }
   function setSearchAndReset(val: string) { setSearch(val); setPage(1) }
+  function toggleMainnetOnly() { setMainnetOnly(value => !value); setPage(1) }
 
   function LogoImg({ p, size }: { p: Project; size: number }) {
     const color = p.color || CAT_COLOR[p.category] || "#1a56ff"
@@ -804,20 +814,25 @@ export default function EcosystemPage() {
         )}
 
         {/* TRENDING STRIP */}
-        {trending.length > 0 && (
+        {visibleTrending.length > 0 && (
           <div style={{ marginBottom: "20px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "10px" }}>
               <span style={{ fontSize: "11px", fontFamily: mono, color: "#e08810", letterSpacing: "0.06em" }}>TRENDING</span>
               <div style={{ flex: 1, height: "1px", background: "rgba(224,136,16,0.15)" }} />
             </div>
             <div style={{ display: "flex", gap: "8px", overflowX: "auto", paddingBottom: "4px", WebkitOverflowScrolling: "touch" as any }}>
-              {trending.map((t, i) => <TrendingCard key={t.id} t={t} i={i} />)}
+              {visibleTrending.map((t, i) => <TrendingCard key={t.id} t={t} i={i} />)}
             </div>
           </div>
         )}
 
         {/* SORT TABS */}
         <div style={{ display: "flex", gap: "6px", marginBottom: "14px", flexWrap: "wrap" }}>
+          <button onClick={toggleMainnetOnly}
+            aria-pressed={mainnetOnly}
+            style={{ height: "28px", padding: "0 14px", background: mainnetOnly ? "rgba(0,217,144,0.12)" : "transparent", color: mainnetOnly ? "#00b87a" : t2, fontSize: "11.5px", fontFamily: mono, border: "1px solid " + (mainnetOnly ? "rgba(0,217,144,0.35)" : border), borderRadius: "6px", cursor: "pointer", transition: "all .12s", whiteSpace: "nowrap", fontWeight: mainnetOnly ? 700 : 400 }}>
+            Live on Mainnet{projects.some(p => p.has_mainnet_contract) ? ` (${projects.filter(p => p.has_mainnet_contract).length})` : ""}
+          </button>
           {([
             { key: "all",      label: "All" },
             { key: "name",     label: "A–Z" },

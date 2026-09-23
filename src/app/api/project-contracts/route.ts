@@ -430,10 +430,12 @@ export async function POST(req: NextRequest) {
       ],
     )
 
-    await pool.query(
-      `UPDATE projects SET tvl_tracking_enabled = true WHERE id = $1`,
-      [project.id],
-    )
+    if (role !== "deployment") {
+      await pool.query(
+        `UPDATE projects SET tvl_tracking_enabled = true WHERE id = $1`,
+        [project.id],
+      )
+    }
 
     return NextResponse.json({
       success: true,
@@ -444,7 +446,9 @@ export async function POST(req: NextRequest) {
       deployer: authorizedBy,
       verification_method: sigCheck.method,  // which rung matched: deployer / deployer_tx_sender / owner / admin / proxy_admin
       verification_proof: sigCheck.proof,    // 'eoa' or 'eip1271'
-      message: "Tracked. The indexer picks it up on the next cron tick (≤5 min).",
+      message: role === "deployment"
+        ? "Mainnet deployment verified. The project now appears under Live on Mainnet."
+        : "Tracked. The indexer picks it up on the next cron tick (≤5 min).",
     })
   } catch (e: any) {
     console.error("[project-contracts POST]", e)

@@ -65,6 +65,7 @@ const ADMIN_RESPONSIVE_CSS = `
     .admin-toast { left: 12px !important; right: 12px !important; top: 70px !important; }
     .admin-empty-state { padding: 40px 18px !important; }
     .admin-main input, .admin-main select, .admin-main textarea, .admin-main img { max-width: 100%; }
+    .admin-mainnet-row > button { width: 100%; }
   }
   @media (prefers-reduced-motion: reduce) {
     .admin-sidebar { transition: none; }
@@ -76,6 +77,7 @@ interface Project {
   logo_url: string|null; email: string|null; website: string|null; twitter: string|null
   github: string|null; discord: string|null; contract: string|null; contracts: string[]|null; badge: string|null
   trust_level?: string|null; recognition?: string|null
+  has_mainnet_contract?: boolean; has_mainnet_deployment?: boolean; mainnet_contract?: string|null
   approved: boolean; live: boolean; featured: boolean; created_at: string
   city: string|null; country: string|null; lat: number|null; lng: number|null
 }
@@ -208,6 +210,7 @@ export default function AdminPage() {
   const [rejectReason, setRejectReason] = useState("")
   const [editing, setEditing]         = useState<Project|null>(null)
   const [editForm, setEditForm]       = useState<Partial<Project>>({})
+  const [mainnetAddress, setMainnetAddress] = useState("")
   const [assess, setAssess]           = useState<any>(null)
   const [assessing, setAssessing]     = useState(false)
   const [estCheck, setEstCheck]       = useState<any>(null)
@@ -529,13 +532,15 @@ export default function AdminPage() {
         if (data.refund_failed) {
           showToast(false, "Rejected — but the USDC refund FAILED. Refund the founder manually.")
         } else {
-        showToast(true, action === "approve" ? "Approved" : action === "approve-all-updates" ? "All changes applied" : action === "reject-all-updates" ? "Changes rejected" : action === "approve-update" ? "Update applied" : action === "reject-update" ? "Update rejected" : action === "approve-campaign-update" ? "Campaign update applied" : action === "reject-campaign-update" ? "Campaign update rejected" : action === "hide-listing" ? "Listing hidden — founder notified" : action === "restore-listing" ? "Listing restored" : action === "delete" || action === "reject" ? "Removed" : "Done")
+        showToast(true, action === "approve" ? "Approved" : action === "approve-all-updates" ? "All changes applied" : action === "reject-all-updates" ? "Changes rejected" : action === "approve-update" ? "Update applied" : action === "reject-update" ? "Update rejected" : action === "approve-campaign-update" ? "Campaign update applied" : action === "reject-campaign-update" ? "Campaign update rejected" : action === "mark-mainnet" ? "Mainnet deployment verified" : action === "unmark-mainnet" ? "Mainnet tag removed" : action === "hide-listing" ? "Listing hidden — founder notified" : action === "restore-listing" ? "Listing restored" : action === "delete" || action === "reject" ? "Removed" : "Done")
         }
         loadAll()
+        return true
       } else {
         showToast(false, data.error || "Action failed")
+        return false
       }
-    } catch { showToast(false, "Network error") }
+    } catch { showToast(false, "Network error"); return false }
     finally { setActing(false) }
   }
 
@@ -648,6 +653,7 @@ export default function AdminPage() {
   function startEdit(p: Project) {
     setEditing(p)
     setEditForm({ ...p, audited: ((p as any).trust_level === "verified" || (p as any).audit_status === "approved") } as any)
+    setMainnetAddress(p.mainnet_contract || p.contract || "")
     setAssess(null)
     setEstCheck(null)
   }
@@ -1434,6 +1440,7 @@ export default function AdminPage() {
                           {p.live
                             ? <span style={pill("#00b87a","rgba(0,184,122,0.2)")}>Live</span>
                             : <span style={pill("#e05a5a","rgba(224,90,90,0.2)")}>Hidden</span>}
+                          {p.has_mainnet_contract && <span style={pill("#00b87a","rgba(0,184,122,0.2)")}>Mainnet</span>}
                         </div>
                         <div style={{ fontSize:"11px", color:t2, display:"flex", alignItems:"center", gap:"8px", flexWrap:"wrap" }}>
                           <span>{p.category} · {p.website || "No website"}</span>
@@ -2797,6 +2804,29 @@ export default function AdminPage() {
                 }
               </div>
             ))}
+            <div className="admin-mainnet-row" style={{ display:"flex", alignItems:"center", gap:"10px", padding:"10px 0", marginBottom:"10px", borderTop:"1px solid "+bdr, borderBottom:"1px solid "+bdr, flexWrap:"wrap" }}>
+              <span style={{ width:"8px", height:"8px", borderRadius:"50%", background:editing.has_mainnet_contract?"#00b87a":t3, flexShrink:0 }} />
+              <div style={{ flex:1, minWidth:"150px" }}>
+                <div style={{ fontSize:"11.5px", fontWeight:600, color:t1 }}>{editing.has_mainnet_contract?"Live on Mainnet":"Mainnet not verified"}</div>
+                {editing.has_mainnet_contract
+                  ? <div style={{ fontSize:"9.5px", fontFamily:mono, color:t3, marginTop:"2px" }}>{editing.mainnet_contract}</div>
+                  : <input value={mainnetAddress} onChange={e=>setMainnetAddress(e.target.value)} placeholder="Arc mainnet contract · 0x…"
+                      style={{ width:"100%", maxWidth:"310px", height:"28px", marginTop:"5px", background:surf2, border:"1px solid "+bdr, borderRadius:"6px", padding:"0 9px", fontSize:"10px", fontFamily:mono, color:t1, outline:"none", boxSizing:"border-box" }} />}
+              </div>
+              {!editing.has_mainnet_contract && (
+                <button disabled={acting || !/^0x[a-fA-F0-9]{40}$/.test(mainnetAddress)}
+                  onClick={async()=>{ const ok=await act(editing.id,"mark-mainnet","projects",{address:mainnetAddress}); if(ok) setEditing(p=>p?{...p,has_mainnet_contract:true,has_mainnet_deployment:true,mainnet_contract:mainnetAddress.toLowerCase()}:p) }}
+                  style={{ height:"30px", padding:"0 12px", background:"rgba(0,184,122,0.1)", color:"#00b87a", border:"1px solid rgba(0,184,122,0.28)", borderRadius:"7px", cursor:"pointer", fontSize:"10px", fontFamily:mono, opacity:/^0x[a-fA-F0-9]{40}$/.test(mainnetAddress)?1:.45 }}>
+                  Verify mainnet
+                </button>
+              )}
+              {editing.has_mainnet_deployment && (
+                <button disabled={acting} onClick={async()=>{ if(!confirm("Remove this admin-reviewed mainnet deployment tag?")) return; const ok=await act(editing.id,"unmark-mainnet","projects"); if(ok) setEditing(null) }}
+                  style={{ height:"30px", padding:"0 12px", background:"transparent", color:"#e05a5a", border:"1px solid rgba(224,90,90,0.25)", borderRadius:"7px", cursor:"pointer", fontSize:"10px", fontFamily:mono }}>
+                  Remove tag
+                </button>
+              )}
+            </div>
             {/* Additional contract addresses */}
             <div style={{ marginBottom:"10px" }}>
               <label style={{ display:"block", fontSize:"10px", fontFamily:mono, color:t3, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:"6px" }}>Additional Contract Addresses</label>

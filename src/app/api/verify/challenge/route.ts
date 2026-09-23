@@ -14,24 +14,10 @@ import { ethers } from "ethers"
 import { enforce } from "@/lib/ratelimit"
 import { getSession } from "@/lib/session"
 import { ARC_EXPLORER_API, ARC_RPC_HTTP } from "@/lib/constants"
+import { buildVerifyMessage, type VerifyChallengePayload } from "@/lib/verifyChallenge"
 
 const ARCSCAN = ARC_EXPLORER_API
 const CHALLENGE_TTL_MS = 10 * 60 * 1000
-
-interface VerifyChallengePayload {
-  kind: "verify-claim"
-  contract_address: string
-  name: string
-  type?: string | null
-  description?: string | null
-  website?: string | null
-  twitter?: string | null
-  email: string
-  nonce: string
-  issued_at: string
-  expires_at: string
-  issued_to_wallet: string
-}
 
 function challengeSecret(): Buffer {
   const s = process.env.SESSION_SECRET || ""
@@ -50,31 +36,6 @@ function signToken(payload: VerifyChallengePayload): string {
   const body = b64url(JSON.stringify(payload))
   const sig = b64url(crypto.createHmac("sha256", challengeSecret()).update(body).digest())
   return `${body}.${sig}`
-}
-
-export function buildVerifyMessage(p: VerifyChallengePayload): string {
-  const lines = [
-    "ArcLens contract registry claim",
-    "",
-    `contract: ${p.contract_address}`,
-    `name: ${p.name}`,
-  ]
-  if (p.type) lines.push(`type: ${p.type}`)
-  if (p.description) lines.push(`description: ${p.description}`)
-  if (p.website) lines.push(`website: ${p.website}`)
-  if (p.twitter) lines.push(`twitter: ${p.twitter}`)
-  lines.push(
-    `email: ${p.email}`,
-    "",
-    `issued_at: ${p.issued_at}`,
-    `expires_at: ${p.expires_at}`,
-    `issued_to_wallet: ${p.issued_to_wallet}`,
-    `nonce: ${p.nonce}`,
-    "",
-    "By signing this message you authorize ArcLens to display the contract's",
-    "name and identity in the public registry. No on-chain action taken.",
-  )
-  return lines.join("\n")
 }
 
 async function fetchDeployer(addr: string): Promise<string | null> {

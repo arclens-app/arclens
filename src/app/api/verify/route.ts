@@ -5,7 +5,7 @@ import { enforce } from "@/lib/ratelimit"
 import { getSession } from "@/lib/session"
 import { ARC_CHAIN_ID, ARC_EXPLORER_API, ARC_RPC_HTTP } from "@/lib/constants"
 import { verifyDeployerSignature } from "@/lib/deployerSig"
-import { buildVerifyMessage } from "./challenge/route"
+import { buildVerifyMessage } from "@/lib/verifyChallenge"
 import { getPool } from "@/lib/dbPool"
 
 const pool = getPool()

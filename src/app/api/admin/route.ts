@@ -2,13 +2,14 @@
 // for the post-update DB row, which would shadow (and TDZ-break) the import.
 import { NextRequest, NextResponse, after as runAfter } from "next/server"
 import { Resend } from "resend"
+import { ethers } from "ethers"
 import { timingSafeEqual } from "crypto"
 import { enforce } from "@/lib/ratelimit"
 import { attestOnChain, subjectFor } from "@/lib/registry"
 import { loadPhishingList, hostOf, checkWebsite, analyzeContract, assessProject } from "@/lib/trustEngine"
 import { getPool } from "@/lib/dbPool"
 import { createUnsubscribeToken } from "@/lib/unsubscribeToken"
-import { APP_KIT_CHAIN, ARC_CHAIN_ID, ARC_CHAIN_NAME, ARC_EXPLORER_API } from "@/lib/constants"
+import { APP_KIT_CHAIN, ARC_CHAIN_ID, ARC_CHAIN_NAME, ARC_EXPLORER_API, ARC_MAINNET_CHAIN_ID, ARC_MAINNET_RPC_HTTP } from "@/lib/constants"
 import { payoutSafetyMessage, payoutsEnabledForActiveNetwork } from "@/lib/payoutSafety"
 import { revalidatePath } from "next/cache"
 
@@ -159,7 +160,7 @@ async function sendCampaignEmail(campaignId: number, status: "approved" | "rejec
 // Reasons a live listing gets taken down. Each is a real situation that has
 // come up, worded so the founder knows exactly what to fix and that the listing
 // is recoverable — hiding used to be silent, which just looked like deletion.
-export const HIDE_REASONS: Record<string, { label: string; line: string; fix: string }> = {
+const HIDE_REASONS: Record<string, { label: string; line: string; fix: string }> = {
   security: {
     label: "Security flag",
     line:  "your website is currently flagged as malicious by one or more security vendors",
@@ -518,7 +519,32 @@ export async function GET(req: NextRequest) {
     try {
       const [pending, approved] = await Promise.all([
         pool.query("SELECT * FROM projects WHERE approved = false ORDER BY created_at DESC"),
-        pool.query("SELECT * FROM projects WHERE approved = true ORDER BY created_at DESC"),
+        pool.query(`SELECT projects.*,
+                    EXISTS (
+                      SELECT 1 FROM project_contracts pc
+                       WHERE pc.project_id = projects.id
+                         AND pc.chain_id = ${ARC_MAINNET_CHAIN_ID}
+                         AND pc.verified_at IS NOT NULL
+                         AND pc.revoked_at IS NULL
+                    ) AS has_mainnet_contract,
+                    EXISTS (
+                      SELECT 1 FROM project_contracts pc
+                       WHERE pc.project_id = projects.id
+                         AND pc.chain_id = ${ARC_MAINNET_CHAIN_ID}
+                         AND pc.role = 'deployment'
+                         AND pc.verified_at IS NOT NULL
+                         AND pc.revoked_at IS NULL
+                    ) AS has_mainnet_deployment,
+                    (SELECT pc.address FROM project_contracts pc
+                      WHERE pc.project_id = projects.id
+                        AND pc.chain_id = ${ARC_MAINNET_CHAIN_ID}
+                        AND pc.verified_at IS NOT NULL
+                        AND pc.revoked_at IS NULL
+                      ORDER BY (pc.role = 'deployment') DESC, pc.created_at ASC
+                      LIMIT 1) AS mainnet_contract
+               FROM projects
+              WHERE approved = true
+              ORDER BY created_at DESC`),
       ])
       let contracts: { rows: unknown[] } = { rows: [] }
       try {
@@ -608,6 +634,53 @@ export async function POST(req: NextRequest) {
   if (!checkAuth(resolvePassword(req))) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   if (!id || !action) return NextResponse.json({ error: "Missing fields" }, { status: 400 })
   try {
+    if (table === "projects" && action === "mark-mainnet") {
+      const address = String(data?.address || "").trim().toLowerCase()
+      if (!/^0x[a-f0-9]{40}$/.test(address)) {
+        return NextResponse.json({ error: "Enter a valid Arc mainnet contract address" }, { status: 400 })
+      }
+      const project = await pool.query(`SELECT id, name FROM projects WHERE id = $1 AND approved = true LIMIT 1`, [id])
+      if (!project.rows.length) return NextResponse.json({ error: "Project not found" }, { status: 404 })
+
+      const provider = new ethers.JsonRpcProvider(ARC_MAINNET_RPC_HTTP)
+      const [code, block] = await Promise.all([provider.getCode(address), provider.getBlockNumber()])
+      if (!code || code === "0x") {
+        return NextResponse.json({ error: "No contract bytecode exists at this address on Arc mainnet" }, { status: 400 })
+      }
+
+      await pool.query(
+        `INSERT INTO project_contracts
+           (project_id, address, role, label, start_block, verified_at, chain_id)
+         VALUES ($1, $2, 'deployment', 'Admin-reviewed mainnet deployment', $3, NOW(), $4)
+         ON CONFLICT DO NOTHING`,
+        [id, address, block, ARC_MAINNET_CHAIN_ID],
+      )
+      await pool.query(
+        `UPDATE project_contracts
+            SET verified_at = NOW(), revoked_at = NULL, revoke_reason = NULL,
+                label = COALESCE(label, 'Admin-reviewed mainnet deployment')
+          WHERE project_id = $1 AND LOWER(address) = $2
+            AND role = 'deployment' AND chain_id = $3`,
+        [id, address, ARC_MAINNET_CHAIN_ID],
+      )
+      revalidatePath("/api/ecosystem")
+      revalidatePath("/ecosystem")
+      return NextResponse.json({ success: true, address })
+    }
+
+    if (table === "projects" && action === "unmark-mainnet") {
+      await pool.query(
+        `UPDATE project_contracts
+            SET revoked_at = NOW(), revoke_reason = 'Removed by ArcLens admin'
+          WHERE project_id = $1 AND chain_id = $2 AND role = 'deployment'
+            AND revoked_at IS NULL`,
+        [id, ARC_MAINNET_CHAIN_ID],
+      )
+      revalidatePath("/api/ecosystem")
+      revalidatePath("/ecosystem")
+      return NextResponse.json({ success: true })
+    }
+
     // Admin-triggered URL reputation re-check (id = the URL). One VirusTotal
     // call, on demand only — no timers, no background usage.
     if (action === "rescan-url") {

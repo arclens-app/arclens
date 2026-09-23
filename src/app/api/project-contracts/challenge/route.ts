@@ -25,7 +25,7 @@ import { enforce } from "@/lib/ratelimit"
 import { getSession } from "@/lib/session"
 import { ARC_EXPLORER_API, ARC_RPC_HTTP } from "@/lib/constants"
 import { dataArgTypes } from "@/lib/tvl"
-import { buildChallengeMessage, type ChallengePayload } from "@/lib/deployerSig"
+import { buildChallengeMessage, type AuthorizedCandidate, type ChallengePayload } from "@/lib/deployerSig"
 import { getPool } from "@/lib/dbPool"
 
 const ARCSCAN = ARC_EXPLORER_API
@@ -49,6 +49,64 @@ async function fetchDeployer(addr: string): Promise<string | null> {
     }
   } catch {}
   return null
+}
+
+async function fetchCreationTxSender(addr: string): Promise<string | null> {
+  try {
+    const res = await fetch(`${ARCSCAN}/addresses/${addr}`, {
+      headers: { Accept: "application/json" }, next: { revalidate: 300 },
+    })
+    if (!res.ok) return null
+    const d = await res.json()
+    const txHash = d?.creation_tx_hash || d?.creation_transaction_hash
+    if (!txHash) return null
+    const txRes = await fetch(`${ARCSCAN}/transactions/${txHash}`, {
+      headers: { Accept: "application/json" }, next: { revalidate: 300 },
+    })
+    if (!txRes.ok) return null
+    const tx = await txRes.json()
+    const from = tx?.from?.hash || tx?.from
+    return from ? String(from).toLowerCase() : null
+  } catch {
+    return null
+  }
+}
+
+const EIP1967_ADMIN_SLOT = "0xb53127684a568b3173ae13b9f8a6016e243e63b6e8ee1178d6a717850b5d6103"
+const AUTHORITY_ABI = [
+  "function owner() view returns (address)",
+  "function getOwner() view returns (address)",
+  "function admin() view returns (address)",
+]
+
+async function resolveAuthorizedSigners(
+  addr: string,
+  provider: ethers.JsonRpcProvider,
+): Promise<AuthorizedCandidate[]> {
+  const out: AuthorizedCandidate[] = []
+  const seen = new Set<string>()
+  const add = (candidate: string | null | undefined, method: string) => {
+    if (!candidate) return
+    const address = candidate.toLowerCase()
+    if (!/^0x[0-9a-f]{40}$/.test(address) || address === ethers.ZeroAddress.toLowerCase() || seen.has(address)) return
+    seen.add(address)
+    out.push({ address, method })
+  }
+
+  add(await fetchDeployer(addr), "deployer")
+  add(await fetchCreationTxSender(addr), "deployer_tx_sender")
+
+  const contract = new ethers.Contract(addr, AUTHORITY_ABI, provider)
+  for (const [fn, method] of [["owner", "owner"], ["getOwner", "owner"], ["admin", "admin"]] as const) {
+    try { add(await (contract as any)[fn](), method) } catch { /* method not exposed */ }
+  }
+
+  try {
+    const raw = await provider.getStorage(addr, EIP1967_ADMIN_SLOT)
+    if (raw && raw !== "0x" && BigInt(raw) !== BigInt(0)) add("0x" + raw.slice(-40), "proxy_admin")
+  } catch { /* not an EIP-1967 proxy */ }
+
+  return out
 }
 
 const pool = getPool()
@@ -96,8 +154,8 @@ export async function POST(req: NextRequest) {
     // Resolve & authorize the project.
     if (!slug)    return NextResponse.json({ error: "slug required" }, { status: 400 })
     if (!address) return NextResponse.json({ error: "address required" }, { status: 400 })
-    if (!role || !["tvl", "revenue", "treasury", "volume"].includes(role)) {
-      return NextResponse.json({ error: "role must be tvl, revenue, treasury, or volume" }, { status: 400 })
+    if (!role || !["deployment", "tvl", "revenue", "treasury", "volume"].includes(role)) {
+      return NextResponse.json({ error: "role must be deployment, tvl, revenue, treasury, or volume" }, { status: 400 })
     }
 
     const addr = String(address).trim().toLowerCase()
@@ -175,6 +233,7 @@ export async function POST(req: NextRequest) {
     //
     // We also do a code() check to fail fast if the address has no bytecode.
     let deployer: string | null = null
+    let authorizedSigners: AuthorizedCandidate[] = []
     let deployerStatus: "found" | "unindexed" | "not_a_contract" = "found"
     try {
       const provider = new ethers.JsonRpcProvider(ARC_RPC_HTTP)
@@ -182,7 +241,8 @@ export async function POST(req: NextRequest) {
       if (code === "0x") {
         deployerStatus = "not_a_contract"
       } else {
-        deployer = await fetchDeployer(payload.contract_address)
+        authorizedSigners = await resolveAuthorizedSigners(payload.contract_address, provider)
+        deployer = authorizedSigners[0]?.address ?? null
         if (!deployer) deployerStatus = "unindexed"
       }
     } catch {
@@ -199,6 +259,8 @@ export async function POST(req: NextRequest) {
       payload,
       deployer,           // lowercase 0x… or null
       deployer_status: deployerStatus,
+      authorized_signers: authorizedSigners,
+      connected_signer: authorizedSigners.find(candidate => candidate.address === sess.addr) ?? null,
     })
   } catch (e: any) {
     console.error("[project-contracts/challenge POST]", e)

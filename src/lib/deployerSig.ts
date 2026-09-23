@@ -188,7 +188,7 @@ export async function verifyAuthorizedSigner(
 export interface ChallengePayload {
   project_slug: string
   contract_address: string   // lowercase 0x…
-  role: "tvl" | "revenue" | "treasury" | "volume"
+  role: "deployment" | "tvl" | "revenue" | "treasury" | "volume"
   start_block?: number | null
   label?: string | null
   // Volume-only — keep undefined when role !== 'volume'.
@@ -222,15 +222,18 @@ export function buildChallengeMessage(p: ChallengePayload): string {
     if (p.volume_amount_arg != null) lines.push(`volume_amount_arg: ${p.volume_amount_arg}`)
     if (p.volume_stablecoin_id != null) lines.push(`volume_stablecoin_id: ${p.volume_stablecoin_id}`)
   }
-  lines.push(
-    "",
-    `issued_at: ${p.issued_at}`,
-    `expires_at: ${p.expires_at}`,
-    `issued_to_wallet: ${p.issued_to_wallet}`,
-    `nonce: ${p.nonce}`,
-    "",
-    "By signing this message you authorize ArcLens to display the contract's",
-    "USDC/stablecoin metrics under this project. No on-chain action taken.",
-  )
+  lines.push("", `issued_at: ${p.issued_at}`, `expires_at: ${p.expires_at}`, `issued_to_wallet: ${p.issued_to_wallet}`, `nonce: ${p.nonce}`, "")
+  if (p.role === "deployment") {
+    lines.push(
+      "By signing this message you authorize ArcLens to show this contract as",
+      "this project's verified Arc mainnet deployment. No metrics are tracked",
+      "and no on-chain action is taken.",
+    )
+  } else {
+    lines.push(
+      "By signing this message you authorize ArcLens to display the contract's",
+      "USDC/stablecoin metrics under this project. No on-chain action taken.",
+    )
+  }
   return lines.join("\n")
 }

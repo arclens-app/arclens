@@ -1,5 +1,8 @@
 ﻿export type ArcNetwork = "testnet" | "mainnet"
 
+export const ARC_MAINNET_CHAIN_ID = 5_042
+export const ARC_TESTNET_CHAIN_ID = 5_042_002
+
 type ArcNetworkConfig = {
   chainId: number
   chainName: string
@@ -21,7 +24,7 @@ export const ARC_NETWORK: ArcNetwork = requestedNetwork === "mainnet" ? "mainnet
 
 const NETWORKS: Record<ArcNetwork, ArcNetworkConfig> = {
   testnet: {
-    chainId: 5_042_002,
+    chainId: ARC_TESTNET_CHAIN_ID,
     chainName: "Arc Testnet",
     rpcHttp: "https://rpc.testnet.arc.io",
     rpcWs: "wss://rpc.testnet.arc.io",
@@ -35,7 +38,7 @@ const NETWORKS: Record<ArcNetwork, ArcNetworkConfig> = {
     cctpIrisBase: "https://iris-api-sandbox.circle.com",
   },
   mainnet: {
-    chainId: 5_042,
+    chainId: ARC_MAINNET_CHAIN_ID,
     chainName: "Arc",
     rpcHttp: "https://rpc.mainnet.arc.io",
     // Arc's public primary RPC is HTTP-only. Configure a provider URL before
@@ -51,6 +54,8 @@ const NETWORKS: Record<ArcNetwork, ArcNetworkConfig> = {
     cctpIrisBase: "https://iris-api.circle.com",
   },
 }
+
+export const ARC_MAINNET_RPC_HTTP = NETWORKS.mainnet.rpcHttp
 
 const active = NETWORKS[ARC_NETWORK]
 

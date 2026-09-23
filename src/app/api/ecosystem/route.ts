@@ -4,7 +4,7 @@ import { getPool } from "@/lib/dbPool"
 import { validateEmail, validateWebsite, hostFromUrl, domainResolves } from "@/lib/submissionGuards"
 import { extractTags } from "@/lib/projectTags"
 import { sendSubmissionCode, verifySubmissionCode } from "@/lib/submissionOtp"
-import { ARC_CHAIN_ID } from "@/lib/constants"
+import { ARC_CHAIN_ID, ARC_MAINNET_CHAIN_ID } from "@/lib/constants"
 
 const pool = getPool()
 
@@ -68,6 +68,13 @@ export async function GET() {
               city, country, lat, lng,
               COALESCE(view_count, 0) as view_count,
               created_at,
+              EXISTS (
+                SELECT 1 FROM project_contracts mainnet_pc
+                 WHERE mainnet_pc.project_id = projects.id
+                   AND mainnet_pc.chain_id = ${ARC_MAINNET_CHAIN_ID}
+                   AND mainnet_pc.verified_at IS NOT NULL
+                   AND mainnet_pc.revoked_at IS NULL
+              ) AS has_mainnet_contract,
               -- TVL / Revenue tracking. The directory cards + sort/filter only
               -- read these five fields; the per-day ATH breakdowns (tvl_ath_*,
               -- revenue_ath_day*, volume_ath_day*, tvl_last_indexed_at) are shown

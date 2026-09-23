@@ -4,7 +4,7 @@ import { useArcStore } from "@/store/arc"
 import { detectWallets, EIP6963Provider } from "@/context/web3modal"
 import ArcLensAI from "@/components/ArcLensAI"
 import WalletPanel from "@/components/WalletPanel"
-import { ADD_CHAIN_PARAMS, ARC_CHAIN_ID, ARC_CHAIN_NAME, ARC_RPC_HTTP } from "@/lib/constants"
+import { ADD_CHAIN_PARAMS, ARC_CHAIN_ID, ARC_CHAIN_NAME } from "@/lib/constants"
 
 const NAV = [
   { section: "", items: [
@@ -74,6 +74,7 @@ export default function ArcLayout({ children, active, lockDark }: { children: Re
   const [pinPhase,     setPinPhase]     = useState<"pin" | "finalizing">("pin")
   const [circleWalletAction, setCircleWalletAction] = useState<"initialize" | "add_network">("initialize")
   const otpRefs = useRef<(HTMLInputElement | null)[]>([])
+  const otpVerifyInFlightRef = useRef(false)
 
   const walletAddr  = useArcStore(s => s.walletAddr)
   const walletBal   = useArcStore(s => s.walletBal)
@@ -129,12 +130,12 @@ export default function ArcLayout({ children, active, lockDark }: { children: Re
     const saved = localStorage.getItem("arclens-wallet")
     const savedChain = localStorage.getItem("arclens-wallet-chain-id")
     if (saved && savedChain === String(ARC_CHAIN_ID)) {
-      setWallet(saved)
-      fetchWalletBal(saved)
       // Circle users have no popup, so silently keep the session warm.
       // Browser wallets defer to next protected action so we never surprise
       // the user with a "sign this" popup just from refreshing the page.
       const savedType = localStorage.getItem("arclens-wallet-type") as "metamask" | "circle" | null
+      rememberConnectedWallet(saved, savedType === "circle" ? "circle" : "metamask")
+      fetchWalletBal(saved)
       if (savedType === "circle") establishSession(saved.toLowerCase(), savedType).catch(() => {})
       fetch("/api/claim", {
         method: "PATCH",
@@ -147,8 +148,28 @@ export default function ArcLayout({ children, active, lockDark }: { children: Re
         }
       }).catch(() => {})
       fetchBuilderProfile(saved)
+      return
     }
 
+    // Browser storage is a convenience, not the authority. A verified Circle
+    // login already has a signed, HTTP-only session cookie, so recover from it
+    // if storage was cleared, blocked, or a hot reload interrupted final UI
+    // state after the wallet was created.
+    fetch("/api/auth/session", { credentials: "include" })
+      .then(r => r.json())
+      .then(session => {
+        if (
+          session?.signedIn &&
+          session?.type === "circle" &&
+          /^0x[a-fA-F0-9]{40}$/.test(String(session.address || ""))
+        ) {
+          const address = String(session.address).toLowerCase()
+          rememberConnectedWallet(address, "circle")
+          fetchWalletBal(address)
+          fetchBuilderProfile(address)
+        }
+      })
+      .catch(() => {})
   }, [mounted])
 
   async function fetchWalletBal(addr: string) {
@@ -172,12 +193,20 @@ export default function ArcLayout({ children, active, lockDark }: { children: Re
     setShowConnectModal(true)
   }
 
-  async function afterConnect(addr: string, type: "metamask" | "circle") {
-    localStorage.setItem("arclens-wallet", addr)
-    localStorage.setItem("arclens-wallet-type", type)
-    localStorage.setItem("arclens-wallet-chain-id", String(ARC_CHAIN_ID))
+  function rememberConnectedWallet(addr: string, type: "metamask" | "circle") {
+    // Update the visible state first. Storage is best-effort and must never
+    // make a successfully authenticated wallet appear disconnected.
     setWallet(addr)
     setWalletType(type)
+    try {
+      localStorage.setItem("arclens-wallet", addr)
+      localStorage.setItem("arclens-wallet-type", type)
+      localStorage.setItem("arclens-wallet-chain-id", String(ARC_CHAIN_ID))
+    } catch {}
+  }
+
+  async function afterConnect(addr: string, type: "metamask" | "circle") {
+    rememberConnectedWallet(addr, type)
     fetchWalletBal(addr)
 
     // Establish a signed session cookie so subsequent protected edits
@@ -296,6 +325,7 @@ export default function ArcLayout({ children, active, lockDark }: { children: Re
     setEmailError("")
     setOtpError("")
     setOtpDigits(["", "", "", "", "", ""])
+    otpVerifyInFlightRef.current = false
 
     try {
       const res = await fetch("/api/auth/otp/send", {
@@ -322,7 +352,8 @@ export default function ArcLayout({ children, active, lockDark }: { children: Re
   }
 
   async function verifyOTP(fullCode: string) {
-    if (otpVerifying) return
+    if (otpVerifyInFlightRef.current) return
+    otpVerifyInFlightRef.current = true
     const email = emailInput.toLowerCase().trim()
     setOtpVerifying(true)
     setOtpError("")
@@ -334,6 +365,7 @@ export default function ArcLayout({ children, active, lockDark }: { children: Re
       })
       const data = await res.json()
       if (!res.ok || !data.success) {
+        otpVerifyInFlightRef.current = false
         setOtpError(data.error || "Verification failed")
         setOtpVerifying(false)
         // Clear the boxes and refocus on first one for retry
@@ -346,9 +378,10 @@ export default function ArcLayout({ children, active, lockDark }: { children: Re
       if (data.address && !data.needsPinSetup) {
         localStorage.setItem("arclens-circle-email", email)
         setSavedCircleEmail(email)
+        await afterConnect(data.address, "circle")
         setShowConnectModal(false)
         setOtpVerifying(false)
-        await afterConnect(data.address, "circle")
+        otpVerifyInFlightRef.current = false
         return
       }
 
@@ -359,8 +392,14 @@ export default function ArcLayout({ children, active, lockDark }: { children: Re
         setPinPhase("pin")
         setConnectView("pin")
         await runPinSetup(email, data.challengeId, data.userToken, data.encryptionKey, walletAction)
+        return
       }
+
+      otpVerifyInFlightRef.current = false
+      setOtpError("Wallet setup could not be started. Request a new code and try again.")
+      setOtpVerifying(false)
     } catch (e: any) {
+      otpVerifyInFlightRef.current = false
       setOtpError(e?.message || "Network error. Try again.")
       setOtpVerifying(false)
     }
@@ -409,6 +448,7 @@ export default function ArcLayout({ children, active, lockDark }: { children: Re
       sdk.execute(challengeId, async (error: any) => {
         sdkRef.current = null
         if (error) {
+          otpVerifyInFlightRef.current = false
           setOtpError(error.message || "Wallet authorization was cancelled or failed. Sign in again to retry.")
           setOtpVerifying(false)
           setOtpDigits(["", "", "", "", "", ""])
@@ -431,10 +471,11 @@ export default function ArcLayout({ children, active, lockDark }: { children: Re
             if (walletRes.ok && walletData.address) {
               localStorage.setItem("arclens-circle-email", email)
               setSavedCircleEmail(email)
+              await afterConnect(walletData.address, "circle")
               setShowConnectModal(false)
               setOtpVerifying(false)
+              otpVerifyInFlightRef.current = false
               setPinPhase("pin")
-              await afterConnect(walletData.address, "circle")
               return
             }
           } catch {
@@ -447,11 +488,13 @@ export default function ArcLayout({ children, active, lockDark }: { children: Re
           ? `Your ${ARC_CHAIN_NAME} wallet is still being enabled. Please sign in again in a moment.`
           : "Your wallet is still being created. Please sign in again in a moment.")
         setOtpVerifying(false)
+        otpVerifyInFlightRef.current = false
         setOtpDigits(["", "", "", "", "", ""])
         setPinPhase("pin")
         setConnectView("email")
       })
     } catch (e: any) {
+      otpVerifyInFlightRef.current = false
       setOtpError(e?.message || "Wallet authorization failed. Try again.")
       setOtpVerifying(false)
       setConnectView("otp")
@@ -466,6 +509,7 @@ export default function ArcLayout({ children, active, lockDark }: { children: Re
     document.getElementById("sdkIframe")?.remove()
     setEmailLoading(false)
     setOtpVerifying(false)
+    otpVerifyInFlightRef.current = false
     setOtpDigits(["", "", "", "", "", ""])
     setOtpError("")
     setConnectView("email")
@@ -501,18 +545,15 @@ export default function ArcLayout({ children, active, lockDark }: { children: Re
 
   function setOtpDigitAt(idx: number, raw: string) {
     const digit = raw.replace(/\D/g, "").slice(-1)
-    setOtpDigits(prev => {
-      const next = [...prev]
-      next[idx] = digit
-      // Auto-advance focus
-      if (digit && idx < 5) setTimeout(() => otpRefs.current[idx + 1]?.focus(), 0)
-      // Auto-submit when complete
-      if (next.every(d => d !== "")) {
-        const code = next.join("")
-        setTimeout(() => verifyOTP(code), 50)
-      }
-      return next
-    })
+    const next = [...otpDigits]
+    next[idx] = digit
+    setOtpDigits(next)
+    // Auto-advance focus
+    if (digit && idx < 5) setTimeout(() => otpRefs.current[idx + 1]?.focus(), 0)
+    // Keep network work outside the React state updater. In Strict Mode an
+    // updater may run twice, which previously submitted and consumed one OTP
+    // twice before the Circle setup screen appeared.
+    if (next.every(d => d !== "")) setTimeout(() => verifyOTP(next.join("")), 50)
     setOtpError("")
   }
 
@@ -560,15 +601,13 @@ export default function ArcLayout({ children, active, lockDark }: { children: Re
     if (!mounted) return
     async function fetchStats() {
       try {
-        const [blockRes, gasRes] = await Promise.all([
-          fetch(ARC_RPC_HTTP, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", method: "eth_blockNumber", params: [], id: 1 }) }),
-          fetch(ARC_RPC_HTTP, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", method: "eth_gasPrice", params: [], id: 2 }) }),
-        ])
-        const blockData = await blockRes.json()
-        const gasData   = await gasRes.json()
-        const num  = parseInt(blockData.result, 16)
-        const gwei = parseInt(gasData.result, 16) / 1e9
-        setBlockNum(num.toLocaleString())
+        const response = await fetch("/api/arc-status", { cache: "no-store" })
+        const data = await response.json()
+        if (!response.ok || !Number.isSafeInteger(data.blockNumber) || !data.gasPriceWei) {
+          throw new Error(data.error || "Arc status unavailable")
+        }
+        const gwei = Number(data.gasPriceWei) / 1e9
+        setBlockNum(Number(data.blockNumber).toLocaleString())
         setGas("$" + (gwei * 46000 * 1e-9).toFixed(4))
         setConnected(true)
       } catch { setConnected(false) }
@@ -907,7 +946,7 @@ export default function ArcLayout({ children, active, lockDark }: { children: Re
           </button>
 
           {/* WALLET — compact topbar button */}
-          {connected && walletAddr ? (
+          {walletAddr ? (
             <div style={{ display: "flex", alignItems: "center", gap: "2px", flexShrink: 0 }}>
               <button onClick={() => setWalletPanelOpen(true)} title="Wallet · balances & send"
                 style={{ height: "30px", padding: "0 10px", background: "rgba(0,184,122,0.08)", color: usdc, fontSize: "11px", fontFamily: mono, border: "1px solid rgba(0,184,122,0.2)", borderRadius: "6px 0 0 6px", cursor: "pointer", display: "flex", alignItems: "center", gap: "5px" }}>

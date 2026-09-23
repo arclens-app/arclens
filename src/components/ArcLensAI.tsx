@@ -670,12 +670,21 @@ export default function ArcLensAI() {
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
   const [nudge, setNudge] = useState(false)
+  const [compactViewport, setCompactViewport] = useState(false)
   const [turns, setTurns] = useState<Turn[]>([])
   const [input, setInput] = useState("")
   const [convId, setConvId] = useState<number | string | null>(null)
   const [face, setFace] = useState<LensState>("idle")
   const inputRef  = useRef<HTMLTextAreaElement>(null)
   const streamRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 600px)")
+    const sync = () => setCompactViewport(media.matches)
+    sync()
+    media.addEventListener("change", sync)
+    return () => media.removeEventListener("change", sync)
+  }, [])
 
   // Drive the character off the live chat state: thinking while it works, a
   // green-eyed "paying" beat when it pays a builder, then back to calm.
@@ -883,11 +892,12 @@ export default function ArcLensAI() {
           title="Ask Lens AI (⌘K)"
           style={{
             position: "fixed",
-            right: "20px", bottom: "20px",
+            right: compactViewport ? "12px" : "20px", bottom: compactViewport ? "12px" : "20px",
             zIndex: 45,
             height: "46px",
-            padding: "0 15px 0 8px",
-            display: "flex", alignItems: "center", gap: "10px",
+            width: compactViewport ? "46px" : undefined,
+            padding: compactViewport ? "0" : "0 15px 0 8px",
+            display: "flex", alignItems: "center", justifyContent: compactViewport ? "center" : undefined, gap: compactViewport ? 0 : "10px",
             background: SURF2,
             color: T1,
             border: `1px solid ${BDR}`,
@@ -917,20 +927,20 @@ export default function ArcLensAI() {
             }} />
             <LensFace state="idle" size={30} />
           </span>
-          <span>Ask Lens AI</span>
-          <span style={{
+          {!compactViewport && <span>Ask Lens AI</span>}
+          {!compactViewport && <span style={{
             display: "inline-flex", alignItems: "center", justifyContent: "center",
             minWidth: "22px", height: "18px", padding: "0 5px",
             background: "rgba(127,127,127,0.12)",
             border: `1px solid ${BDR}`,
             borderRadius: "4px",
             fontSize: "10px", color: T2, fontFamily: MONO,
-          }}>⌘K</span>
+          }}>⌘K</span>}
         </button>
       )}
 
       {/* ── FIRST-VISIT INVITATION — coach-mark above the trigger ───────── */}
-      {nudge && !open && (
+      {nudge && !open && !compactViewport && (
         <div
           onClick={openPanel}
           style={{

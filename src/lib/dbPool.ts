@@ -11,13 +11,34 @@ import { Pool } from "pg"
 
 let _pool: Pool | null = null
 
+function databaseConfig() {
+  const connectionString = process.env.DATABASE_URL
+  if (!connectionString) throw new Error("DATABASE_URL is required")
+
+  if (process.env.BLOCK_EXTERNAL_DATABASE === "true") {
+    const host = new URL(connectionString).hostname.toLowerCase()
+    const localHosts = new Set(["localhost", "127.0.0.1", "::1", "host.docker.internal"])
+    if (!localHosts.has(host)) {
+      throw new Error(`External database access is blocked for this process (${host})`)
+    }
+  }
+
+  const sslSetting = process.env.DATABASE_SSL?.toLowerCase()
+  const ssl = sslSetting === "false" || sslSetting === "disable"
+    ? false
+    : { rejectUnauthorized: false }
+
+  return { connectionString, ssl }
+}
+
 export function getPool(): Pool {
   if (!_pool) {
+    const { connectionString, ssl } = databaseConfig()
     _pool = new Pool({
-      connectionString: process.env.DATABASE_URL,
+      connectionString,
       max: 10,
       idleTimeoutMillis: 30_000,
-      ssl: { rejectUnauthorized: false },
+      ssl,
     })
   }
   return _pool

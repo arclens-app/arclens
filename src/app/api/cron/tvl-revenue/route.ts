@@ -290,6 +290,7 @@ async function loadLiveProjectContracts(client: PoolClient): Promise<ProjectCont
      WHERE pc.verified_at IS NOT NULL
        AND pc.revoked_at IS NULL
        AND pc.chain_id = ${ARC_CHAIN_ID}
+       AND pc.role <> 'deployment'
        AND p.approved = true
        AND p.live = true
        AND p.tvl_tracking_enabled = true

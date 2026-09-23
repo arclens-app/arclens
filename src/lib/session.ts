@@ -14,6 +14,7 @@
 import crypto from "crypto"
 import type { NextRequest } from "next/server"
 import type { NextResponse } from "next/server"
+import { ARC_CHAIN_ID } from "@/lib/constants"
 
 const SESSION_TTL_SEC = 7 * 24 * 60 * 60          // 7 days
 const COOKIE_NAME     = "arclens-session"
@@ -43,14 +44,16 @@ function hmac(payload: string): string {
 export interface SessionData {
   addr: string                    // lowercase 0x...
   type: "wallet" | "circle"
+  chain_id?: number               // Circle wallets differ between TEST and LIVE environments
   iat:  number                    // issued at (seconds)
   exp:  number                    // expires at (seconds)
 }
 
-export function signSession(data: Omit<SessionData, "iat" | "exp">): string {
+export function signSession(data: Pick<SessionData, "addr" | "type">): string {
   const now: SessionData = {
     addr: data.addr.toLowerCase(),
     type: data.type,
+    chain_id: ARC_CHAIN_ID,
     iat:  Math.floor(Date.now() / 1000),
     exp:  Math.floor(Date.now() / 1000) + SESSION_TTL_SEC,
   }
@@ -73,6 +76,11 @@ export function verifySession(token: string | null | undefined): SessionData | n
     const data = JSON.parse(b64urlDecode(payload).toString("utf8")) as SessionData
     if (!data || !data.addr || !data.exp) return null
     if (data.exp < Math.floor(Date.now() / 1000)) return null
+    // Circle TEST and LIVE environments issue different wallets. Never restore
+    // a retired testnet Circle address after the app switches to mainnet (or
+    // vice versa). Existing browser-wallet sessions remain portable because an
+    // EOA keeps the same address across EVM networks.
+    if (data.type === "circle" && data.chain_id !== ARC_CHAIN_ID) return null
     return data
   } catch {
     return null

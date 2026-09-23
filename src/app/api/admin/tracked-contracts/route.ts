@@ -53,6 +53,7 @@ export async function GET(req: NextRequest) {
         SELECT project_id, COUNT(*)::int AS live_count
         FROM project_contracts
         WHERE verified_at IS NOT NULL AND revoked_at IS NULL AND chain_id = ${ARC_CHAIN_ID}
+          AND role <> 'deployment'
         GROUP BY project_id
       )
       SELECT
@@ -77,6 +78,7 @@ export async function GET(req: NextRequest) {
       LEFT JOIN last_alert la ON la.project_id = pc.project_id
       LEFT JOIN live_per_project lpp ON lpp.project_id = pc.project_id
       WHERE pc.verified_at IS NOT NULL AND pc.chain_id = ${ARC_CHAIN_ID}
+        AND pc.role <> 'deployment'
       ORDER BY
         CASE WHEN pc.revoked_at IS NULL THEN 0 ELSE 1 END,
         pc.created_at DESC

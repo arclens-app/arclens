@@ -613,6 +613,9 @@ export default function DashboardPage() {
           .dash-metric:first-child{border-top:none}
           .dash-attn{padding-left:16px;padding-right:16px}
           .dash-act{width:100%}
+          .contract-panel{padding:18px 14px!important;border-radius:10px!important}
+          .contract-status>button{width:100%}
+          .contract-form input,.contract-form select,.contract-form textarea{box-sizing:border-box;max-width:100%}
         }
       `}</style>
       <div style={{ padding: "0 0 60px", maxWidth: "900px", margin: "0 auto" }}>

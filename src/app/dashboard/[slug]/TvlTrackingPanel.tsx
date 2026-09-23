@@ -45,7 +45,7 @@ interface ProjectContract {
   id: number
   project_id: number
   address: string
-  role: "tvl" | "revenue" | "treasury" | "volume"
+  role: "deployment" | "tvl" | "revenue" | "treasury" | "volume"
   label: string | null
   start_block: number
   deployer_address: string | null
@@ -100,12 +100,13 @@ export default function TvlTrackingPanel({ slug, token, connectedWallet, theme }
   const [labelEditValue, setLabelEditValue] = useState("")
 
   const [addr, setAddr] = useState("")
-  const [role, setRole] = useState<"tvl" | "revenue" | "treasury" | "volume">("tvl")
+  const [role, setRole] = useState<"deployment" | "tvl" | "revenue" | "treasury" | "volume">("deployment")
   const [label, setLabel] = useState("")
   const [startBlock, setStartBlock] = useState("")
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState("")
   const [submitSuccess, setSubmitSuccess] = useState("")
+  const [contractFormOpen, setContractFormOpen] = useState(false)
 
   // Volume-only subform
   const [stables, setStables] = useState<Stablecoin[]>([])
@@ -134,6 +135,8 @@ export default function TvlTrackingPanel({ slug, token, connectedWallet, theme }
     expires_at: string
     deployer: string | null
     deployer_status: "found" | "unindexed" | "not_a_contract"
+    authorized_signers: Array<{ address: string; method: string }>
+    connected_signer: { address: string; method: string } | null
   } | null>(null)
   const [signaturePaste, setSignaturePaste] = useState("")
   const [copiedMsg, setCopiedMsg] = useState(false)
@@ -177,6 +180,8 @@ export default function TvlTrackingPanel({ slug, token, connectedWallet, theme }
     () => contracts.filter(c => c.revoked_at),
     [contracts],
   )
+  const mainnetContract = live.find(c => c.role === "deployment") || live[0] || null
+  const metricContracts = live.filter(c => c.role !== "deployment")
 
   // Step 1 of submit flow: request a canonical signing message from the
   // server. No wallet interaction yet — the founder is free to take that
@@ -239,6 +244,8 @@ export default function TvlTrackingPanel({ slug, token, connectedWallet, theme }
         expires_at: data.expires_at,
         deployer: data.deployer ?? null,
         deployer_status: data.deployer_status ?? "unindexed",
+        authorized_signers: Array.isArray(data.authorized_signers) ? data.authorized_signers : [],
+        connected_signer: data.connected_signer ?? null,
       })
     } catch (e: any) {
       setSubmitError(e?.message || "Network error")
@@ -372,6 +379,7 @@ export default function TvlTrackingPanel({ slug, token, connectedWallet, theme }
   // endpoint upserts on (project_id, address, role) — same row gets updated
   // with the new signed config.
   function reconfigure(c: ProjectContract) {
+    setContractFormOpen(true)
     setAddr(c.address)
     setRole(c.role)
     setLabel(c.label ?? "")
@@ -416,12 +424,12 @@ export default function TvlTrackingPanel({ slug, token, connectedWallet, theme }
     width: "100%",
   }
   const roleColor = (r: ProjectContract["role"]) =>
-    r === "tvl" ? "#8aaeff" : r === "revenue" ? "#c08828" : "#a855f7"
+    r === "deployment" ? "#00b87a" : r === "tvl" ? "#8aaeff" : r === "revenue" ? "#c08828" : "#a855f7"
 
   return (
-    <div style={{ background: surf, border: "1px solid " + bdr, borderRadius: "12px", padding: "24px 26px" }}>
+    <div className="contract-panel" style={{ background: surf, border: "1px solid " + bdr, borderRadius: "12px", padding: "24px 26px" }}>
       <div style={{ fontSize: "14px", fontWeight: 600, color: t1, marginBottom: "10px" }}>
-        TVL &amp; Revenue tracking
+        Mainnet contracts &amp; analytics
       </div>
       {/* Method toggle — two ways to the same goal, one home */}
       <div style={{ display: "flex", gap: 6, marginBottom: 18 }}>
@@ -439,12 +447,31 @@ export default function TvlTrackingPanel({ slug, token, connectedWallet, theme }
 
       {method === "verified" && (<>
       <div style={{ fontSize: "11px", fontFamily: mono, color: t3, marginBottom: "12px", lineHeight: 1.6 }}>
-        Register the contracts that hold user deposits (TVL) or collect fees (Revenue).
-        We verify your ownership by matching the contract&apos;s on-chain deployer to your signed-in wallet —
-        the same gate used for contract claims. Numbers appear on /ecosystem within 5 minutes, with the green verified badge.
+        Verify a deployment for mainnet directory status, or opt a contract into on-chain analytics.
       </div>
-      <div style={{ fontSize: "11px", fontFamily: mono, color: "#a8c2ff", background: "rgba(26,86,255,0.06)", border: "1px solid rgba(26,86,255,0.18)", borderRadius: "7px", padding: "9px 12px", marginBottom: "22px", lineHeight: 1.6 }}>
-        Verification is a one-time off-chain signature that proves you control the contract. It gives ArcLens no control over it — ownership stays entirely yours.
+      <details style={{ fontSize: "11px", fontFamily: mono, color: "#8aaeff", background: "rgba(26,86,255,0.05)", border: "1px solid rgba(26,86,255,0.18)", borderRadius: "7px", padding: "9px 12px", marginBottom: "18px", lineHeight: 1.6 }}>
+        <summary style={{ cursor: "pointer", fontWeight: 600 }}>How verification works</summary>
+        <div style={{ color: t2, paddingTop: "7px" }}>
+          Sign one off-chain message with the contract&apos;s deployer wallet. ArcLens gains no control over
+          your contract. A deployment activates only the Live on Mainnet status; analytics roles are tracked
+          after the next indexing cycle.
+        </div>
+      </details>
+
+      <div className="contract-status" style={{ display: "flex", alignItems: "center", gap: "12px", padding: "11px 0", borderTop: "1px solid " + bdr, borderBottom: "1px solid " + bdr, marginBottom: "18px", flexWrap: "wrap" }}>
+        <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: mainnetContract ? green : t3, boxShadow: mainnetContract ? "0 0 0 4px rgba(0,184,122,0.1)" : "none", flexShrink: 0 }} />
+        <div style={{ flex: 1, minWidth: "160px" }}>
+          <div style={{ fontSize: "12px", fontWeight: 650, color: t1 }}>
+            {loading ? "Checking mainnet status…" : mainnetContract ? "Live on Mainnet" : "Mainnet contract not verified"}
+          </div>
+          <div style={{ fontSize: "10px", fontFamily: mono, color: t3, marginTop: "2px" }}>
+            {mainnetContract ? `${mainnetContract.address.slice(0, 10)}…${mainnetContract.address.slice(-6)}` : "Verify one deployed contract to activate the directory filter."}
+          </div>
+        </div>
+        <button onClick={() => { setContractFormOpen(open => !open); if (!contractFormOpen) { setRole("deployment"); setChallenge(null); setSubmitError("") } }}
+          style={{ height: "30px", padding: "0 12px", background: contractFormOpen ? "rgba(26,86,255,0.12)" : "transparent", color: "#8aaeff", border: "1px solid rgba(26,86,255,0.28)", borderRadius: "7px", cursor: "pointer", fontSize: "10.5px", fontFamily: mono, flexShrink: 0 }}>
+          {contractFormOpen ? "Close" : mainnetContract ? "Manage contracts" : "Verify contract"}
+        </button>
       </div>
 
       {/* ── LIVE LIST ── */}
@@ -452,23 +479,11 @@ export default function TvlTrackingPanel({ slug, token, connectedWallet, theme }
         <div style={{ fontSize: "12px", fontFamily: mono, color: t3, padding: "16px 0" }}>Loading…</div>
       ) : loadError ? (
         <div style={{ fontSize: "12px", fontFamily: mono, color: "#e03348", padding: "10px 0" }}>{loadError}</div>
-      ) : live.length === 0 ? (
-        <div style={{
-          padding: "16px",
-          background: "rgba(26,86,255,0.04)",
-          border: "1px dashed " + bdr,
-          borderRadius: "8px",
-          fontSize: "12px",
-          fontFamily: mono,
-          color: t3,
-          marginBottom: "22px",
-          lineHeight: 1.6,
-        }}>
-          No contracts registered yet. Add one below to enable TVL/Revenue on your /ecosystem page.
-        </div>
+      ) : metricContracts.length === 0 ? (
+        null
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "22px" }}>
-          {live.map(c => (
+          {metricContracts.map(c => (
             <div key={c.id} style={{
               display: "flex",
               alignItems: "center",
@@ -559,7 +574,7 @@ export default function TvlTrackingPanel({ slug, token, connectedWallet, theme }
                   fontFamily: mono,
                   flexShrink: 0,
                 }}
-                title="Stop tracking this contract"
+                title={c.role === "deployment" ? "Remove this mainnet deployment status" : "Stop tracking this contract"}
               >
                 Revoke
               </button>
@@ -569,12 +584,12 @@ export default function TvlTrackingPanel({ slug, token, connectedWallet, theme }
       )}
 
       {/* ── ADD FORM ── */}
-      <div data-tvl-form style={{ borderTop: "1px solid " + bdr, paddingTop: "20px" }}>
+      {contractFormOpen && <div className="contract-form" data-tvl-form style={{ borderTop: "1px solid " + bdr, paddingTop: "20px" }}>
         <div style={{ fontSize: "11px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "12px" }}>
           Add a contract
         </div>
 
-        <div style={{
+        <details style={{
           padding: "10px 14px",
           background: "rgba(138,174,255,0.05)",
           border: "1px solid rgba(138,174,255,0.2)",
@@ -585,11 +600,12 @@ export default function TvlTrackingPanel({ slug, token, connectedWallet, theme }
           marginBottom: "14px",
           lineHeight: 1.7,
         }}>
-          <strong style={{ color: "#a8c2ff" }}>Security note.</strong> You stay signed in with any wallet
-          that owns this project. To prove the contract is yours, you sign an off-chain message with
-          your <em>deployer wallet</em> wherever it lives — hardware wallet, Safe multisig, cast,
-          Frame, anything that signs EIP-191. The deployer wallet never connects to a URL.
-        </div>
+          <summary style={{ cursor: "pointer", color: "#a8c2ff", fontWeight: 600 }}>Deployer wallet options</summary>
+          <div style={{ color: t2, paddingTop: "7px" }}>
+            Sign the off-chain message wherever your deployer wallet lives — hardware wallet, Safe multisig,
+            cast or Frame. The deployer wallet never has to connect to ArcLens.
+          </div>
+        </details>
         {!connectedWallet && (
           <div style={{
             padding: "8px 14px",
@@ -622,10 +638,11 @@ export default function TvlTrackingPanel({ slug, token, connectedWallet, theme }
               <label style={labelStyle}>Role</label>
               <select
                 value={role}
-                onChange={e => setRole(e.target.value as "tvl" | "revenue" | "treasury" | "volume")}
+                onChange={e => setRole(e.target.value as "deployment" | "tvl" | "revenue" | "treasury" | "volume")}
                 style={{ ...inputStyle, cursor: "pointer" }}
                 disabled={submitting}
               >
+                <option value="deployment">Mainnet deployment — directory status only</option>
                 <option value="tvl">TVL — holds user deposits</option>
                 <option value="volume">Volume — emits Swap events</option>
                 <option value="revenue">Revenue — collects fees</option>
@@ -874,12 +891,18 @@ export default function TvlTrackingPanel({ slug, token, connectedWallet, theme }
           }}>
             {(() => {
               const conn = (connectedWallet || "").toLowerCase()
-              const dep = (challenge.deployer || "").toLowerCase()
-              const matched = !!dep && conn === dep
+              const connectedAuthority = challenge.connected_signer
+              const expected = (connectedAuthority?.address || challenge.deployer || "").toLowerCase()
+              const matched = !!expected && conn === expected
+              const methodLabel = connectedAuthority?.method === "owner" ? "owner"
+                : connectedAuthority?.method === "admin" ? "admin"
+                : connectedAuthority?.method === "proxy_admin" ? "proxy admin"
+                : connectedAuthority?.method === "deployer_tx_sender" ? "creation wallet"
+                : "deployer"
               return (
                 <>
                   <div style={{ fontSize: "10px", fontFamily: mono, color: green, textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                    Step 2 of 2 · Sign as the deployer
+                    Step 2 of 2 · Sign as an authorized wallet
                   </div>
 
                   {/* Deployer banner — tells the founder exactly what address is expected. */}
@@ -895,11 +918,11 @@ export default function TvlTrackingPanel({ slug, token, connectedWallet, theme }
                   }}>
                     {challenge.deployer_status === "found" ? (
                       <>
-                        On-chain deployer: <span style={{ color: t1, fontWeight: 600 }}>{challenge.deployer}</span>
+                        On-chain {methodLabel}: <span style={{ color: t1, fontWeight: 600 }}>{expected}</span>
                         <br />
                         {matched
-                          ? "✓ That's your connected wallet — sign in-browser with one click below."
-                          : `Your connected wallet (${conn.slice(0,8)}…${conn.slice(-6)}) is different. Sign the message offline with the deployer wallet and paste the signature.`}
+                          ? "✓ That is your connected wallet — sign in-browser with one click below."
+                          : `Your connected wallet (${conn.slice(0,8)}…${conn.slice(-6)}) is different. Sign the message offline with an authorized contract wallet and paste the signature.`}
                       </>
                     ) : challenge.deployer_status === "not_a_contract" ? (
                       <>No bytecode at that address on Arc — this isn&apos;t a contract.</>
@@ -912,19 +935,19 @@ export default function TvlTrackingPanel({ slug, token, connectedWallet, theme }
             })()}
 
             <div style={{ fontSize: "12px", fontFamily: mono, color: t2, lineHeight: 1.7 }}>
-              Two ways to sign: (1) <strong style={{ color: t1 }}>connect the deployer wallet</strong> to this site
+              Two ways to sign: (1) <strong style={{ color: t1 }}>connect an authorized wallet</strong> to this site
               and click <em>Sign with connected wallet</em> for a single click, or (2) take the message
               offline and sign with anything that produces EIP-191 <code>personal_sign</code> — Frame,
               Rabby, Ledger Live, <code>cast wallet sign</code>, a Safe multisig (EIP-1271). Paste the
               resulting 0x-hex signature below. Message expires at {new Date(challenge.expires_at).toLocaleTimeString()}.
             </div>
 
-            {/* One-click in-browser sign — only shown when the connected
-                wallet is itself the on-chain deployer. */}
+            {/* One-click in-browser sign — shown when the connected wallet is
+                an on-chain deployer, owner, admin, or proxy admin. */}
             {(() => {
               const conn = (connectedWallet || "").toLowerCase()
-              const dep = (challenge.deployer || "").toLowerCase()
-              if (!dep || conn !== dep) return null
+              const expected = (challenge.connected_signer?.address || challenge.deployer || "").toLowerCase()
+              if (!expected || conn !== expected) return null
               return (
                 <button
                   onClick={signInBrowser}
@@ -1101,7 +1124,7 @@ export default function TvlTrackingPanel({ slug, token, connectedWallet, theme }
             </div>
           </div>
         )}
-      </div>
+      </div>}
 
       {/* ── REVOKED HISTORY (collapsed by default) ── */}
       {revoked.length > 0 && (
