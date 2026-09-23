@@ -2,17 +2,7 @@
 import { useEffect, useState, useRef } from "react"
 import ArcLayout from "@/components/ArcLayout"
 import { SkeletonRow, SkeletonStatsBand } from "@/components/ArcSkeleton"
-import { ARC_CHAIN_ID, ARC_CHAIN_NAME, ARC_RPC_HTTP } from "@/lib/constants"
-
-async function rpc(method: string, params: unknown[] = []) {
-  const res = await fetch(ARC_RPC_HTTP, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ jsonrpc: "2.0", method, params, id: 1 }),
-  })
-  const data = await res.json()
-  return data.result
-}
+import { ARC_CHAIN_ID, ARC_CHAIN_NAME } from "@/lib/constants"
 
 function timeAgo(ts: number) {
   const s = Math.floor(Date.now() / 1000) - ts
@@ -34,8 +24,8 @@ export default function Home() {
   const [tps, setTps]           = useState("...")
   const [blocks, setBlocks]     = useState<Block[]>([])
   const [txs, setTxs]           = useState<Tx[]>([])
-  const [lastBlock, setLastBlock] = useState(0)
   const [connected, setConnected] = useState(false)
+  const lastBlock = useRef(0)
 
   // Cache names so we never re-fetch the same address
   const namesCache = useRef<Record<string, string>>({})
@@ -46,39 +36,23 @@ export default function Home() {
     if (!mounted) return
     async function fetchAll() {
       try {
-        const blockHex = await rpc("eth_blockNumber")
-        const num      = parseInt(blockHex, 16)
-        const gasHex   = await rpc("eth_gasPrice")
-        const gwei     = parseInt(gasHex, 16) / 1e9
+        const response = await fetch("/api/network-overview", { cache: "no-store" })
+        const data = await response.json()
+        if (!response.ok || !Number.isSafeInteger(data.blockNumber) || !data.gasPriceWei) {
+          throw new Error(data.error || "Arc network data unavailable")
+        }
+        const num = Number(data.blockNumber)
+        const gwei = Number(data.gasPriceWei) / 1e9
         setBlockNum(num.toLocaleString())
         setGasUSDC((gwei * 46000 * 1e-9).toFixed(4))
+        if (typeof data.transactionsPerSecond === "number" && Number.isFinite(data.transactionsPerSecond)) {
+          setTps(data.transactionsPerSecond.toFixed(1))
+        }
         setConnected(true)
-        if (num === lastBlock) return
-        setLastBlock(num)
-        const newBlocks: Block[] = []
-        const newTxs: Tx[] = []
-        for (let i = 0; i < 6; i++) {
-          const b = await rpc("eth_getBlockByNumber", ["0x" + (num - i).toString(16), true])
-          if (!b) continue
-          const gasUsed = parseInt(b.gasUsed, 16)
-          const baseFee = parseInt(b.baseFeePerGas || "0x2540BE400", 16)
-          const feeUSDC = (Number(BigInt(gasUsed) * BigInt(baseFee)) / 1e18).toFixed(4)
-          const ts      = parseInt(b.timestamp, 16)
-          newBlocks.push({ number: parseInt(b.number, 16), txCount: b.transactions.length, feeUSDC, validator: b.miner, timestamp: ts })
-          for (const tx of b.transactions.slice(0, 4)) {
-            if (newTxs.length >= 10) break
-            const gasUsedTx  = parseInt(tx.gas, 16)
-            const gasPriceTx = parseInt(tx.gasPrice || "0x2540BE400", 16)
-            const gasUSDCTx  = (gasUsedTx * gasPriceTx / 1e18).toFixed(4)
-            const valueUSDC  = (Number(BigInt(tx.value || "0x0")) / 1e18).toFixed(2)
-            newTxs.push({ hash: tx.hash, from: tx.from, to: tx.to, valueUSDC: "$" + valueUSDC, gasUSDC: "$" + gasUSDCTx, timestamp: ts })
-          }
-        }
-        if (newBlocks.length >= 2) {
-          const totalTxs = newBlocks.slice(0,5).reduce((s,b) => s + b.txCount, 0)
-          const timeSpan = newBlocks[0].timestamp - newBlocks[Math.min(4, newBlocks.length-1)].timestamp
-          setTps(timeSpan > 0 ? (totalTxs / timeSpan).toFixed(1) : "...")
-        }
+        if (num === lastBlock.current) return
+        lastBlock.current = num
+        const newBlocks: Block[] = Array.isArray(data.blocks) ? data.blocks : []
+        const newTxs: Tx[] = Array.isArray(data.transactions) ? data.transactions : []
         setBlocks(newBlocks)
         setTxs(newTxs)
 
@@ -111,7 +85,7 @@ export default function Home() {
     fetchAll()
     const t = setInterval(fetchAll, 30000)
     return () => clearInterval(t)
-  }, [mounted, lastBlock])
+  }, [mounted])
 
   if (!mounted) return <div style={{ minHeight: "100vh", background: "#060812" }} />
 

@@ -2,22 +2,13 @@
 import { useEffect, useState, useRef } from "react"
 import { safeExternalUrl } from "@/lib/submissionGuards"
 import ArcLayout from "@/components/ArcLayout"
-import { ARC_CHAIN_ID, ARC_CHAIN_NAME, ARC_RPC_HTTP } from "@/lib/constants"
+import { ARC_CHAIN_ID, ARC_CHAIN_NAME } from "@/lib/constants"
 
 interface Project {
   id: number; name: string; tagline: string; category: string; slug?: string
   logo_url: string | null; website: string | null; twitter: string | null
   badge: string | null; featured: boolean
   lat: number | null; lng: number | null; city?: string; country?: string
-}
-
-async function rpc(method: string, params: unknown[] = []) {
-  const res = await fetch(ARC_RPC_HTTP, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ jsonrpc: "2.0", method, params, id: 1 }),
-  })
-  return (await res.json()).result
 }
 
 /* lat/lng → Three.js Vector3 on sphere radius r */
@@ -418,28 +409,22 @@ export default function HomePage() {
     if (!mounted) return
     async function load() {
       try {
-        const blockHex = await rpc("eth_blockNumber")
-        const num      = parseInt(blockHex, 16)
-        const gasHex   = await rpc("eth_gasPrice")
-        const gwei     = parseInt(gasHex, 16) / 1e9
-        setBlockNum(num.toLocaleString())
+        const response = await fetch("/api/arc-status", { cache: "no-store" })
+        const data = await response.json()
+        if (!response.ok || !Number.isSafeInteger(data.blockNumber) || !data.gasPriceWei) {
+          throw new Error(data.error || "Arc status unavailable")
+        }
+        const gwei = Number(data.gasPriceWei) / 1e9
+        setBlockNum(Number(data.blockNumber).toLocaleString())
         setGasCost("$" + (gwei * 46000 * 1e-9).toFixed(4))
-        const blocks: any[] = []
-        for (let i = 0; i < 5; i++) {
-          const b = await rpc("eth_getBlockByNumber", ["0x" + (num - i).toString(16), true])
-          if (b) blocks.push({ number: parseInt(b.number, 16), txCount: b.transactions.length, timestamp: parseInt(b.timestamp, 16) })
+        if (typeof data.transactionsPerSecond === "number" && Number.isFinite(data.transactionsPerSecond)) {
+          setTps(data.transactionsPerSecond.toFixed(1))
         }
-        if (blocks.length >= 2) {
-          const span = blocks[0].timestamp - blocks[blocks.length - 1].timestamp
-          if (span > 0) setTps((blocks.reduce((s: number, b: any) => s + b.txCount, 0) / span).toFixed(1))
-          // Average block time across the sampled blocks. Sub-second on Arc,
-          // so we always show one decimal place even when the integer would round to 0.
-          const avgBlockTime = span / (blocks.length - 1)
-          if (avgBlockTime > 0 && Number.isFinite(avgBlockTime)) {
-            setFinalityLive(avgBlockTime < 10 ? avgBlockTime.toFixed(2) + "s" : Math.round(avgBlockTime) + "s")
-          }
+        if (typeof data.averageBlockTimeSeconds === "number" && Number.isFinite(data.averageBlockTimeSeconds)) {
+          const seconds = data.averageBlockTimeSeconds
+          setFinalityLive(seconds < 10 ? seconds.toFixed(2) + "s" : Math.round(seconds) + "s")
         }
-        setRecentBlocks(blocks.slice(0, 4))
+        setRecentBlocks(Array.isArray(data.recentBlocks) ? data.recentBlocks : [])
       } catch { /* ignore */ }
     }
     load()
