@@ -445,16 +445,23 @@ export default function ArcLayout({ children, active, lockDark }: { children: Re
       } as any)
       sdkRef.current = sdk
 
+      // Circle may emit a late callback while its hosted iframe is closing.
+      // Once a successful completion starts, ignore that callback so the UI
+      // cannot jump back to the email form while ArcLens finishes connecting.
+      let completionInProgress = false
       sdk.execute(challengeId, async (error: any) => {
+        if (completionInProgress) return
         sdkRef.current = null
         if (error) {
           otpVerifyInFlightRef.current = false
           setOtpError(error.message || "Wallet authorization was cancelled or failed. Sign in again to retry.")
           setOtpVerifying(false)
           setOtpDigits(["", "", "", "", "", ""])
-          setConnectView("email")
+          setPinPhase("pin")
+          setConnectView("pin")
           return
         }
+        completionInProgress = true
 
         // PIN created. Circle provisions the wallet asynchronously —
         // poll with backoff so we don't show a false "not ready" error.
@@ -471,8 +478,11 @@ export default function ArcLayout({ children, active, lockDark }: { children: Re
             if (walletRes.ok && walletData.address) {
               localStorage.setItem("arclens-circle-email", email)
               setSavedCircleEmail(email)
-              await afterConnect(walletData.address, "circle")
+              // The address and signed session are confirmed at this point.
+              // Close immediately; balance/project hydration is secondary and
+              // must not keep the completed sign-in dialog on screen.
               setShowConnectModal(false)
+              await afterConnect(walletData.address, "circle")
               setOtpVerifying(false)
               otpVerifyInFlightRef.current = false
               setPinPhase("pin")
@@ -491,7 +501,7 @@ export default function ArcLayout({ children, active, lockDark }: { children: Re
         otpVerifyInFlightRef.current = false
         setOtpDigits(["", "", "", "", "", ""])
         setPinPhase("pin")
-        setConnectView("email")
+        setConnectView("pin")
       })
     } catch (e: any) {
       otpVerifyInFlightRef.current = false
