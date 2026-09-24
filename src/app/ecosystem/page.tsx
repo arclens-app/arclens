@@ -266,6 +266,8 @@ export default function EcosystemPage() {
   async function submitProject(verifyCode?: string) {
     if (!form.name.trim())    { setSubmitError("Project name is required"); return }
     if (!form.tagline.trim()) { setSubmitError("Tagline is required"); return }
+    if (!form.website.trim()) { setSubmitError("Official project website is required"); return }
+    if (!form.twitter.trim()) { setSubmitError("Official project X account is required"); return }
     if (!form.email.trim())   { setSubmitError("Contact email is required"); return }
     if (!form.founder.trim()) { setSubmitError("Founder or representative profile is required"); return }
     if (contractErr)          { setSubmitError(contractErr); return }
@@ -737,8 +739,8 @@ export default function EcosystemPage() {
                 {/* Fields grid — single column on mobile */}
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "10px", marginBottom: "10px" }}>
                   {[
-                    { k: "website",  l: "Website",      p: "https://..." },
-                    { k: "twitter",  l: "Project X / Twitter",  p: "@yourproject" },
+                    { k: "website",  l: "Official Website *",      p: "https://yourproject.com" },
+                    { k: "twitter",  l: "Official Project X *",  p: "@yourproject" },
                     { k: "github",   l: "GitHub",        p: "https://github.com/..." },
                     { k: "discord",  l: "Discord",       p: "https://discord.gg/..." },
                     { k: "email",    l: "Contact Email *", p: "you@email.com" },

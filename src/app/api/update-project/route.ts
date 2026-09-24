@@ -2,7 +2,7 @@
 import { enforce } from "@/lib/ratelimit"
 import { getSession } from "@/lib/session"
 import { getPool } from "@/lib/dbPool"
-import { validateRepresentativeProfile } from "@/lib/submissionGuards"
+import { validateProjectSocial, validateRepresentativeProfile, validateWebsite } from "@/lib/submissionGuards"
 
 const pool = getPool()
 
@@ -73,6 +73,16 @@ export async function POST(req: NextRequest) {
     if (founderCheck.ok === false) {
       return NextResponse.json({ error: founderCheck.error }, { status: 400 })
     }
+    const websiteWasSubmitted = Object.prototype.hasOwnProperty.call(updates, "website")
+    const finalWebsite = websiteWasSubmitted ? String(updates.website || "").trim() : String(projectRow.website || "").trim()
+    if (!finalWebsite) return NextResponse.json({ error: "Official project website is required" }, { status: 400 })
+    const websiteCheck = validateWebsite(finalWebsite)
+    if (websiteCheck.ok === false) return NextResponse.json({ error: websiteCheck.error }, { status: 400 })
+
+    const socialWasSubmitted = Object.prototype.hasOwnProperty.call(updates, "twitter")
+    const finalSocial = socialWasSubmitted ? String(updates.twitter || "").trim() : String(projectRow.twitter || "").trim()
+    const socialCheck = validateProjectSocial(finalSocial)
+    if (socialCheck.ok === false) return NextResponse.json({ error: socialCheck.error }, { status: 400 })
 
     // Write each changed field to pending_updates
     let changeCount = 0

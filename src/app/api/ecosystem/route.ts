@@ -1,7 +1,7 @@
 ﻿import { NextRequest, NextResponse, after } from "next/server"
 import { scanUrl } from "@/lib/urlScan"
 import { getPool } from "@/lib/dbPool"
-import { validateEmail, validateWebsite, validateRepresentativeProfile, hostFromUrl, domainResolves } from "@/lib/submissionGuards"
+import { validateEmail, validateWebsite, validateRepresentativeProfile, validateProjectSocial, hostFromUrl, domainResolves } from "@/lib/submissionGuards"
 import { extractTags } from "@/lib/projectTags"
 import { sendSubmissionCode, verifySubmissionCode } from "@/lib/submissionOtp"
 import { ARC_CHAIN_ID, ARC_MAINNET_CHAIN_ID } from "@/lib/constants"
@@ -163,6 +163,7 @@ export async function POST(req: NextRequest) {
 
   if (!name?.trim())    return NextResponse.json({ error: "Project name required" }, { status: 400 })
   if (!tagline?.trim()) return NextResponse.json({ error: "Tagline required" }, { status: 400 })
+  if (!website?.trim()) return NextResponse.json({ error: "Official project website required" }, { status: 400 })
 
   // ── Intake validation ─────────────────────────────────────────────────────
   // Reject junk before it reaches the admin queue: bad emails, reserved/
@@ -173,6 +174,9 @@ export async function POST(req: NextRequest) {
 
   const founderCheck = validateRepresentativeProfile(founderSocial)
   if (founderCheck.ok === false) return NextResponse.json({ error: founderCheck.error }, { status: 400 })
+
+  const socialCheck = validateProjectSocial(twitter)
+  if (socialCheck.ok === false) return NextResponse.json({ error: socialCheck.error }, { status: 400 })
 
   const siteCheck = validateWebsite(website)
   if (siteCheck.ok === false) return NextResponse.json({ error: siteCheck.error }, { status: 400 })

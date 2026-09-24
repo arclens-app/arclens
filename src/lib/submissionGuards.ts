@@ -135,6 +135,20 @@ export function validateRepresentativeProfile(raw: string | null | undefined): {
   }
 }
 
+/** Official project X identity. Accept a handle or an x.com/twitter.com URL. */
+export function validateProjectSocial(raw: string | null | undefined): { ok: true } | { ok: false; error: string } {
+  const value = (raw || "").trim()
+  if (!value) return { ok: false, error: "Official project X account is required" }
+  if (/^@?[A-Za-z0-9_]{1,15}$/.test(value)) return { ok: true }
+  try {
+    const url = new URL(/^https?:\/\//i.test(value) ? value : `https://${value}`)
+    const host = url.hostname.toLowerCase().replace(/^www\./, "")
+    const handle = url.pathname.split("/").filter(Boolean)[0] || ""
+    if ((host === "x.com" || host === "twitter.com") && /^[A-Za-z0-9_]{1,15}$/.test(handle)) return { ok: true }
+  } catch { /* return the shared error below */ }
+  return { ok: false, error: "Enter a valid project X handle or x.com profile URL" }
+}
+
 /**
  * Does the domain actually resolve? Uses DNS-over-HTTPS (no local resolver
  * dependency, works on serverless). Best-effort: on any network error we return

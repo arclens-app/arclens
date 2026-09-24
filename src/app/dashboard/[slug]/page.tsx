@@ -407,6 +407,16 @@ export default function DashboardPage() {
   }
 
   async function saveEdit() {
+    if (!editForm.website.trim()) {
+      setSaveError("Add the project's official website before saving.")
+      setActiveTab("edit")
+      return
+    }
+    if (!editForm.twitter.trim()) {
+      setSaveError("Add the project's official X account before saving.")
+      setActiveTab("edit")
+      return
+    }
     if (!editForm.founder_social.trim()) {
       setSaveError("Add a founder or authorized representative profile before saving.")
       setActiveTab("edit")
@@ -1380,8 +1390,8 @@ export default function DashboardPage() {
               <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
                 {[
                   { key: "tagline",     label: "Tagline",          ph: "One-line description" },
-                  { key: "website",     label: "Website",          ph: "https://..." },
-                  { key: "twitter",     label: "Project X / Twitter", ph: "@yourproject" },
+                  { key: "website",     label: "Official Website *",          ph: "https://yourproject.com" },
+                  { key: "twitter",     label: "Official Project X *", ph: "@yourproject" },
                   { key: "github",      label: "GitHub",           ph: "https://github.com/..." },
                   { key: "discord",     label: "Discord",          ph: "https://discord.gg/..." },
                   { key: "contract",    label: "Primary Contract Address", ph: "0x..." },

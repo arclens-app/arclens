@@ -21,7 +21,7 @@ import { getSession } from "@/lib/session"
 import { ARC_CHAIN_ID, ARC_EXPLORER_API, ARC_RPC_HTTP } from "@/lib/constants"
 import { canonicalEventSignature, dataArgTypes } from "@/lib/tvl"
 import { getPool } from "@/lib/dbPool"
-import { validateRepresentativeProfile } from "@/lib/submissionGuards"
+import { validateProjectSocial, validateRepresentativeProfile, validateWebsite } from "@/lib/submissionGuards"
 import {
   buildChallengeMessage,
   verifyAuthorizedSigner,
@@ -305,7 +305,7 @@ export async function POST(req: NextRequest) {
 
     // 5. Look up the project & confirm session ownership matches.
     const proj = await pool.query(
-      `SELECT id, slug, founder_social FROM projects WHERE slug = $1 AND owner_wallet = $2 LIMIT 1`,
+      `SELECT id, slug, founder_social, website, twitter FROM projects WHERE slug = $1 AND owner_wallet = $2 LIMIT 1`,
       [payload.project_slug, sess.addr],
     )
     if (proj.rows.length === 0) {
@@ -317,6 +317,16 @@ export async function POST(req: NextRequest) {
         { error: "Add a valid founder or authorized representative profile in your project dashboard before registering a mainnet deployment." },
         { status: 400 },
       )
+    }
+    if (payload.role === "deployment") {
+      const websiteCheck = validateWebsite(proj.rows[0].website)
+      const socialCheck = validateProjectSocial(proj.rows[0].twitter)
+      if (!String(proj.rows[0].website || "").trim() || websiteCheck.ok === false || socialCheck.ok === false) {
+        return NextResponse.json(
+          { error: "Add a valid official website and project X account in your dashboard before registering a mainnet deployment." },
+          { status: 400 },
+        )
+      }
     }
     const project = proj.rows[0]
 
