@@ -11,18 +11,20 @@ pragma solidity ^0.8.24;
 ///         This is ArcLens's *opinion*, signed on-chain — not decentralized
 ///         truth. Only authorized attesters can write; the owner manages them.
 contract ArcLensRegistry {
-    /// @notice Owner can add/remove attesters and transfer ownership.
+    /// @notice Owner can add/remove attesters and begin an ownership transfer.
     address public owner;
+    /// @notice Proposed owner. Ownership changes only after this address accepts.
+    address public pendingOwner;
 
     /// @notice Addresses allowed to write attestations (the deployer + any the
     ///         owner authorizes). Kept separate from any wallet that holds funds.
     mapping(address => bool) public attester;
 
     struct Attestation {
-        uint8  tier;      // 0 none · 1 listed · 2 claimed · 3 vetted · 4 verified · 5 arc partner · 6 arc official
-        uint64 issuedAt;  // unix seconds (0 = never attested)
-        bool   revoked;
-        string ref;       // pointer, e.g. "arclenz.xyz/ecosystem/<slug>" or an IPFS hash
+        uint8 tier; // 0 none · 1 listed · 2 claimed · 3 vetted · 4 verified · 5 arc partner · 6 arc official
+        uint64 issuedAt; // unix seconds (0 = never attested)
+        bool revoked;
+        string ref; // pointer, e.g. "arclenz.xyz/ecosystem/<slug>" or an IPFS hash
     }
 
     /// @notice subject (a project contract or builder wallet) => its attestation.
@@ -31,10 +33,17 @@ contract ArcLensRegistry {
     event Attested(address indexed subject, uint8 tier, string ref, address indexed by);
     event Revoked(address indexed subject, address indexed by);
     event AttesterSet(address indexed who, bool allowed);
+    event OwnershipTransferStarted(address indexed from, address indexed to);
     event OwnerTransferred(address indexed from, address indexed to);
 
-    modifier onlyOwner()    { require(msg.sender == owner, "not owner"); _; }
-    modifier onlyAttester() { require(attester[msg.sender], "not attester"); _; }
+    modifier onlyOwner() {
+        require(msg.sender == owner, "not owner");
+        _;
+    }
+    modifier onlyAttester() {
+        require(attester[msg.sender], "not attester");
+        _;
+    }
 
     constructor() {
         owner = msg.sender;
@@ -53,8 +62,18 @@ contract ArcLensRegistry {
 
     function transferOwnership(address to) external onlyOwner {
         require(to != address(0), "zero");
-        emit OwnerTransferred(owner, to);
-        owner = to;
+        pendingOwner = to;
+        emit OwnershipTransferStarted(owner, to);
+    }
+
+    /// @notice Complete an ownership transfer. A mistyped recipient can never
+    ///         take ownership because only the proposed address can accept.
+    function acceptOwnership() external {
+        require(msg.sender == pendingOwner, "not pending owner");
+        address previousOwner = owner;
+        owner = msg.sender;
+        pendingOwner = address(0);
+        emit OwnerTransferred(previousOwner, msg.sender);
     }
 
     // ── Attestations ───────────────────────────────────────────────────────────
@@ -66,12 +85,7 @@ contract ArcLensRegistry {
     function attest(address subject, uint8 tier, string calldata ref) external onlyAttester {
         require(subject != address(0), "zero subject");
         require(tier <= 6, "bad tier");
-        attestations[subject] = Attestation({
-            tier:     tier,
-            issuedAt: uint64(block.timestamp),
-            revoked:  false,
-            ref:      ref
-        });
+        attestations[subject] = Attestation({tier: tier, issuedAt: uint64(block.timestamp), revoked: false, ref: ref});
         emit Attested(subject, tier, ref, msg.sender);
     }
 
@@ -92,11 +106,7 @@ contract ArcLensRegistry {
     }
 
     /// @notice Full attestation for `subject` in one call.
-    function get(address subject)
-        external
-        view
-        returns (uint8 tier, uint64 issuedAt, bool revoked, string memory ref)
-    {
+    function get(address subject) external view returns (uint8 tier, uint64 issuedAt, bool revoked, string memory ref) {
         Attestation storage a = attestations[subject];
         return (a.tier, a.issuedAt, a.revoked, a.ref);
     }

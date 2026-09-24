@@ -8,14 +8,14 @@
 //   npm i -D solc
 //
 // Run:
-//   DEPLOYER_PRIVATE_KEY=0x...        # a DEDICATED attester wallet (NOT your payout DCW),
-//                                     # funded with a little USDC on Arc for gas
-//   [ATTESTER_ADDRESS=0x...]          # optional: also authorize a second writer
-//   [ARC_RPC_HTTP=https://rpc.testnet.arc.network]
-//   [ARC_CHAIN_ID=5042002]
+//   DEPLOYER_PRIVATE_KEY=0x...        # dedicated registry attester wallet,
+//                                     # funded with only a little USDC for gas
+//   REGISTRY_OWNER_ADDRESS=0x...      # secure/offline owner wallet
+//   ARC_RPC_HTTP=https://rpc.mainnet.arc.io
+//   ARC_CHAIN_ID=5042
 //   node scripts/deploy-registry.mjs
 //
-// After it prints the address, set in your env:  NEXT_PUBLIC_ARCLENS_REGISTRY=0x...
+// After it prints the address, set in your env: ARCLENS_REGISTRY=0x...
 
 import fs from "fs"
 import path from "path"
@@ -27,13 +27,21 @@ import { privateKeyToAccount } from "viem/accounts"
 dotenv.config({ path: ".env.local" })
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const RPC      = process.env.ARC_RPC_HTTP || "https://rpc.testnet.arc.network"
-const CHAIN_ID = Number(process.env.ARC_CHAIN_ID || 5042002)
+const RPC      = process.env.ARC_RPC_HTTP
+const CHAIN_ID = Number(process.env.ARC_CHAIN_ID)
 const PK       = process.env.DEPLOYER_PRIVATE_KEY
-const EXTRA    = process.env.ATTESTER_ADDRESS // optional second authorized writer
+const OWNER    = process.env.REGISTRY_OWNER_ADDRESS
 
-if (!PK) {
-  console.error("✗ Set DEPLOYER_PRIVATE_KEY — a dedicated wallet (not your payout DCW), funded with a little USDC on Arc for gas.")
+if (!PK || !OWNER) {
+  console.error("✗ Set DEPLOYER_PRIVATE_KEY and REGISTRY_OWNER_ADDRESS.")
+  process.exit(1)
+}
+if (RPC !== "https://rpc.mainnet.arc.io" || CHAIN_ID !== 5042) {
+  console.error("✗ Refusing deployment: ARC_RPC_HTTP must be Arc mainnet and ARC_CHAIN_ID must be 5042.")
+  process.exit(1)
+}
+if (!/^0x[a-fA-F0-9]{40}$/.test(OWNER)) {
+  console.error("✗ REGISTRY_OWNER_ADDRESS must be a valid EVM address.")
   process.exit(1)
 }
 
@@ -70,8 +78,18 @@ const chain = {
   rpcUrls: { default: { http: [RPC] } },
 }
 const account = privateKeyToAccount(PK.startsWith("0x") ? PK : "0x" + PK)
+if (account.address.toLowerCase() === OWNER.toLowerCase()) {
+  console.error("✗ Registry owner and automated attester must be different wallets.")
+  process.exit(1)
+}
 const wallet  = createWalletClient({ account, chain, transport: http(RPC) })
 const pub     = createPublicClient({ chain, transport: http(RPC) })
+
+const actualChainId = await pub.getChainId()
+if (actualChainId !== CHAIN_ID) {
+  console.error(`✗ RPC reported chain ${actualChainId}; expected ${CHAIN_ID}.`)
+  process.exit(1)
+}
 
 console.log(`Deploying ArcLensRegistry`)
 console.log(`  from   ${account.address}`)
@@ -79,23 +97,32 @@ console.log(`  chain  ${CHAIN_ID}  rpc ${RPC}`)
 const hash = await wallet.deployContract({ abi, bytecode })
 console.log(`  tx     ${hash}`)
 const receipt = await pub.waitForTransactionReceipt({ hash })
+if (receipt.status !== "success" || !receipt.contractAddress) {
+  throw new Error("Registry deployment transaction failed")
+}
 const address = receipt.contractAddress
 console.log(`\n✅ ArcLensRegistry deployed at: ${address}`)
 console.log(`   owner + attester: ${account.address}`)
 
-// 3) Optionally authorize a second writer
-if (EXTRA) {
-  console.log(`\nAuthorizing extra attester ${EXTRA} ...`)
-  const h2 = await wallet.writeContract({ address, abi, functionName: "setAttester", args: [EXTRA, true] })
-  await pub.waitForTransactionReceipt({ hash: h2 })
-  console.log(`✅ authorized ${EXTRA}`)
-}
+// 3) Begin two-step transfer to the secure owner. The deployment wallet stays
+// the attester, but ownership does not move until OWNER calls acceptOwnership.
+console.log(`\nStarting ownership transfer to ${OWNER} ...`)
+const ownershipHash = await wallet.writeContract({
+  address,
+  abi,
+  functionName: "transferOwnership",
+  args: [OWNER],
+})
+const ownershipReceipt = await pub.waitForTransactionReceipt({ hash: ownershipHash })
+if (ownershipReceipt.status !== "success") throw new Error("Ownership proposal transaction failed")
+console.log(`✓ ownership proposed to ${OWNER}`)
 
 // 4) Save the ABI for the app to read later
 const abiOut = path.join(__dirname, "..", "contracts", "ArcLensRegistry.abi.json")
 fs.writeFileSync(abiOut, JSON.stringify(abi, null, 2))
 console.log(`\nSaved ABI -> ${abiOut}`)
 console.log(`\nNext steps:`)
-console.log(`  • set NEXT_PUBLIC_ARCLENS_REGISTRY=${address}`)
-console.log(`  • keep the deployer key as your attester (e.g. ATTESTER_PRIVATE_KEY) — server-side only`)
-console.log(`  • verify on the Arc explorer when ready`)
+console.log(`  • from ${OWNER}, call acceptOwnership() on ${address}`)
+console.log(`  • set ARCLENS_REGISTRY=${address}`)
+console.log(`  • store the deployer key only as the sensitive ATTESTER_PRIVATE_KEY`)
+console.log(`  • verify the source code on the Arc explorer`)

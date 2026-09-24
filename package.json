@@ -9,6 +9,8 @@
     "lint": "eslint",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
+    "compile:registry": "node scripts/compile-registry.mjs",
+    "test:registry": "node scripts/test-registry.mjs",
     "eval:ai": "node scripts/eval-ai.mjs"
   },
   "dependencies": {
