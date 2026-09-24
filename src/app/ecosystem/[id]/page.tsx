@@ -202,6 +202,16 @@ export default function ProjectPage() {
         setUsingXp(!!data.usingXp)
         setTvl(data.tvl || null)
 
+        // Founder identity is uncached so a public/private change takes effect
+        // immediately even while the rest of this project page stays fast.
+        fetch(`/api/ecosystem/${id}/founder`, { cache: "no-store" })
+          .then(r => r.ok ? r.json() : null)
+          .then(founder => {
+            if (!founder) return
+            setProject(current => current ? { ...current, ...founder } : current)
+          })
+          .catch(() => {})
+
         // Record view
         const deviceId = getDeviceId()
         if (deviceId) {

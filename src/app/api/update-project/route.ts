@@ -2,6 +2,7 @@
 import { enforce } from "@/lib/ratelimit"
 import { getSession } from "@/lib/session"
 import { getPool } from "@/lib/dbPool"
+import { validateRepresentativeProfile } from "@/lib/submissionGuards"
 
 const pool = getPool()
 
@@ -58,14 +59,42 @@ export async function POST(req: NextRequest) {
 
     // Get current project values
     const current = await pool.query(
-      `SELECT tagline, description, website, twitter, github, discord, contract, contracts, color, city, country, founder_social FROM projects WHERE id = $1`,
+      `SELECT tagline, description, website, twitter, github, discord, contract, contracts, color, city, country, founder_social,
+              COALESCE((trust_profile->>'founder_social_public')::boolean, true) AS founder_social_public
+         FROM projects WHERE id = $1`,
       [projectId]
     )
     projectRow = current.rows[0]
 
+    const founderWasSubmitted = Object.prototype.hasOwnProperty.call(updates, "founder_social")
+    const submittedFounder = typeof updates.founder_social === "string" ? updates.founder_social.trim() : ""
+    const finalFounder = founderWasSubmitted ? submittedFounder : String(projectRow.founder_social || "").trim()
+    const founderCheck = validateRepresentativeProfile(finalFounder)
+    if (founderCheck.ok === false) {
+      return NextResponse.json({ error: founderCheck.error }, { status: 400 })
+    }
+
     // Write each changed field to pending_updates
     let changeCount = 0
+    if (typeof updates.founder_social_public === "boolean" && updates.founder_social_public !== projectRow.founder_social_public) {
+      // Going private is immediate so an existing public contact never leaks
+      // while other edits await review. Going public is reviewed with the
+      // profile content before it appears on the listing.
+      if (updates.founder_social_public === false) {
+        await pool.query(
+          `UPDATE projects SET trust_profile = jsonb_set(COALESCE(trust_profile, '{}'::jsonb), '{founder_social_public}', 'false'::jsonb, true) WHERE id = $1`,
+          [projectId],
+        )
+      } else {
+        await pool.query(
+          `INSERT INTO pending_updates (project_id, field, old_value, new_value) VALUES ($1, 'founder_social_public', 'false', 'true')`,
+          [projectId],
+        )
+      }
+      changeCount++
+    }
     for (const [key, value] of Object.entries(updates)) {
+      if (key === "founder_social_public") continue
       // Handle array fields (contracts)
       if (ALLOWED_ARRAY.includes(key) && Array.isArray(value)) {
         const newArr = (value as string[]).map(c => c.trim()).filter(Boolean)

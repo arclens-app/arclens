@@ -29,7 +29,6 @@ export async function GET(
                   ORDER BY pc.created_at ASC LIMIT 1),
                 CASE WHEN ${ARC_CHAIN_ID} = 5042002 THEN projects.contract ELSE NULL END
               ) AS contract,
-              founder_social, owner_wallet,
               recognition, trust_level, trust_profile, established,
               auditor, audit_url,
               featured, badge, color, created_at,
@@ -64,33 +63,6 @@ export async function GET(
     }
 
     const project = result.rows[0]
-
-    // Founder linkage: a claimed project's owner_wallet IS a builder profile.
-    // Prefer pointing "Founder" at that wallet-proven profile (rich + verified)
-    // over the self-disclosed social link. If the wallet hasn't filled a profile
-    // yet, the builder page still shows their on-chain track record, so we link
-    // it anyway. Falls back to the typed founder_social on the page when there's
-    // no owner wallet at all.
-    let founderProfile: any = null
-    if (project.owner_wallet) {
-      const owner = String(project.owner_wallet).toLowerCase()
-      try {
-        const bp = await pool.query(
-          `SELECT address, display_name, avatar_url, verified, claimed_at FROM builder_profiles WHERE address = $1`,
-          [owner]
-        )
-        const row = bp.rows[0]
-        founderProfile = {
-          address:      owner,
-          display_name: row?.display_name || null,
-          avatar_url:   row?.avatar_url   || null,
-          verified:     !!row?.verified,
-          claimed:      !!row?.claimed_at,
-        }
-      } catch {
-        founderProfile = { address: owner, display_name: null, avatar_url: null, verified: false, claimed: false }
-      }
-    }
 
     // Fetch tx count for contract if available
     let txCount: string | null = null
@@ -241,7 +213,7 @@ export async function GET(
     }
 
     return NextResponse.json(
-      { project: { ...project, txCount, owner_wallet: undefined, founder_profile: founderProfile }, related: related.rows, leaderboard, campaignsRun, usingXp, tvl },
+      { project: { ...project, txCount }, related: related.rows, leaderboard, campaignsRun, usingXp, tvl },
       // Each detail page costs ~a dozen queries, and search crawlers now reach
       // all ~310 of them. Five minutes was short enough that repeat visitors and
       // re-crawls paid the full cost again; an hour (serving stale for a day

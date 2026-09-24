@@ -67,7 +67,7 @@ export default function DashboardPage() {
   const [walletSaved, setWalletSaved]                   = useState(false)
 
   // Edit form
-  const [editForm, setEditForm]   = useState({ tagline: "", description: "", website: "", twitter: "", github: "", discord: "", contract: "", color: "", city: "", country: "", founder_social: "", logo_url: "" })
+  const [editForm, setEditForm]   = useState({ tagline: "", description: "", website: "", twitter: "", github: "", discord: "", contract: "", color: "", city: "", country: "", founder_social: "", founder_social_public: true, logo_url: "" })
   const [logoUploading, setLogoUploading] = useState(false)
   const [auditForm, setAuditForm] = useState({ auditor: "", audit_url: "" })
   const [auditMsg, setAuditMsg]   = useState<{ ok: boolean; text: string } | null>(null)
@@ -175,6 +175,7 @@ export default function DashboardPage() {
           contract: data.project.contract || "", color: data.project.color || "",
           city: data.project.city || "", country: data.project.country || "",
           founder_social: data.project.founder_social || "",
+          founder_social_public: data.project.founder_social_public !== false,
           logo_url: data.project.logo_url || "",
         })
         setExtraContracts(Array.isArray(data.project.contracts) ? data.project.contracts : [])
@@ -406,6 +407,11 @@ export default function DashboardPage() {
   }
 
   async function saveEdit() {
+    if (!editForm.founder_social.trim()) {
+      setSaveError("Add a founder or authorized representative profile before saving.")
+      setActiveTab("edit")
+      return
+    }
     setSaving(true)
     setSaveError("")
     setSaveSuccess(false)
@@ -1395,16 +1401,28 @@ export default function DashboardPage() {
                 {/* FOUNDER — the person, distinct from the project's own links above. */}
                 <div style={{ paddingTop: "14px", borderTop: "1px solid " + bdr }}>
                   <label style={{ display: "block", fontSize: "9.5px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "5px" }}>
-                    Founder <span style={{ color: t3, textTransform: "none", letterSpacing: 0 }}>— optional</span>
+                    Founder or representative profile *
                   </label>
                   <input
                     value={editForm.founder_social}
                     onChange={e => setEditForm(p => ({ ...p, founder_social: e.target.value }))}
-                    placeholder="Your personal X, LinkedIn, or site — e.g. @yourname"
+                    placeholder="Personal X, LinkedIn, GitHub or website"
                     style={inputStyle}
                   />
                   <div style={{ fontSize: "10px", fontFamily: mono, color: t3, marginTop: "5px", lineHeight: 1.5 }}>
-                    This is <strong style={{ color: t2 }}>you</strong> — the person behind the project, not the project's own account. Shown on your project page.
+                    Use an account belonging to a person authorized to represent this project, not the project&apos;s own account.
+                  </div>
+                  <div style={{ display: "flex", gap: "8px", marginTop: "10px", flexWrap: "wrap" }}>
+                    {[
+                      { value: true, label: "Show publicly", note: "Visible on the project page" },
+                      { value: false, label: "Keep private", note: "ArcLens review team only" },
+                    ].map(option => (
+                      <button key={String(option.value)} type="button" onClick={() => setEditForm(p => ({ ...p, founder_social_public: option.value }))}
+                        style={{ flex: "1 1 190px", minHeight: "52px", padding: "9px 11px", textAlign: "left", background: editForm.founder_social_public === option.value ? "rgba(26,86,255,0.1)" : surf2, border: `1px solid ${editForm.founder_social_public === option.value ? "rgba(26,86,255,0.45)" : bdr}`, borderRadius: "8px", color: t1, cursor: "pointer" }}>
+                        <span style={{ display: "block", fontSize: "11px", fontWeight: 600 }}>{editForm.founder_social_public === option.value ? "● " : "○ "}{option.label}</span>
+                        <span style={{ display: "block", fontSize: "9.5px", fontFamily: mono, color: t3, marginTop: "3px" }}>{option.note}</span>
+                      </button>
+                    ))}
                   </div>
                 </div>
                 {/* Additional contracts */}

@@ -17,6 +17,7 @@ Data contact: support@arclenz.xyz`,
     body: `2.1 Information you provide voluntarily:
 • Email address — collected when you submit a project to the Arc Ecosystem Directory, create an Arc Trials campaign, or contact us for support
 • Project information — name, description, website, social links, and contract addresses submitted to the Ecosystem Directory
+• Founder or representative profile — a professional profile or contact link supplied with a project listing. You choose whether it is displayed publicly or kept private for ArcLens review only
 • Campaign details — titles, task descriptions, reward amounts, and associated wallet addresses for Arc Trials campaigns
 • Support correspondence — messages and contact details you provide when reaching out to us
 
@@ -41,6 +42,7 @@ When you chat with Lens AI, our in-platform assistant, we process the messages y
     title: "How We Use Your Data",
     body: `We use your personal data for the following purposes:
 • Email address: to contact you about your project listing, campaign status, or in response to a support request. We may also send important platform updates (no marketing without consent)
+• Founder or representative profile: to confirm that a real person is accountable for a submitted project. Private profiles are available only to authorized ArcLens administrators and are not returned by our public project APIs or Lens AI
 • Project and campaign information: to display publicly on the platform as submitted and to operate the Arc Ecosystem Directory and Arc Trials features
 • Server logs: to protect the platform from abuse, enforce rate limits, and diagnose technical issues
 • Lens AI conversations: to generate answers to your questions and to improve the assistant's accuracy and coverage over time. Using Lens AI may also trigger a public on-chain transaction that recognises the builder whose project data informed an answer — see our Terms of Service for how that works

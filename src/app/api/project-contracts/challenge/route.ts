@@ -27,6 +27,7 @@ import { ARC_EXPLORER_API, ARC_RPC_HTTP } from "@/lib/constants"
 import { dataArgTypes } from "@/lib/tvl"
 import { buildChallengeMessage, type AuthorizedCandidate, type ChallengePayload } from "@/lib/deployerSig"
 import { getPool } from "@/lib/dbPool"
+import { validateRepresentativeProfile } from "@/lib/submissionGuards"
 
 const ARCSCAN = ARC_EXPLORER_API
 
@@ -167,11 +168,18 @@ export async function POST(req: NextRequest) {
     // their wallet to be the deployer — that proof comes via the signature
     // later. We only need to know which project they're claiming for.
     const proj = await pool.query(
-      `SELECT id, slug FROM projects WHERE (slug = $1 OR id::text = $1) AND owner_wallet = $2 LIMIT 1`,
+      `SELECT id, slug, founder_social FROM projects WHERE (slug = $1 OR id::text = $1) AND owner_wallet = $2 LIMIT 1`,
       [slug, sess.addr],
     )
     if (proj.rows.length === 0) {
       return NextResponse.json({ error: "You don't own this project" }, { status: 403 })
+    }
+    const representativeCheck = validateRepresentativeProfile(proj.rows[0].founder_social)
+    if (role === "deployment" && representativeCheck.ok === false) {
+      return NextResponse.json(
+        { error: "Add a valid founder or authorized representative profile in your project dashboard before registering a mainnet deployment." },
+        { status: 400 },
+      )
     }
 
     // Volume-only validation. Two methods supported.

@@ -114,6 +114,28 @@ export function validateEmail(raw: string | null | undefined): { ok: true } | { 
 }
 
 /**
+ * A project must name one real person who can represent it. We accept an X
+ * handle or a public profile/site URL; the founder may still keep it private
+ * from the directory and expose it only to the ArcLens review team.
+ */
+export function validateRepresentativeProfile(raw: string | null | undefined): { ok: true } | { ok: false; error: string } {
+  const value = (raw || "").trim()
+  if (!value) return { ok: false, error: "Add a founder or authorized representative profile" }
+  if (/^@[A-Za-z0-9_]{1,15}$/.test(value)) return { ok: true }
+
+  const normalized = /^https?:\/\//i.test(value) ? value : `https://${value}`
+  try {
+    const url = new URL(normalized)
+    if (!/^https?:$/.test(url.protocol) || !url.hostname.includes(".") || RESERVED_TLDS.has(tldOf(url.hostname))) {
+      return { ok: false, error: "Enter a valid X, LinkedIn, GitHub or personal website profile" }
+    }
+    return { ok: true }
+  } catch {
+    return { ok: false, error: "Enter a valid X handle or profile URL" }
+  }
+}
+
+/**
  * Does the domain actually resolve? Uses DNS-over-HTTPS (no local resolver
  * dependency, works on serverless). Best-effort: on any network error we return
  * true (fail-open) so a DoH outage never blocks a legitimate submission.

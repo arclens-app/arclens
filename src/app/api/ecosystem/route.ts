@@ -1,7 +1,7 @@
 ﻿import { NextRequest, NextResponse, after } from "next/server"
 import { scanUrl } from "@/lib/urlScan"
 import { getPool } from "@/lib/dbPool"
-import { validateEmail, validateWebsite, hostFromUrl, domainResolves } from "@/lib/submissionGuards"
+import { validateEmail, validateWebsite, validateRepresentativeProfile, hostFromUrl, domainResolves } from "@/lib/submissionGuards"
 import { extractTags } from "@/lib/projectTags"
 import { sendSubmissionCode, verifySubmissionCode } from "@/lib/submissionOtp"
 import { ARC_CHAIN_ID, ARC_MAINNET_CHAIN_ID } from "@/lib/constants"
@@ -152,8 +152,9 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   const body = await req.json()
-  const { name, tagline, description, category, website, twitter, github, discord, contract, contracts: extraContracts, logo_url, email, city, country, founder, code } = body
+  const { name, tagline, description, category, website, twitter, github, discord, contract, contracts: extraContracts, logo_url, email, city, country, founder, founder_public, code } = body
   const founderSocial = typeof founder === "string" ? founder.trim() || null : null
+  const founderPublic = founder_public !== false
   const contractsArr = Array.isArray(extraContracts) ? extraContracts.map((c: string) => c.trim()).filter(Boolean) : []
   // Cap tagline + description so cards/listings stay neat (the form enforces
   // these too; this is the server-side safety net). Tagline 80, description 300.
@@ -169,6 +170,9 @@ export async function POST(req: NextRequest) {
   // a resolving website nor a contract. Complements the reputation scan.
   const emailCheck = validateEmail(email)
   if (emailCheck.ok === false) return NextResponse.json({ error: emailCheck.error }, { status: 400 })
+
+  const founderCheck = validateRepresentativeProfile(founderSocial)
+  if (founderCheck.ok === false) return NextResponse.json({ error: founderCheck.error }, { status: 400 })
 
   const siteCheck = validateWebsite(website)
   if (siteCheck.ok === false) return NextResponse.json({ error: siteCheck.error }, { status: 400 })
@@ -230,11 +234,12 @@ export async function POST(req: NextRequest) {
                logo_url = COALESCE($5, logo_url),
                website = $6, twitter = $7, github = $8, discord = $9,
                founder_social = COALESCE($11, founder_social),
+               trust_profile = jsonb_set(COALESCE(trust_profile, '{}'::jsonb), '{founder_social_public}', to_jsonb($12::boolean), true),
                approved = false, live = false
              WHERE contract = $10`,
             [name.trim(), cleanTagline, cleanDesc, category||"DeFi",
              logo_url||null, website?.trim()||null, twitter?.trim()||null,
-             github?.trim()||null, discord?.trim()||null, contract.trim().toLowerCase(), founderSocial]
+             github?.trim()||null, discord?.trim()||null, contract.trim().toLowerCase(), founderSocial, founderPublic]
           )
           // Re-issue a reference so a resubmission is trackable too, but keep
           // the original if this project already has one.
@@ -273,13 +278,13 @@ export async function POST(req: NextRequest) {
 
     const reference = await newSubmissionRef()
     await pool.query(
-      `INSERT INTO projects (name, tagline, description, category, logo_url, website, twitter, github, discord, contract, contracts, email, city, country, founder_social, approved, live, slug, submission_ref)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,false,false,$16,$17)`,
+      `INSERT INTO projects (name, tagline, description, category, logo_url, website, twitter, github, discord, contract, contracts, email, city, country, founder_social, trust_profile, approved, live, slug, submission_ref)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,jsonb_build_object('founder_social_public',$16::boolean),false,false,$17,$18)`,
       [name.trim(), cleanTagline, cleanDesc, category||"DeFi",
        logo_url||null, website?.trim()||null, twitter?.trim()||null,
        github?.trim()||null, discord?.trim()||null,
        contract?.trim()?.toLowerCase()||null, contractsArr, email.trim(),
-       city?.trim()||null, country?.trim()||null, founderSocial, finalSlug, reference]
+       city?.trim()||null, country?.trim()||null, founderSocial, founderPublic, finalSlug, reference]
     )
     // Reputation-scan the submitted website (VirusTotal) after responding —
     // the verdict lands in url_scans and shows in the admin review panel.

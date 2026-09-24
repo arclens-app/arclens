@@ -21,6 +21,7 @@ import { getSession } from "@/lib/session"
 import { ARC_CHAIN_ID, ARC_EXPLORER_API, ARC_RPC_HTTP } from "@/lib/constants"
 import { canonicalEventSignature, dataArgTypes } from "@/lib/tvl"
 import { getPool } from "@/lib/dbPool"
+import { validateRepresentativeProfile } from "@/lib/submissionGuards"
 import {
   buildChallengeMessage,
   verifyAuthorizedSigner,
@@ -304,11 +305,18 @@ export async function POST(req: NextRequest) {
 
     // 5. Look up the project & confirm session ownership matches.
     const proj = await pool.query(
-      `SELECT id, slug FROM projects WHERE slug = $1 AND owner_wallet = $2 LIMIT 1`,
+      `SELECT id, slug, founder_social FROM projects WHERE slug = $1 AND owner_wallet = $2 LIMIT 1`,
       [payload.project_slug, sess.addr],
     )
     if (proj.rows.length === 0) {
       return NextResponse.json({ error: "You don't own this project" }, { status: 403 })
+    }
+    const representativeCheck = validateRepresentativeProfile(proj.rows[0].founder_social)
+    if (payload.role === "deployment" && representativeCheck.ok === false) {
+      return NextResponse.json(
+        { error: "Add a valid founder or authorized representative profile in your project dashboard before registering a mainnet deployment." },
+        { status: 400 },
+      )
     }
     const project = proj.rows[0]
 

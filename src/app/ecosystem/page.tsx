@@ -98,7 +98,7 @@ export default function EcosystemPage() {
   const [mainnetOnly, setMainnetOnly] = useState(false)
   const [search, setSearch]           = useState("")
   const [showForm, setShowForm]       = useState(false)
-  const [form, setForm]               = useState({ name: "", tagline: "", description: "", category: "DeFi", website: "", twitter: "", github: "", discord: "", contract: "", email: "", city: "", country: "", founder: "" })
+  const [form, setForm]               = useState({ name: "", tagline: "", description: "", category: "DeFi", website: "", twitter: "", github: "", discord: "", contract: "", email: "", city: "", country: "", founder: "", founder_public: true })
   const [extraContracts, setExtraContracts] = useState<string[]>([])
   const [logoUrl, setLogoUrl]         = useState<string | null>(null)
   const [logoPreview, setLogoPreview] = useState<string | null>(null)
@@ -267,6 +267,7 @@ export default function EcosystemPage() {
     if (!form.name.trim())    { setSubmitError("Project name is required"); return }
     if (!form.tagline.trim()) { setSubmitError("Tagline is required"); return }
     if (!form.email.trim())   { setSubmitError("Contact email is required"); return }
+    if (!form.founder.trim()) { setSubmitError("Founder or representative profile is required"); return }
     if (contractErr)          { setSubmitError(contractErr); return }
     setSubmitting(true)
     setSubmitError("")
@@ -779,11 +780,23 @@ export default function EcosystemPage() {
                     own links above so founders don't just re-paste the project X. */}
                 <div style={{ marginBottom: "14px", paddingTop: "14px", borderTop: "1px solid " + border }}>
                   <label style={{ display: "block", fontSize: "9.5px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "5px" }}>
-                    Founder <span style={{ color: t3, textTransform: "none", letterSpacing: 0 }}>— optional</span>
+                    Founder or representative profile *
                   </label>
-                  <input style={inputStyle} value={form.founder} onChange={e => setForm(p => ({ ...p, founder: e.target.value }))} placeholder="Your personal X, LinkedIn, or site — e.g. @yourname" spellCheck={false} />
+                  <input style={inputStyle} value={form.founder} onChange={e => setForm(p => ({ ...p, founder: e.target.value }))} placeholder="Personal X, LinkedIn, GitHub or website" spellCheck={false} />
                   <div style={{ fontSize: "10px", fontFamily: mono, color: t3, marginTop: "5px", lineHeight: 1.5 }}>
-                    This is <strong style={{ color: t2 }}>you</strong> — the person behind the project, not the project's own account. Shown on your project page so people can see who's building it.
+                    Use an account belonging to a person authorized to represent this project, not the project&apos;s own account.
+                  </div>
+                  <div style={{ display: "flex", gap: "8px", marginTop: "10px", flexWrap: "wrap" }}>
+                    {[
+                      { value: true, label: "Show publicly", note: "Visible on the project page" },
+                      { value: false, label: "Keep private", note: "ArcLens review team only" },
+                    ].map(option => (
+                      <button key={String(option.value)} type="button" onClick={() => setForm(p => ({ ...p, founder_public: option.value }))}
+                        style={{ flex: "1 1 190px", minHeight: "52px", padding: "9px 11px", textAlign: "left", background: form.founder_public === option.value ? "rgba(26,86,255,0.1)" : surf2, border: `1px solid ${form.founder_public === option.value ? "rgba(26,86,255,0.45)" : border}`, borderRadius: "8px", color: t1, cursor: "pointer" }}>
+                        <span style={{ display: "block", fontSize: "11px", fontWeight: 600 }}>{form.founder_public === option.value ? "● " : "○ "}{option.label}</span>
+                        <span style={{ display: "block", fontSize: "9.5px", fontFamily: mono, color: t3, marginTop: "3px" }}>{option.note}</span>
+                      </button>
+                    ))}
                   </div>
                 </div>
 

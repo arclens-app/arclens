@@ -893,7 +893,11 @@ export async function POST(req: NextRequest) {
       )
       const appliedChanges: Array<{ field: string; new_value: string }> = []
       for (const u of updates.rows as any[]) {
-        await pool.query(`UPDATE projects SET ${u.field} = $1 WHERE id = $2`, [u.new_value, u.project_id])
+        if (u.field === "founder_social_public") {
+          await pool.query(`UPDATE projects SET trust_profile = jsonb_set(COALESCE(trust_profile, '{}'::jsonb), '{founder_social_public}', to_jsonb($1::boolean), true) WHERE id = $2`, [u.new_value, u.project_id])
+        } else {
+          await pool.query(`UPDATE projects SET ${u.field} = $1 WHERE id = $2`, [u.new_value, u.project_id])
+        }
         await pool.query(`UPDATE pending_updates SET status = 'approved' WHERE id = $1`, [u.id])
         appliedChanges.push({ field: u.field, new_value: String(u.new_value) })
       }
@@ -910,7 +914,11 @@ export async function POST(req: NextRequest) {
       const upd = await pool.query(`SELECT * FROM pending_updates WHERE id = $1`, [id])
       if (upd.rows.length > 0) {
         const u = upd.rows[0] as any
-        await pool.query(`UPDATE projects SET ${u.field} = $1 WHERE id = $2`, [u.new_value, u.project_id])
+        if (u.field === "founder_social_public") {
+          await pool.query(`UPDATE projects SET trust_profile = jsonb_set(COALESCE(trust_profile, '{}'::jsonb), '{founder_social_public}', to_jsonb($1::boolean), true) WHERE id = $2`, [u.new_value, u.project_id])
+        } else {
+          await pool.query(`UPDATE projects SET ${u.field} = $1 WHERE id = $2`, [u.new_value, u.project_id])
+        }
         await pool.query(`UPDATE pending_updates SET status = 'approved' WHERE id = $1`, [id])
       }
       return NextResponse.json({ success: true })

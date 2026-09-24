@@ -1168,7 +1168,9 @@ export default function AdminPage() {
                               <span style={pill(t3, bdr)}>{new Date(s.created_at).toLocaleString(undefined,{ day:"2-digit", month:"short", hour:"2-digit", minute:"2-digit" })}</span>
                             </div>
                             {s.founder_social
-                              ? <div style={{ fontSize:"11px", fontFamily:mono, color:"#8aaeff", marginTop:"6px" }}>Founder: {s.founder_social}</div>
+                              ? <div style={{ fontSize:"11px", fontFamily:mono, color:"#8aaeff", marginTop:"6px" }}>
+                                  Founder: {s.founder_social} · {s.trust_profile?.founder_social_public === false ? "private" : "public"}
+                                </div>
                               : <div style={{ fontSize:"11px", fontFamily:mono, color:t3, marginTop:"6px" }}>Founder: not provided</div>}
                             {s.description && <div style={{ fontSize:"11.5px", color:t2, marginTop:"6px", lineHeight:1.5 }}>{s.description}</div>}
                           </div>
