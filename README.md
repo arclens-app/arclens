@@ -11,6 +11,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Supabase-336791?style=flat-square&logo=postgresql&logoColor=white)](https://supabase.com)
 [![Built on Arc](https://img.shields.io/badge/built%20on-Arc%20%C3%97%20Circle-00b87a?style=flat-square)](https://arc.network)
+[![Arc Mainnet](https://img.shields.io/badge/Arc%20Mainnet-chain%205042-1a56ff?style=flat-square)](https://explorer.arc.io)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
 
 [**Live → arclenz.xyz**](https://arclenz.xyz) · [**Ask Lens AI**](https://arclenz.xyz/lens) · [**Docs**](https://docs.arclenz.xyz)
@@ -20,6 +21,13 @@
 ---
 
 ArcLens is where the Arc ecosystem lives: discover every project, read verified on-chain data, follow the builders shaping the chain, track events, and ask **Lens AI** anything about it.
+
+## Arc mainnet
+
+ArcLens is deployed for Arc mainnet (chain ID `5042`). Its public trust records are written to the source-verified **ArcLensRegistry** contract:
+
+- **Registry:** [`0x458025a5d469d46243680edbf35c98fa44a1ba2f`](https://explorer.arc.io/address/0x458025a5d469d46243680edbf35c98fa44a1ba2f)
+- **Purpose:** records ArcLens project-verification tiers and revocations so wallets, apps, and agents can independently read the current status.
 
 ## Lens AI
 
@@ -89,7 +97,7 @@ Create a `.env.local` with the variables below. The app boots with the **core** 
 | Variable | Group | Purpose |
 |---|---|---|
 | `DATABASE_URL` | Core | PostgreSQL connection string (Supabase) |
-| `ARC_RPC_URL` | Core | Arc RPC endpoint for the indexer & explorer |
+| `NEXT_PUBLIC_ARC_NETWORK`, `NEXT_PUBLIC_ARC_RPC_HTTP`, `ARC_RPC_URL` | Core | Active Arc network (`mainnet` or `testnet`), public RPC, and optional server-side RPC override |
 | `SESSION_SECRET` | Core | Signs wallet-session cookies |
 | `ADMIN_PASSWORD` | Core | Admin panel access |
 | `NEXT_PUBLIC_BASE_URL` | Core | Canonical site URL (links, emails) |
@@ -98,7 +106,8 @@ Create a `.env.local` with the variables below. The app boots with the **core** 
 | `LENS_AI_DAILY_GLOBAL` | Lens AI | Hard daily cap on total model calls |
 | `CIRCLE_API_KEY`, `CIRCLE_ENTITY_SECRET` | Circle | Developer-Controlled Wallets |
 | `NEXT_PUBLIC_CIRCLE_APP_ID` | Circle | User-Controlled Wallets (W3S SDK, email sign-in) |
-| `USDC_ARC_ADDRESS`, `ARCLENS_REGISTRY` | Arc | On-chain token & trust registry |
+| `USDC_ARC_ADDRESS`, `ARCLENS_REGISTRY`, `ATTESTER_PRIVATE_KEY` | Arc | On-chain token, public trust registry, and dedicated registry attester |
+| `PAYOUTS_ENABLED`, `PAYOUT_NETWORK` | Payments | Explicit double gate for real payouts; the configured network must match the active Arc network |
 | `LENS_WALLET_ID`, `PAYOUT_WALLET_PRIVATE_KEY` | Payments | Builder-recognition payouts (`LENS_PAY_*` knobs tune amount/caps) |
 | `SELLER_ADDRESS` | Payments | Receives x402 / Gateway nanopayments |
 | `RESEND_API_KEY` | Email | Transactional email (approvals, campaigns) |

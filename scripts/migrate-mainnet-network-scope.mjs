@@ -10,6 +10,7 @@ const MAINNET_CHAIN_ID = 5_042
 const preparing = process.argv.includes("--prepare")
 const finalizing = process.argv.includes("--finalize")
 const inspecting = process.argv.includes("--inspect")
+const databaseSsl = process.env.DATABASE_SSL === "false" ? false : { rejectUnauthorized: false }
 
 if (preparing && finalizing) throw new Error("Choose either --prepare or --finalize, not both")
 if (process.argv.includes("--apply")) {
@@ -184,7 +185,7 @@ console.log(`New mainnet rows use: ${MAINNET_CHAIN_ID}`)
 
 if (inspecting) {
   if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL is required")
-  const inspectPool = new pg.Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
+  const inspectPool = new pg.Pool({ connectionString: process.env.DATABASE_URL, ssl: databaseSsl })
   try {
     const tables = ["stablecoins", "project_contracts", "indexer_cursors", "tvl_snapshots", "revenue_events", "revenue_daily", "volume_events", "volume_daily", "indexed_transactions", "contracts", "contract_names_cache", "circle_wallet_users", "campaigns", "campaign_completions", "reviews", "lens_payouts", "lens_premium", "arclens_accounts"]
     const [columns, constraints, indexes, duplicates] = await Promise.all([
@@ -218,7 +219,7 @@ if (!preparing && !finalizing) {
 if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL is required")
 const phase = preparing ? "prepare" : "finalize"
 const sql = preparing ? PREPARE_SQL : FINALIZE_SQL
-const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
+const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, ssl: databaseSsl })
 const client = await pool.connect()
 try {
   await client.query("BEGIN")

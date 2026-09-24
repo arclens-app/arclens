@@ -6,6 +6,25 @@ const pool = getPool()
 
 type Queryable = Pick<PoolClient, "query">
 
+// Best-effort and deliberately non-blocking: wallet sign-in must succeed even
+// when payouts are paused or Circle's settlement rail is temporarily down.
+async function settleOwnedProjectCredits(wallet: string): Promise<void> {
+  try {
+    const projects = await pool.query<{ slug: string }>(
+      `SELECT slug FROM projects
+        WHERE LOWER(owner_wallet) = $1 AND approved = true AND live = true`,
+      [wallet],
+    )
+    if (!projects.rows.length) return
+    const { settleAccruedOnClaim } = await import("@/lib/lensPay")
+    for (const project of projects.rows) {
+      await settleAccruedOnClaim(project.slug, wallet)
+    }
+  } catch (error: any) {
+    console.error("[accountIdentity] accrued payout retry:", error?.message || error)
+  }
+}
+
 /** Return the private ArcLens account shared by all verified Circle wallets. */
 export async function ensureCircleAccount(email: string, db: Queryable = pool): Promise<number> {
   const normalized = String(email || "").toLowerCase().trim()
@@ -62,6 +81,7 @@ export async function promoteCircleWallet(email: string, currentWallet: string):
     )
     if (account.rows[0]?.primary_wallet?.toLowerCase() === current) {
       await client.query("COMMIT")
+      void settleOwnedProjectCredits(current)
       return
     }
 
@@ -126,6 +146,7 @@ export async function promoteCircleWallet(email: string, currentWallet: string):
     )
 
     await client.query("COMMIT")
+    void settleOwnedProjectCredits(current)
   } catch (error) {
     await client.query("ROLLBACK")
     throw error

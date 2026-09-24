@@ -236,6 +236,15 @@ export async function payoutForAnswer(args: {
   const r = await pool.query(
     `SELECT slug, name, LOWER(owner_wallet) AS wallet,
             trust_level, recognition, established, logo_url, tagline,
+            EXISTS (
+              SELECT 1 FROM circle_wallet_users cwu
+               WHERE LOWER(cwu.wallet_address) = LOWER(projects.owner_wallet)
+            ) AS owner_is_circle,
+            EXISTS (
+              SELECT 1 FROM circle_wallet_users cwu
+               WHERE LOWER(cwu.wallet_address) = LOWER(projects.owner_wallet)
+                 AND cwu.chain_id = ${ARC_CHAIN_ID}
+            ) AS owner_is_current_circle,
             CASE WHEN metrics_chain_id = ${ARC_CHAIN_ID} THEN tvl_usd_e6::text ELSE '0' END AS tvl_e6,
             CASE WHEN metrics_chain_id = ${ARC_CHAIN_ID} THEN volume_cum_usd_e6::text ELSE '0' END AS vol_e6,
             CASE WHEN metrics_chain_id = ${ARC_CHAIN_ID} THEN revenue_cum_usd_e6::text ELSE '0' END AS rev_e6,
@@ -288,7 +297,13 @@ export async function payoutForAnswer(args: {
       p.established ? "established" :
       p.wallet ? "claimed" : null
     if (!earnKey)                      { skipped.push({ name: p.name, slug: p.slug, reason: p.hard_risk ? "risk-flagged" : "hasn't claimed a wallet here yet" }); continue }
-    if (p.wallet && p.wallet === asker){ skipped.push({ name: p.name, slug: p.slug, reason: "your own project" }); continue }
+
+    // Browser/self-custody EVM wallets use the same address across Arc
+    // networks. Circle wallets are environment-specific, so a Circle address
+    // known only on another network must never receive mainnet funds.
+    const awaitingCircleNetworkWallet = Boolean(p.wallet && p.owner_is_circle && !p.owner_is_current_circle)
+    const payoutWallet: string | null = awaitingCircleNetworkWallet ? null : (p.wallet || null)
+    if (payoutWallet && payoutWallet === asker){ skipped.push({ name: p.name, slug: p.slug, reason: "your own project" }); continue }
 
     // CONTRIBUTION — how much real substance this source brought to the answer:
     // live financial data it exposes (TVL / volume / revenue) + descriptive depth.
@@ -300,7 +315,7 @@ export async function payoutForAnswer(args: {
     if (Number(p.rev_e6) > 0)                 contribution += 0.2
     if ((p.tagline || "").trim().length > 20) contribution += 0.1
     let amount = Math.round(BASE_E6 * (TIER_WEIGHT[earnKey] || 1) * contribution)
-    const dedupKey = p.wallet || `unclaimed:${p.slug}`
+    const dedupKey = payoutWallet || `unclaimed:${p.slug}`
     if (recent.has(dedupKey))          { skipped.push({ name: p.name, slug: p.slug, reason: "already rewarded for you recently" }); continue }
 
     // Per-call profit cap: a paid agent call passes at most its budget through
@@ -314,11 +329,14 @@ export async function payoutForAnswer(args: {
 
     // Trusted but NO wallet yet → ACCRUE (pending claim). No money moves, no
     // budget consumed; the builder collects when they connect a wallet.
-    if (!p.wallet) {
+    if (!payoutWallet) {
+      const accruedReason = awaitingCircleNetworkWallet
+        ? "accrued — awaiting verified Arc mainnet Circle wallet"
+        : "accrued — pending claim"
       await pool.query(
         `INSERT INTO lens_payouts (conversation_id, asker_id, builder_wallet, project_slug, project_name, trust_label, amount_e6, status, reason, chain_id)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,'accrued','accrued — pending claim',${ARC_CHAIN_ID})`,
-        [args.conversationId, askerId, dedupKey, p.slug, p.name, label, amount],
+         VALUES ($1,$2,$3,$4,$5,$6,$7,'accrued',$8,${ARC_CHAIN_ID})`,
+        [args.conversationId, askerId, dedupKey, p.slug, p.name, label, amount, accruedReason],
       )
       recent.add(dedupKey)
       committed += amount
@@ -338,7 +356,7 @@ export async function payoutForAnswer(args: {
     const ins = await pool.query<{ id: number }>(
       `INSERT INTO lens_payouts (conversation_id, asker_id, builder_wallet, project_slug, project_name, trust_label, amount_e6, status, reason, chain_id)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,${ARC_CHAIN_ID}) RETURNING id`,
-      [args.conversationId, askerId, p.wallet, p.slug, p.name, label, amount, status0, "grounded answer"],
+      [args.conversationId, askerId, payoutWallet, p.slug, p.name, label, amount, status0, "grounded answer"],
     )
     const payoutId = ins.rows[0].id
 
@@ -346,7 +364,7 @@ export async function payoutForAnswer(args: {
     let txHash: string | null = null
     if (live) {
       try {
-        const res = await sendUsdc(p.wallet, amount)
+        const res = await sendUsdc(payoutWallet, amount)
         txHash = res.txHash; status = res.status
         await pool.query(`UPDATE lens_payouts SET status=$2, tx_hash=$3, tx_id=$4 WHERE id=$1 AND chain_id=${ARC_CHAIN_ID}`, [payoutId, status, txHash, res.txId])
       } catch (e: any) {
@@ -402,25 +420,26 @@ export async function settleAccruedOnClaim(
   if (rows.length === 0) return { settled: 0, paid_e6: 0 }
 
   const live = payoutsLive()
+  // Paused payouts must leave real credits accrued. Never convert a pending
+  // obligation into a simulated payment that cannot be collected later.
+  if (!live) return { settled: 0, paid_e6: 0 }
   const SETTLE_CAP_E6 = Number(process.env.LENS_CLAIM_SETTLE_CAP_E6 || 1_000_000) // $1 safety ceiling per claim
   let settled = 0
   let spent = 0
   for (const row of rows) {
     const amount = Number(row.amount_e6)
     if (spent + amount > SETTLE_CAP_E6) break
-    let status: PaidBuilder["status"] = live ? "pending" : "simulated"
+    let status: PaidBuilder["status"] = "pending"
     let txHash: string | null = null
     let txId: string | null = null
-    if (live) {
-      try {
-        const res = await sendUsdc(w, amount)
-        txHash = res.txHash
-        txId = res.txId
-        status = res.status
-      } catch (e: any) {
-        console.error("[lensPay] settle-on-claim send failed:", e?.message || e)
-        continue // leave as accrued; a later claim or sweeper can retry
-      }
+    try {
+      const res = await sendUsdc(w, amount)
+      txHash = res.txHash
+      txId = res.txId
+      status = res.status
+    } catch (e: any) {
+      console.error("[lensPay] settle-on-claim send failed:", e?.message || e)
+      continue // leave as accrued; a later claim or sweeper can retry
     }
     await pool.query(
       `UPDATE lens_payouts
