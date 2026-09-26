@@ -520,6 +520,7 @@ export async function GET(req: NextRequest) {
       const [pending, approved] = await Promise.all([
         pool.query("SELECT * FROM projects WHERE approved = false ORDER BY created_at DESC"),
         pool.query(`SELECT projects.*,
+                    COALESCE((projects.trust_profile->>'mainnet_claimed')::bool, false) AS mainnet_claimed,
                     EXISTS (
                       SELECT 1 FROM project_contracts pc
                        WHERE pc.project_id = projects.id

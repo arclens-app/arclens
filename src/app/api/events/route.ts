@@ -1,25 +1,40 @@
 import { NextRequest, NextResponse } from "next/server"
 import { rateLimit, getIp } from "@/lib/ratelimit"
 import { getPool } from "@/lib/dbPool"
+import { fetchArcHouseEvents } from "@/lib/arcHouseEvents"
 
 const pool = getPool()
 
 export async function GET() {
-  try {
-    const result = await pool.query(
+  const [localEvents, arcHouseEvents] = await Promise.all([
+    pool.query(
       `SELECT id, name, tagline, type, description, date, end_date, timezone,
               location, is_online, link, logo_url, organizer, organizer_twitter,
               tags, badge, featured, created_at
        FROM events
        WHERE approved = true
        ORDER BY featured DESC, date ASC`
-    )
-    return NextResponse.json({ events: result.rows }, {
-      headers: { "Cache-Control": "public, s-maxage=120, stale-while-revalidate=300" },
-    })
-  } catch {
-    return NextResponse.json({ events: [] })
-  }
+    ).then(result => result.rows).catch(error => {
+      console.error("[Events GET] local events:", error)
+      return []
+    }),
+    fetchArcHouseEvents(),
+  ])
+
+  // Prefer an existing ArcLens record when the same event and start instant are
+  // already present. This prevents duplicate cards without modifying either
+  // source or writing imported events into the database.
+  const key = (event: any) => `${String(event.name || "").trim().toLowerCase()}|${new Date(event.date).toISOString()}`
+  const seen = new Set(localEvents.map(key))
+  const imported = arcHouseEvents.filter(event => !seen.has(key(event)))
+  const events = [...localEvents, ...imported].sort((a: any, b: any) => {
+    if (!!a.featured !== !!b.featured) return a.featured ? -1 : 1
+    return new Date(a.date).getTime() - new Date(b.date).getTime()
+  })
+
+  return NextResponse.json({ events }, {
+    headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=3600" },
+  })
 }
 
 export async function POST(req: NextRequest) {

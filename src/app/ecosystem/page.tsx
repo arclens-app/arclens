@@ -30,6 +30,7 @@ interface Project {
   created_at?: string
   view_count?: number
   has_mainnet_contract?: boolean
+  live_on_mainnet?: boolean
   // Derived server-side from the FULL description (see lib/projectTags) — the
   // description shipped here is truncated, so these are how search reaches text
   // the browser never receives.
@@ -75,6 +76,7 @@ interface TrendingProject {
   view_count: number
   tx_count: number
   has_mainnet_contract?: boolean
+  live_on_mainnet?: boolean
 }
 
 function imgSrc(url: string | null): string | null {
@@ -98,7 +100,7 @@ export default function EcosystemPage() {
   const [mainnetOnly, setMainnetOnly] = useState(false)
   const [search, setSearch]           = useState("")
   const [showForm, setShowForm]       = useState(false)
-  const [form, setForm]               = useState({ name: "", tagline: "", description: "", category: "DeFi", website: "", twitter: "", github: "", discord: "", contract: "", email: "", city: "", country: "", founder: "", founder_public: true })
+  const [form, setForm]               = useState({ name: "", tagline: "", description: "", category: "DeFi", website: "", twitter: "", github: "", discord: "", contract: "", email: "", city: "", country: "", founder: "", founder_public: true, mainnet: false })
   const [extraContracts, setExtraContracts] = useState<string[]>([])
   const [logoUrl, setLogoUrl]         = useState<string | null>(null)
   const [logoPreview, setLogoPreview] = useState<string | null>(null)
@@ -405,7 +407,7 @@ export default function EcosystemPage() {
 
   const filtered = projects.filter(p => {
     const matchCat    = filter === "All" || (p.category || "").trim().toLowerCase() === filter.trim().toLowerCase()
-    const matchMainnet = !mainnetOnly || !!p.has_mainnet_contract
+    const matchMainnet = !mainnetOnly || !!p.live_on_mainnet
     let matchSearch = true
     if (terms.length) {
       let total = 0
@@ -467,7 +469,7 @@ export default function EcosystemPage() {
 
   const totalPages  = Math.max(1, Math.ceil(filtered.length / pageSize))
   const paginated   = filtered.slice((page - 1) * pageSize, page * pageSize)
-  const visibleTrending = mainnetOnly ? trending.filter(project => project.has_mainnet_contract) : trending
+  const visibleTrending = mainnetOnly ? trending.filter(project => project.live_on_mainnet) : trending
 
   // Picking a category is a "browse this type" action, so it always shows every
   // project in that type. We reset the sort to "all" because the metric tabs
@@ -752,9 +754,26 @@ export default function EcosystemPage() {
                       <input style={inputStyle} value={(form as any)[f.k]} onChange={e => setForm(p => ({ ...p, [f.k]: e.target.value }))} placeholder={f.p} spellCheck={false} />
                     </div>
                   ))}
-                  {/* Contract — separate so we can show inline duplicate error */}
+                  <div>
+                    <label style={{ display: "block", fontSize: "9.5px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "5px" }}>Arc network status</label>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px", height: "38px", padding: "3px", background: surf2, border: "1px solid " + border, borderRadius: "8px" }}>
+                      {([{ value: false, label: "Testnet" }, { value: true, label: "Mainnet" }] as const).map(option => (
+                        <button key={option.label} type="button" onClick={() => setForm(p => ({ ...p, mainnet: option.value }))}
+                          style={{ border: "none", borderRadius: "6px", background: form.mainnet === option.value ? (option.value ? "rgba(0,184,122,0.14)" : "rgba(26,86,255,0.14)") : "transparent", color: form.mainnet === option.value ? (option.value ? "#00b87a" : "#8aaeff") : t3, fontSize: "10.5px", fontFamily: mono, fontWeight: form.mainnet === option.value ? 700 : 500, cursor: "pointer" }}>
+                          {option.value && form.mainnet === option.value ? "● " : ""}{option.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <label style={{ display: "block", fontSize: "9.5px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "5px" }}>Category</label>
+                    <select style={{ ...inputStyle }} value={form.category} onChange={e => setForm(p => ({ ...p, category: e.target.value }))}>
+                      {["Infrastructure","DeFi","AI","Payments","NFT","Gaming","Social","Developer Tools","Bridge","Identity","Wallet","Exchange","Lending","Prediction Market","RWA","DAO","Stablecoin","Derivatives","Insurance","Launchpad","Oracle","Analytics","Finance","Trading","Custody","Other"].map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
+                  {/* Contract — optional; network availability is reviewed separately. */}
                   <div style={{ gridColumn: "1 / -1" }}>
-                    <label style={{ display: "block", fontSize: "9.5px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "5px" }}>Contract Address</label>
+                    <label style={{ display: "block", fontSize: "9.5px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "5px" }}>Contract Address <span style={{ textTransform: "none", letterSpacing: 0, fontWeight: 400 }}>(optional)</span></label>
                     <input style={{ ...inputStyle, borderColor: contractErr ? "rgba(224,51,72,0.5)" : undefined }} value={form.contract} onChange={e => { setForm(p => ({ ...p, contract: e.target.value })); checkContract(e.target.value) }} placeholder="0x... (primary contract)" spellCheck={false} />
                     {contractErr && <div style={{ fontSize: "10px", fontFamily: mono, color: "#e03348", marginTop: "4px", lineHeight: 1.5 }}>✗ {contractErr}</div>}
                     {/* Extra contracts */}
@@ -769,12 +788,6 @@ export default function EcosystemPage() {
                       style={{ marginTop: "8px", height: "28px", padding: "0 12px", background: "rgba(26,86,255,0.07)", color: "#8aaeff", border: "1px solid rgba(26,86,255,0.2)", borderRadius: "6px", cursor: "pointer", fontSize: "10px", fontFamily: mono }}>
                       + Add another contract
                     </button>
-                  </div>
-                  <div>
-                    <label style={{ display: "block", fontSize: "9.5px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "5px" }}>Category</label>
-                    <select style={{ ...inputStyle }} value={form.category} onChange={e => setForm(p => ({ ...p, category: e.target.value }))}>
-                      {["Infrastructure","DeFi","AI","Payments","NFT","Gaming","Social","Developer Tools","Bridge","Identity","Wallet","Exchange","Lending","Prediction Market","RWA","DAO","Stablecoin","Derivatives","Insurance","Launchpad","Oracle","Analytics","Finance","Trading","Custody","Other"].map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
                   </div>
                 </div>
 
@@ -846,7 +859,7 @@ export default function EcosystemPage() {
           <button onClick={toggleMainnetOnly}
             aria-pressed={mainnetOnly}
             style={{ height: "28px", padding: "0 14px", background: mainnetOnly ? "rgba(0,217,144,0.12)" : "transparent", color: mainnetOnly ? "#00b87a" : t2, fontSize: "11.5px", fontFamily: mono, border: "1px solid " + (mainnetOnly ? "rgba(0,217,144,0.35)" : border), borderRadius: "6px", cursor: "pointer", transition: "all .12s", whiteSpace: "nowrap", fontWeight: mainnetOnly ? 700 : 400 }}>
-            Live on Mainnet{projects.some(p => p.has_mainnet_contract) ? ` (${projects.filter(p => p.has_mainnet_contract).length})` : ""}
+            Live on Mainnet
           </button>
           {([
             { key: "all",      label: "All" },

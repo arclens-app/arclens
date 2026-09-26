@@ -16,6 +16,8 @@ export async function GET(req: NextRequest) {
     "arclens.app",
     "logo.clearbit.com",
     "icon.horse",
+    "cdn.gradual.com",
+    "d2xo500swnpgl1.cloudfront.net",
   ]
   try {
     const parsed = new URL(url)

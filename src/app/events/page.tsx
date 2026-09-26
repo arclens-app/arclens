@@ -3,7 +3,7 @@ import { useEffect, useState, useRef } from "react"
 import ArcLayout from "@/components/ArcLayout"
 
 interface Event {
-  id: number
+  id: number | string
   name: string
   tagline: string | null
   type: string | null
@@ -14,6 +14,7 @@ interface Event {
   location: string | null
   is_online: boolean
   link: string | null
+  source_url?: string | null
   logo_url: string | null
   organizer: string | null
   organizer_twitter: string | null
@@ -320,7 +321,7 @@ export default function EventsPage() {
           <div style={{ position: "absolute", inset: 0, pointerEvents: "none", background: "linear-gradient(180deg, rgba(0,0,0,0.34) 0%, transparent 26%, transparent 60%, rgba(0,0,0,0.40) 100%)" }} />
           {/* official / featured */}
           <div style={{ position: "absolute", top: "10px", left: "10px", display: "flex", gap: "6px" }}>
-            {e.badge === "official" && <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", fontSize: "8.5px", fontWeight: 700, fontFamily: mono, letterSpacing: "0.06em", padding: "3px 8px", borderRadius: "999px", background: "rgba(26,86,255,0.92)", color: "#fff", boxShadow: "0 2px 8px rgba(0,0,0,0.28)" }}><span style={{ width: "4px", height: "4px", borderRadius: "50%", background: "#fff" }} />OFFICIAL</span>}
+            {e.badge === "official" && <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", fontSize: "8.5px", fontWeight: 700, fontFamily: mono, letterSpacing: "0.06em", padding: "3px 8px", borderRadius: "999px", background: "rgba(26,86,255,0.92)", color: "#fff", boxShadow: "0 2px 8px rgba(0,0,0,0.28)" }}><span style={{ width: "4px", height: "4px", borderRadius: "50%", background: "#fff" }} />{e.source_url ? "ARC HOUSE" : "OFFICIAL"}</span>}
             {e.featured && <span style={{ fontSize: "8.5px", fontWeight: 700, fontFamily: mono, letterSpacing: "0.06em", padding: "3px 8px", borderRadius: "999px", background: "rgba(192,136,40,0.92)", color: "#fff" }}>FEATURED</span>}
           </div>
           {/* countdown */}
@@ -402,7 +403,13 @@ export default function EventsPage() {
             {e.link && (
               <a href={e.link} target="_blank" rel="noopener noreferrer"
                 style={{ display: "inline-flex", alignItems: "center", gap: "5px", height: "30px", padding: "0 14px", background: arc, color: "#fff", fontSize: "11px", fontWeight: 600, borderRadius: "6px", textDecoration: "none", fontFamily: "'Geist', sans-serif", flexShrink: 0 }}>
-                {isPast ? "View Event" : "Register"} →
+                {isPast ? "View Event" : e.source_url === e.link ? "View details" : "Register"} →
+              </a>
+            )}
+            {e.source_url && e.source_url !== e.link && (
+              <a href={e.source_url} target="_blank" rel="noopener noreferrer"
+                style={{ marginLeft: "auto", color: t3, fontSize: "9.5px", fontFamily: mono, textDecoration: "none", whiteSpace: "nowrap" }}>
+                Arc House ↗
               </a>
             )}
             {!isPast && (

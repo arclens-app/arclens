@@ -12,7 +12,8 @@
 import { tool, jsonSchema } from "ai"
 import { getPayoutStats, getBuilderBoard } from "@/lib/lensPay"
 import { getPool } from "@/lib/dbPool"
-import { ARC_CHAIN_ID, ARC_RPC_HTTP } from "@/lib/constants"
+import { ARC_CHAIN_ID, ARC_MAINNET_CHAIN_ID, ARC_RPC_HTTP } from "@/lib/constants"
+import { curatedMainnetProjectSlugs, isCuratedMainnetProject } from "@/lib/mainnetAvailability"
 
 const pool = getPool()
 
@@ -74,6 +75,23 @@ async function fuzzyProjectSlug(query: string): Promise<string | null> {
 // about a project's standing (and never call a baseline-Claimed project
 // "trustworthy" by accident).
 const TRUST_COLS = `trust_level, recognition, established, COALESCE((trust_profile->>'hard_risk')::bool, false) AS hard_risk`
+const mainnetStatusCols = (projectAlias = "projects") => `
+  COALESCE((${projectAlias}.trust_profile->>'mainnet_claimed')::bool, false) AS mainnet_claimed,
+  EXISTS (
+    SELECT 1 FROM project_contracts mainnet_pc
+     WHERE mainnet_pc.project_id = ${projectAlias}.id
+       AND mainnet_pc.chain_id = ${ARC_MAINNET_CHAIN_ID}
+       AND mainnet_pc.role = 'deployment'
+       AND mainnet_pc.verified_at IS NOT NULL
+       AND mainnet_pc.revoked_at IS NULL
+  ) AS has_mainnet_contract`
+
+function mainnetStatusOf(row: any): { live: boolean; evidence: string } {
+  if (row.has_mainnet_contract === true) return { live: true, evidence: "verified Arc mainnet deployment" }
+  if (row.mainnet_claimed === true) return { live: true, evidence: "team submitted mainnet status; ArcLens confirmed the listing update" }
+  if (isCuratedMainnetProject(row.slug)) return { live: true, evidence: "confirmed by ArcLens from the project's public launch information" }
+  return { live: false, evidence: "ArcLens has not confirmed this project as live on mainnet yet" }
+}
 
 // Turn the raw trust columns into a compact, honest signal the model reads back.
 // Mirrors the public badge ladder; Established is an additive marker, Risk
@@ -107,7 +125,9 @@ async function rpc(method: string, params: unknown[] = []): Promise<any> {
     body: JSON.stringify({ jsonrpc: "2.0", method, params, id: 1 }),
     signal: AbortSignal.timeout(8000),
   })
+  if (!res.ok) throw new Error(`Arc RPC HTTP ${res.status}`)
   const j = await res.json().catch(() => ({} as any))
+  if (j?.error) throw new Error(String(j.error.message || "Arc RPC error"))
   return j.result
 }
 const hexToInt = (h: string | null | undefined) => (h ? parseInt(h, 16) : 0)
@@ -182,6 +202,7 @@ export function buildTools() {
                     CASE WHEN metrics_chain_id = ${ARC_CHAIN_ID} THEN volume_cum_usd_e6::text ELSE '0' END AS volume,
                     CASE WHEN metrics_chain_id = ${ARC_CHAIN_ID} THEN revenue_cum_usd_e6::text ELSE '0' END AS revenue,
                     (tvl_tracking_enabled AND metrics_chain_id = ${ARC_CHAIN_ID}) AS tvl_tracking_enabled,
+                    ${mainnetStatusCols()},
                     ${TRUST_COLS}
              FROM projects
              WHERE approved AND live AND (slug ILIKE $1 OR name ILIKE $1)
@@ -195,6 +216,8 @@ export function buildTools() {
               name: p.name, slug: p.slug, category: p.category, tagline: p.tagline, logo: p.logo_url ?? null,
               tvl: fmtUsd(p.tvl), volume: fmtUsd(p.volume), revenue: fmtUsd(p.revenue),
               tracking: p.tvl_tracking_enabled ? "enabled" : "off",
+              live_on_mainnet: mainnetStatusOf(p).live,
+              mainnet_evidence: mainnetStatusOf(p).evidence,
               trust: trustOf(p).label,
             })
           } else {
@@ -209,15 +232,16 @@ export function buildTools() {
       description:
         "Search Arc projects by keyword and/or category. Use for 'find DeFi projects', 'what wallets are on Arc', " +
         "'is there a project doing X'. Returns matching projects with their tagline and category.",
-      inputSchema: jsonSchema<{ query?: string; category?: string; limit?: number }>({
+      inputSchema: jsonSchema<{ query?: string; category?: string; mainnet_only?: boolean; limit?: number }>({
         type: "object",
         properties: {
           query:    { type: "string", description: "Keyword to match in name, tagline, or description." },
           category: { type: "string", description: "Optional category filter, e.g. 'DeFi', 'Gaming', 'Infrastructure'." },
+          mainnet_only: { type: "boolean", description: "Only projects ArcLens currently confirms as live on Arc mainnet." },
           limit:    { type: "number", description: "Max results (1-15). Default 8." },
         },
       }),
-      execute: async ({ query, category, limit = 8 }) => {
+      execute: async ({ query, category, mainnet_only, limit = 8 }) => {
         const lim = Math.min(Math.max(Number(limit) || 8, 1), 15)
         const params: any[] = []
         const clauses: string[] = ["approved", "live"]
@@ -226,10 +250,26 @@ export function buildTools() {
           clauses.push(`(name ILIKE $${params.length} OR tagline ILIKE $${params.length} OR description ILIKE $${params.length})`)
         }
         if (category) { params.push(category); clauses.push(`category ILIKE $${params.length}`) }
+        if (mainnet_only) {
+          params.push(curatedMainnetProjectSlugs())
+          clauses.push(`(
+            EXISTS (
+              SELECT 1 FROM project_contracts mainnet_pc
+               WHERE mainnet_pc.project_id = projects.id
+                 AND mainnet_pc.chain_id = ${ARC_MAINNET_CHAIN_ID}
+                 AND mainnet_pc.role = 'deployment'
+                 AND mainnet_pc.verified_at IS NOT NULL
+                 AND mainnet_pc.revoked_at IS NULL
+            )
+            OR COALESCE((trust_profile->>'mainnet_claimed')::bool, false)
+            OR slug = ANY($${params.length}::text[])
+          )`)
+        }
         params.push(lim)
         const r = await pool.query(
           `SELECT name, slug, category, tagline, featured, logo_url,
                   CASE WHEN metrics_chain_id = ${ARC_CHAIN_ID} THEN tvl_usd_e6::text ELSE '0' END AS tvl,
+                  ${mainnetStatusCols()},
                   ${TRUST_COLS}
            FROM projects
            WHERE ${clauses.join(" AND ")}
@@ -243,8 +283,80 @@ export function buildTools() {
             name: p.name, slug: p.slug, category: p.category, logo: p.logo_url ?? null,
             tagline: p.tagline, featured: !!p.featured,
             tvl: p.tvl && Number(p.tvl) > 0 ? fmtUsd(p.tvl) : null,
+            live_on_mainnet: mainnetStatusOf(p).live,
+            mainnet_evidence: mainnetStatusOf(p).evidence,
             trust: trustOf(p).label,
           })),
+        }
+      },
+    }),
+
+    check_project_mainnet: tool({
+      description:
+        "Check whether one named project is confirmed live on Arc mainnet. Uses ArcLens listing evidence and, when the project has a verified deployment contract, checks the live Arc RPC for deployed bytecode. " +
+        "Use for 'is X live on mainnet?', 'has X launched on Arc?', or when mainnet status needs evidence. Missing ArcLens confirmation does not prove a project is offline.",
+      inputSchema: jsonSchema<{ project: string }>({
+        type: "object",
+        properties: { project: { type: "string", description: "Project name or ArcLens slug." } },
+        required: ["project"],
+      }),
+      execute: async ({ project }) => {
+        const sql = `SELECT p.id, p.name, p.slug, p.website, p.twitter,
+                            ${mainnetStatusCols("p")},
+                            (SELECT pc.address
+                               FROM project_contracts pc
+                              WHERE pc.project_id = p.id
+                                AND pc.chain_id = ${ARC_MAINNET_CHAIN_ID}
+                                AND pc.role = 'deployment'
+                                AND pc.verified_at IS NOT NULL
+                                AND pc.revoked_at IS NULL
+                              ORDER BY pc.verified_at DESC
+                              LIMIT 1) AS deployment_address
+                       FROM projects p
+                      WHERE p.approved AND p.live AND (p.slug ILIKE $1 OR p.name ILIKE $1)
+                      ORDER BY (p.slug = LOWER($2)) DESC
+                      LIMIT 1`
+        let r = await pool.query(sql, [`%${project}%`, project.toLowerCase()])
+        if (!r.rows[0]) {
+          const fuzzy = await fuzzyProjectSlug(project)
+          if (fuzzy) r = await pool.query(sql, [`%${fuzzy}%`, fuzzy])
+        }
+        if (!r.rows[0]) {
+          return {
+            found: false,
+            confirmed_live_on_mainnet: false,
+            note: `No public ArcLens project matching "${project}". That does not prove the project is not live.`,
+          }
+        }
+
+        const p = r.rows[0]
+        const status = mainnetStatusOf(p)
+        let onchainCode: boolean | null = null
+        let rpcNote: string | null = null
+        if (p.deployment_address) {
+          try {
+            const code = await rpc("eth_getCode", [p.deployment_address, "latest"])
+            onchainCode = typeof code === "string" && code !== "0x" && !/^0x0*$/.test(code)
+          } catch {
+            rpcNote = "The Arc RPC check was temporarily unavailable; the stored verification record is unchanged."
+          }
+        }
+
+        const confirmed = p.deployment_address ? onchainCode !== false && status.live : status.live
+        return {
+          found: true,
+          name: p.name,
+          slug: p.slug,
+          confirmed_live_on_mainnet: confirmed,
+          evidence: status.evidence,
+          deployment: p.deployment_address
+            ? { address: p.deployment_address, bytecode_found_live: onchainCode, explorer: `https://explorer.arc.io/address/${p.deployment_address}` }
+            : null,
+          official_sources: { website: p.website || null, twitter: p.twitter || null },
+          project_page: `/ecosystem/${p.slug}`,
+          note: rpcNote || (!status.live
+            ? "ArcLens has not confirmed this project as live on mainnet yet. Missing confirmation is not proof that it is offline."
+            : undefined),
         }
       },
     }),
@@ -357,7 +469,7 @@ export function buildTools() {
       description:
         "Lens AI's OWN on-chain payout activity: how much it has paid builders, how many payouts, how many builders, and the most-cited builders (ranked by what Lens AI paid them). " +
         "Use for 'who have you paid', 'how much have you paid builders', 'show your payouts', 'most-cited builders', 'how much has Lens AI given out'. " +
-        "This is Lens AI paying the builders whose data grounds its answers, in test USDC on Arc.",
+        "This is Lens AI's confirmed USDC recognition activity for eligible builders whose project data grounded its answers on Arc mainnet.",
       inputSchema: jsonSchema<{ limit?: number }>({
         type: "object",
         properties: { limit: { type: "number", description: "How many top builders to include (1-15). Default 6." } },
@@ -373,7 +485,7 @@ export function buildTools() {
             payouts: stats.payouts,
             builders_paid: stats.builders_paid,
             top_builders: board.map(b => ({ rank: b.rank, name: b.name, slug: b.slug, trust: b.trust, logo: b.logo, cites: b.cites, earned: b.earnedUsd })),
-            note: "Lens AI pays the builders whose data grounds its answers, in test USDC on Arc.",
+            note: "Only completed on-chain USDC recognition payments are counted as paid; accrued recognition is shown separately until settled.",
           }
         } catch { return { note: "Couldn't load payout activity right now." } }
       },
@@ -493,6 +605,7 @@ export function buildTools() {
                   CASE WHEN metrics_chain_id = ${ARC_CHAIN_ID} THEN tvl_last_indexed_at ELSE NULL END AS tvl_last_indexed_at,
                   CASE WHEN subgraph_chain_id = ${ARC_CHAIN_ID} THEN subgraph_tvl_usd_e6::text ELSE '0' END AS sg_tvl,
                   CASE WHEN subgraph_chain_id = ${ARC_CHAIN_ID} THEN subgraph_volume_usd_e6::text ELSE '0' END AS sg_volume,
+                  ${mainnetStatusCols()},
                   ${TRUST_COLS}
            FROM projects
            WHERE approved AND live AND (slug ILIKE $1 OR name ILIKE $1)
@@ -516,6 +629,8 @@ export function buildTools() {
           tvl: fmtUsd(p.tvl), volume: fmtUsd(p.volume), revenue: fmtUsd(p.revenue),
           tvl_all_time_high: fmtUsd(p.tvl_ath),
           last_indexed: p.tvl_last_indexed_at,
+          live_on_mainnet: mainnetStatusOf(p).live,
+          mainnet_evidence: mainnetStatusOf(p).evidence,
           trust: trustOf(p).label,
           links: { twitter: nn(p.twitter), website: nn(p.website), discord: nn(p.discord), github: nn(p.github) },
           ...((sgTvl || sgVol) ? {
@@ -655,13 +770,14 @@ export function buildTools() {
         "'newest projects', 'show me Gaming projects', 'what's featured', and for TRUST questions like 'a trustworthy DeFi project', " +
         "'safe DEXs', 'which projects are Verified or Established'. Set trusted_only for trust questions. Every result includes its " +
         "trust signal (Listed / Claimed / Verified / Arc Partner / Arc Official, plus Established, or Risk flagged). " +
-        "Filter by category / claimed-by-a-builder / verified-builder / trusted-only. Sort covers most listing questions: " +
+        "Filter by category / mainnet status / claimed-by-a-builder / verified-builder / trusted-only. Sort covers most listing questions: " +
         "'trending' (most-viewed this week — use for 'trending', 'hot', 'what's popular'), 'newest', 'oldest' (use for 'first project to list'), " +
         "'quiet' (least-viewed — use for 'most unknown', 'minimal activity', 'quietest project'), 'tvl', 'volume', or 'featured'.",
-      inputSchema: jsonSchema<{ category?: string; claimed_only?: boolean; verified_builder_only?: boolean; trusted_only?: boolean; sort?: "tvl" | "volume" | "newest" | "oldest" | "trending" | "quiet" | "featured"; limit?: number }>({
+      inputSchema: jsonSchema<{ category?: string; mainnet_only?: boolean; claimed_only?: boolean; verified_builder_only?: boolean; trusted_only?: boolean; sort?: "tvl" | "volume" | "newest" | "oldest" | "trending" | "quiet" | "featured"; limit?: number }>({
         type: "object",
         properties: {
           category:              { type: "string", description: "Optional category filter, e.g. 'DeFi', 'Gaming'." },
+          mainnet_only:          { type: "boolean", description: "Only projects ArcLens currently confirms as live on Arc mainnet." },
           claimed_only:          { type: "boolean", description: "Only projects claimed by a builder." },
           verified_builder_only: { type: "boolean", description: "Only projects whose builder is verified." },
           trusted_only:          { type: "boolean", description: "Only projects with a meaningful trust signal — Verified, Arc Partner, Arc Official, or Established — and never risk-flagged. Use for 'trustworthy'/'safe' questions." },
@@ -669,11 +785,26 @@ export function buildTools() {
           limit:                 { type: "number", description: "Max results (1-20). Default 10." },
         },
       }),
-      execute: async ({ category, claimed_only, verified_builder_only, trusted_only, sort = "featured", limit = 10 }) => {
+      execute: async ({ category, mainnet_only, claimed_only, verified_builder_only, trusted_only, sort = "featured", limit = 10 }) => {
         const lim = Math.min(Math.max(Number(limit) || 10, 1), 20)
         const where = ["p.approved", "p.live"]
         const params: any[] = []
         if (category) { params.push(category); where.push(`p.category ILIKE $${params.length}`) }
+        if (mainnet_only) {
+          params.push(curatedMainnetProjectSlugs())
+          where.push(`(
+            EXISTS (
+              SELECT 1 FROM project_contracts mainnet_pc
+               WHERE mainnet_pc.project_id = p.id
+                 AND mainnet_pc.chain_id = ${ARC_MAINNET_CHAIN_ID}
+                 AND mainnet_pc.role = 'deployment'
+                 AND mainnet_pc.verified_at IS NOT NULL
+                 AND mainnet_pc.revoked_at IS NULL
+            )
+            OR COALESCE((p.trust_profile->>'mainnet_claimed')::bool, false)
+            OR p.slug = ANY($${params.length}::text[])
+          )`)
+        }
         if (claimed_only) where.push(`(p.claimed_at IS NOT NULL OR b.address IS NOT NULL)`)
         if (verified_builder_only) where.push(`b.verified = true`)
         if (trusted_only) where.push(
@@ -702,6 +833,7 @@ export function buildTools() {
                   p.logo_url,
                   p.trust_level, p.recognition, p.established,
                   COALESCE((p.trust_profile->>'hard_risk')::bool, false) AS hard_risk,
+                  ${mainnetStatusCols("p")},
                   b.display_name AS builder_name, b.verified AS builder_verified
            FROM projects p LEFT JOIN builder_profiles b ON b.address = LOWER(p.owner_wallet)
            ${trendingJoin}
@@ -715,6 +847,8 @@ export function buildTools() {
           projects: r.rows.map(x => ({
             name: x.name, slug: x.slug, category: x.category, tagline: x.tagline, logo: x.logo_url ?? null,
             tvl: x.tvl && Number(x.tvl) > 0 ? fmtUsd(x.tvl) : null,
+            live_on_mainnet: mainnetStatusOf(x).live,
+            mainnet_evidence: mainnetStatusOf(x).evidence,
             trust: trustOf(x).label,
             builder: x.builder_name || null, builder_verified: !!x.builder_verified,
           })),

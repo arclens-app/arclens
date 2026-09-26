@@ -93,7 +93,7 @@ export const agentPayoutBudgetE6 = Math.max(0, Math.floor(PREMIUM_PRICE_E6 * AGE
 
 // ── Ask: full Lens answers via the agent API ─────────────────────────────────
 // Priced above the simple lookups because every call spends REAL LLM tokens
-// (Gemini bills in dollars even while the inbound USDC is testnet). Default
+// (Gemini bills in dollars while inbound calls settle in USDC). Default
 // $0.02: worst-case LLM cost ≈ $0.006 + builder share 60% ($0.012) still nets
 // positive. Tune via LENS_ASK_PRICE_E6.
 const ASK_PRICE_E6 = Number(process.env.LENS_ASK_PRICE_E6 || 20000) // $0.02/call
@@ -527,15 +527,15 @@ export async function getPayoutStats(): Promise<{
   await tableReady
   const [agg, recent] = await Promise.all([
     pool.query(`SELECT
-        COALESCE(SUM(amount_e6) FILTER (WHERE status IN ('complete','pending','simulated')),0)::bigint paid_total,
-        COUNT(*) FILTER (WHERE status IN ('complete','pending','simulated'))::int payouts,
-        COUNT(DISTINCT builder_wallet) FILTER (WHERE status IN ('complete','pending','simulated'))::int builders_paid,
+        COALESCE(SUM(amount_e6) FILTER (WHERE status = 'complete'),0)::bigint paid_total,
+        COUNT(*) FILTER (WHERE status = 'complete')::int payouts,
+        COUNT(DISTINCT builder_wallet) FILTER (WHERE status = 'complete')::int builders_paid,
         COALESCE(SUM(amount_e6) FILTER (WHERE status='accrued'),0)::bigint credited_total,
         COUNT(DISTINCT builder_wallet) FILTER (WHERE status='accrued')::int builders_credited,
         COUNT(DISTINCT project_slug)::int builders_total
-      FROM lens_payouts WHERE status IN ('complete','pending','simulated','accrued') AND chain_id = ${ARC_CHAIN_ID}`),
+      FROM lens_payouts WHERE status IN ('complete','accrued') AND chain_id = ${ARC_CHAIN_ID}`),
     pool.query(`SELECT project_name, project_slug, amount_e6, tx_hash, status, created_at::text
-                  FROM lens_payouts WHERE status IN ('complete','pending','simulated','accrued') AND chain_id = ${ARC_CHAIN_ID}
+                  FROM lens_payouts WHERE status IN ('complete','accrued') AND chain_id = ${ARC_CHAIN_ID}
                  ORDER BY created_at DESC LIMIT 14`),
   ])
   const a = agg.rows[0] || {}
@@ -569,7 +569,7 @@ export async function getBuilderBoard(limit = 25): Promise<Array<{
             BOOL_AND(lp.status = 'accrued') AS unclaimed
        FROM lens_payouts lp
        LEFT JOIN projects p ON p.slug = lp.project_slug
-      WHERE lp.status IN ('complete','pending','simulated','accrued') AND lp.project_slug IS NOT NULL
+      WHERE lp.status IN ('complete','accrued') AND lp.project_slug IS NOT NULL
         AND lp.chain_id = ${ARC_CHAIN_ID}
       GROUP BY lp.project_slug
       ORDER BY earned DESC, cites DESC
@@ -590,7 +590,7 @@ export async function getProjectEarnings(slug: string): Promise<{
   const r = await pool.query(
     `SELECT COUNT(*)::int AS cites, COALESCE(SUM(amount_e6),0)::bigint AS earned, MAX(created_at)::text AS last_cited
        FROM lens_payouts
-      WHERE LOWER(project_slug) = LOWER($1) AND status IN ('complete','pending','simulated') AND chain_id = ${ARC_CHAIN_ID}`,
+      WHERE LOWER(project_slug) = LOWER($1) AND status = 'complete' AND chain_id = ${ARC_CHAIN_ID}`,
     [slug],
   )
   const x = r.rows[0] || {}

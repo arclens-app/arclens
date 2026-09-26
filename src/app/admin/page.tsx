@@ -77,6 +77,7 @@ interface Project {
   logo_url: string|null; email: string|null; website: string|null; twitter: string|null
   github: string|null; discord: string|null; contract: string|null; contracts: string[]|null; badge: string|null
   trust_level?: string|null; recognition?: string|null
+  mainnet_claimed?: boolean
   has_mainnet_contract?: boolean; has_mainnet_deployment?: boolean; mainnet_contract?: string|null
   approved: boolean; live: boolean; featured: boolean; created_at: string
   city: string|null; country: string|null; lat: number|null; lng: number|null
@@ -1163,6 +1164,7 @@ export default function AdminPage() {
                               <span style={pill(t3, bdr)}>{s.email || "No email"}</span>
                               {s.website && <span style={pill(t3, bdr)}>{s.website.replace(/^https?:\/\//, "").replace(/\/$/, "")}</span>}
                               {s.submission_ref && <span style={pill("#8aaeff","rgba(26,86,255,0.3)")}>{s.submission_ref}</span>}
+                              {s.trust_profile?.mainnet_claimed === true && <span style={pill("#00b87a","rgba(0,184,122,0.2)")}>Claims mainnet</span>}
                               {s.website && urlRepChip(s.website)}
                               {s.contract && <span style={pill(t3, bdr)}>{s.contract.slice(0,6)}…{s.contract.slice(-4)}</span>}
                               <span style={pill(t3, bdr)}>{new Date(s.created_at).toLocaleString(undefined,{ day:"2-digit", month:"short", hour:"2-digit", minute:"2-digit" })}</span>
@@ -1442,7 +1444,7 @@ export default function AdminPage() {
                           {p.live
                             ? <span style={pill("#00b87a","rgba(0,184,122,0.2)")}>Live</span>
                             : <span style={pill("#e05a5a","rgba(224,90,90,0.2)")}>Hidden</span>}
-                          {p.has_mainnet_contract && <span style={pill("#00b87a","rgba(0,184,122,0.2)")}>Mainnet</span>}
+                          {(p.has_mainnet_contract || p.mainnet_claimed) && <span style={pill("#00b87a","rgba(0,184,122,0.2)")}>Mainnet</span>}
                         </div>
                         <div style={{ fontSize:"11px", color:t2, display:"flex", alignItems:"center", gap:"8px", flexWrap:"wrap" }}>
                           <span>{p.category} · {p.website || "No website"}</span>

@@ -23,7 +23,7 @@ const pool = new pg.Pool({
 const FACTS = [
   // ─── Arc network basics ──────────────────────────────────────────────────
   { topic: "arc-basics", fact: "Arc is Circle's EVM-compatible L1 blockchain, purpose-built to use USDC as the native gas token instead of ETH.", source_url: "/about" },
-  { topic: "arc-basics", fact: "Arc Testnet uses chain ID 5042002 (hex 0x4cef52). The RPC URL is https://rpc.testnet.arc.network.", source_url: "/dev" },
+  { topic: "arc-basics", fact: "Arc mainnet uses chain ID 5042. The public RPC is https://rpc.mainnet.arc.io and the explorer is https://explorer.arc.io.", source_url: "https://docs.arc.io/arc/references/connect-to-arc" },
   { topic: "arc-basics", fact: "USDC on Arc has 6 decimals and is at contract address 0x3600000000000000000000000000000000000000.", source_url: "/dev" },
   { topic: "arc-basics", fact: "Arc finality is sub-second — most transactions confirm in under one second. Average block time is fetched live on the homepage.", source_url: "/" },
   { topic: "arc-basics", fact: "Average transfer cost on Arc is under $0.001 in USDC, computed live from eth_gasPrice on each pageview.", source_url: "/" },
@@ -32,12 +32,12 @@ const FACTS = [
   // ─── USDC fundamentals ───────────────────────────────────────────────────
   { topic: "usdc", fact: "USDC is a fully-backed dollar stablecoin issued by Circle. Each USDC is redeemable 1:1 for US dollars held in regulated reserves.", source_url: "https://www.circle.com/usdc" },
   { topic: "usdc", fact: "On Arc, USDC is the native gas token — you pay for every transaction in USDC directly, no ETH wrapper needed.", source_url: "/about" },
-  { topic: "usdc", fact: "USDC is available on 20+ chains. ArcLens specifically tracks the USDC on Arc Testnet (chain 5042002).", source_url: "/dev" },
+  { topic: "usdc", fact: "ArcLens reads Arc mainnet activity on chain ID 5042. USDC is Arc's native gas token and is also available through its ERC-20 interface at 0x3600000000000000000000000000000000000000.", source_url: "https://docs.arc.io/arc/references/contract-addresses" },
 
   // ─── How to use Arc ──────────────────────────────────────────────────────
-  { topic: "arc-howto", fact: "To add Arc Testnet to a wallet like MetaMask: Network Name = Arc Testnet, RPC URL = https://rpc.testnet.arc.network, Chain ID = 5042002, Currency Symbol = USDC, Block Explorer = https://arclenz.xyz.", source_url: "/dev" },
+  { topic: "arc-howto", fact: "To add Arc mainnet to an EVM wallet: Network Name = Arc, RPC URL = https://rpc.mainnet.arc.io, Chain ID = 5042, Currency Symbol = USDC, Block Explorer = https://explorer.arc.io.", source_url: "https://docs.arc.io/arc/references/connect-to-arc" },
   { topic: "arc-howto", fact: "Anyone can sign in to ArcLens without MetaMask using email-based Circle Wallets — type your email, get a code, set a PIN, you have a wallet on Arc.", source_url: "/" },
-  { topic: "arc-howto", fact: "To deploy a contract on Arc, target chain ID 5042002 and use the standard EVM toolchain (Hardhat, Foundry, Remix). No special compiler flags needed.", source_url: "https://developers.circle.com" },
+  { topic: "arc-howto", fact: "To deploy a contract on Arc mainnet, target chain ID 5042 and use a standard EVM toolchain such as Hardhat, Foundry or Remix while accounting for Arc's documented EVM differences.", source_url: "https://docs.arc.io/arc/tutorials/deploy-on-arc" },
   { topic: "arc-howto", fact: "ArcLens has an Arc Beginners section at /start that walks new users through their first steps on Arc.", source_url: "/start" },
 
   // ─── ArcLens platform — what it is ───────────────────────────────────────
@@ -48,14 +48,14 @@ const FACTS = [
   // ─── ArcLens features ────────────────────────────────────────────────────
   { topic: "arclens-features", fact: "Arc Ecosystem Directory — the curated public list of every project on Arc. Filter by category, see TVL/Volume/Revenue, find teams.", source_url: "/ecosystem" },
   { topic: "arclens-features", fact: "Protocol Metrics — deployer-verified TVL, volume, and cumulative revenue for stablecoin protocols. Each contract claim requires the deployer's signature, on-chain provable.", source_url: "/ecosystem" },
-  { topic: "arclens-features", fact: "Arc Trials — testing campaign platform. Founders post tasks with USDC rewards; testers complete tasks, get rated, claim USDC rewards via the platform's Circle DCW.", source_url: "/trials" },
+  { topic: "arclens-features", fact: "Arc Trials lets teams run participation and growth campaigns, verify qualifying activity, and offer USDC, tokens, early access, whitelist spots, community roles or other clearly stated rewards.", source_url: "/trials" },
   { topic: "arclens-features", fact: "Public dispute flow — anyone can flag a TVL, volume, or revenue number on any project. Admin triages each report.", source_url: "/admin" },
-  { topic: "arclens-features", fact: "Contract Registry — verify, submit, and discover smart contracts on Arc. Deployer-signed identity claims so impersonation is impossible.", source_url: "/registry" },
+  { topic: "arclens-features", fact: "Project teams can add an Arc mainnet deployment from their founder dashboard. ArcLens verifies the authorization used for a contract claim before attaching it to the listing.", source_url: "/dashboard" },
   { topic: "arclens-features", fact: "Builder Profiles — every project owner gets a profile showing the projects they own, their campaigns, and their community reputation.", source_url: "/builders" },
 
   // ─── How founders register projects ──────────────────────────────────────
   { topic: "founder-onboarding", fact: "Founders submit their project at /ecosystem (Submit Project button). After admin approval, they receive a magic link to activate their dashboard.", source_url: "/ecosystem" },
-  { topic: "founder-onboarding", fact: "Project ownership is claimed by signing a message with the wallet that deployed the contract — proof of deployer identity via on-chain lookup.", source_url: "/registry" },
+  { topic: "founder-onboarding", fact: "Project ownership can be confirmed from the founder dashboard by signing with the wallet that deployed or controls the submitted contract.", source_url: "/dashboard" },
   { topic: "founder-onboarding", fact: "To enable TVL/Volume/Revenue tracking on a project, the founder opens the TVL Tracking tab on their dashboard, adds each contract address with its role (tvl/volume/revenue/treasury), and signs once with the deployer wallet.", source_url: "/dashboard/[slug]" },
   { topic: "founder-onboarding", fact: "For aggregators or routers that don't emit Swap events (like DEX aggregators), the volume method 'Outflow Transfer' tracks stablecoin transfers leaving the contract instead of decoding Swap events. Labeled approximate.", source_url: "/dashboard/[slug]" },
 
@@ -70,7 +70,7 @@ const FACTS = [
   { topic: "circle-on-arclens", fact: "Circle App Kit (@circle-fin/app-kit) is the SDK that orchestrates USDC sends from the DCW. ArcLens uses this pattern in production.", source_url: "https://developers.circle.com" },
 
   // ─── Compliance + trust ──────────────────────────────────────────────────
-  { topic: "trust", fact: "Every deployer-signed contract claim on ArcLens is independently verifiable. The signed message + signature + on-chain deployer address are all stored, so any third party can reproduce the verification.", source_url: "/registry" },
+  { topic: "trust", fact: "ArcLens checks a deployer-signed contract claim against the Arc mainnet deployment before attaching that contract to a project listing.", source_url: "/dashboard" },
   { topic: "trust", fact: "Public disputes against any TVL or volume number appear immediately on the project page with a warning badge. Admin resolution is visible.", source_url: "/admin" },
   { topic: "trust", fact: "ArcLens's indexer runs every 5 minutes and reconciles cached values against live chain state every hour. Drift alerts are public.", source_url: "/admin" },
 
@@ -84,7 +84,7 @@ const FACTS = [
   { topic: "ai-self", fact: "ArcLens AI never speaks numbers from memory — every TVL, volume, or revenue figure is fetched live from the database or chain at the moment of the question.", source_url: "/" },
 
   // ─── Stablecoins tracked ─────────────────────────────────────────────────
-  { topic: "stablecoins", fact: "ArcLens tracks both USDC and EURC on Arc. EURC is Circle's euro-pegged stablecoin (6 decimals, contract 0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a), valued in USD at the live EUR→USD rate so TVL and volume read in dollars.", source_url: "/about" },
+  { topic: "stablecoins", fact: "ArcLens supports USDC, EURC and cirBTC in its Arc mainnet wallet interface. EURC is at 0xbEf5f6d51CB62b58e6A8f77868681825C6fe21c1 and cirBTC is at 0x171A4217b86A807A64eB94757Db6849fb4bDbAA0.", source_url: "/" },
 
   // ─── TVL vs Volume (the most common confusion) ───────────────────────────
   { topic: "metrics-explained", fact: "TVL and Volume are different metrics. TVL (Total Value Locked) is the value of stablecoins currently held in a project's contracts — a balance, a snapshot. Volume is the throughput of swaps over time, decoded from the protocol's Swap events — a flow. A project can have high TVL and low volume, or the reverse.", source_url: "/about" },

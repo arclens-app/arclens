@@ -6,7 +6,7 @@
 import type { SessionData } from "@/lib/session"
 import { getPool } from "@/lib/dbPool"
 import { rateLimit } from "@/lib/ratelimit"
-import { ARC_CHAIN_ID } from "@/lib/constants"
+import { ARC_CHAIN_ID, ARC_IS_MAINNET } from "@/lib/constants"
 
 const pool = getPool()
 
@@ -324,7 +324,15 @@ export async function buildContext(args: {
     searchKnowledgeBase(args.userQuery),
     recentConversations(userAddr),
   ])
-  return { route: args.route, role, userAddr, selfQuery: isSelfQuery(args.userQuery), pageData, kbHits, recentChats }
+  // Preserve testnet history in the database, but do not feed retired network
+  // configuration into a mainnet answer unless the user explicitly asks about
+  // testnet. This avoids stale chain IDs, RPCs, explorers, and token addresses
+  // competing with the active mainnet configuration in the system prompt.
+  const asksAboutTestnet = /\btestnet\b/i.test(args.userQuery)
+  const activeKbHits = ARC_IS_MAINNET && !asksAboutTestnet
+    ? kbHits.filter(hit => !/(arc testnet|5042002|rpc\.testnet|explorer\.testnet|test usdc)/i.test(hit.fact))
+    : kbHits
+  return { route: args.route, role, userAddr, selfQuery: isSelfQuery(args.userQuery), pageData, kbHits: activeKbHits, recentChats }
 }
 
 /**

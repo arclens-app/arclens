@@ -33,9 +33,9 @@ ArcLens is deployed for Arc mainnet (chain ID `5042`). Its public trust records 
 
 <img src="public/lens-teaser.png" alt="Lens AI" width="180" align="right" />
 
-Lens is ArcLens's intelligence layer — and the first AI that **pays the builders it learns from**.
+Lens is ArcLens's intelligence layer — and an AI that **recognizes eligible builders whose project data grounds its answers**.
 
-Ask it anything about Arc and it answers from live on-chain data, then routes a small USDC payment, on-chain, to the teams whose work grounded the answer. Every payout is public and verifiable. It's not about the amount; it's recognition, made real, for the people showing up to build on Arc.
+Ask it about Arc, listed projects, builders, metrics, campaigns and events. It uses ArcLens data and live tools instead of inventing missing facts, records substantive knowledge gaps for review, and can route a small USDC recognition payment on Arc mainnet to an eligible verified builder whose project data grounded an answer. Completed payouts are public and verifiable.
 
 This is what an agentic economy should look like: agents that credit the people they're built on.
 
@@ -43,7 +43,7 @@ This is what an agentic economy should look like: agents that credit the people 
 
 ## What's inside
 
-- **Lens AI** — live, grounded answers about Arc, projects, builders, metrics, and events; pays the builders it cites, on-chain.
+- **Lens AI** — grounded answers about Arc, projects, builders, metrics, campaigns and events; it states when ArcLens cannot verify an answer and can recognize eligible cited builders in USDC on-chain.
 - **Trust layer** — an on-chain badge ladder (Listed → Claimed → Verified, plus Established, Arc Partner / Official) so anyone can tell proven projects from unproven ones.
 - **Metrics** — TVL, volume, and revenue tracking with pluggable methods; on-chain-verified figures rank the leaderboard, protocol-reported figures are clearly labeled.
 - **Ecosystem directory** — every project on Arc, categorized, searchable, with live stats and builder profiles. Every listing needs a verified email and a website on a domain the project owns, carries a reference number, and is reviewed by a person before it goes live.

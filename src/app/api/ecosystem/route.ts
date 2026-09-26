@@ -5,6 +5,7 @@ import { validateEmail, validateWebsite, validateRepresentativeProfile, validate
 import { extractTags } from "@/lib/projectTags"
 import { sendSubmissionCode, verifySubmissionCode } from "@/lib/submissionOtp"
 import { ARC_CHAIN_ID, ARC_MAINNET_CHAIN_ID } from "@/lib/constants"
+import { isCuratedMainnetProject } from "@/lib/mainnetAvailability"
 
 const pool = getPool()
 
@@ -65,6 +66,7 @@ export async function GET() {
               featured, color, launched_at, slug, badge,
               trust_level, recognition, established,
               json_build_object('hard_risk', COALESCE((trust_profile->>'hard_risk')::bool, false)) AS trust_profile,
+              COALESCE((trust_profile->>'mainnet_claimed')::bool, false) AS mainnet_claimed,
               city, country, lat, lng,
               COALESCE(view_count, 0) as view_count,
               created_at,
@@ -103,6 +105,7 @@ export async function GET() {
       const { description_full, ...rest } = p
       return {
         ...rest,
+        live_on_mainnet: !!p.has_mainnet_contract || !!p.mainnet_claimed || isCuratedMainnetProject(p.slug),
         tags: extractTags(`${p.name || ""} ${p.tagline || ""} ${description_full || ""}`),
       }
     })
@@ -152,9 +155,10 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   const body = await req.json()
-  const { name, tagline, description, category, website, twitter, github, discord, contract, contracts: extraContracts, logo_url, email, city, country, founder, founder_public, code } = body
+  const { name, tagline, description, category, website, twitter, github, discord, contract, contracts: extraContracts, logo_url, email, city, country, founder, founder_public, mainnet, code } = body
   const founderSocial = typeof founder === "string" ? founder.trim() || null : null
   const founderPublic = founder_public !== false
+  const mainnetClaimed = mainnet === true
   const contractsArr = Array.isArray(extraContracts) ? extraContracts.map((c: string) => c.trim()).filter(Boolean) : []
   // Cap tagline + description so cards/listings stay neat (the form enforces
   // these too; this is the server-side safety net). Tagline 80, description 300.
@@ -238,12 +242,15 @@ export async function POST(req: NextRequest) {
                logo_url = COALESCE($5, logo_url),
                website = $6, twitter = $7, github = $8, discord = $9,
                founder_social = COALESCE($11, founder_social),
-               trust_profile = jsonb_set(COALESCE(trust_profile, '{}'::jsonb), '{founder_social_public}', to_jsonb($12::boolean), true),
+               trust_profile = jsonb_set(
+                 jsonb_set(COALESCE(trust_profile, '{}'::jsonb), '{founder_social_public}', to_jsonb($12::boolean), true),
+                 '{mainnet_claimed}', to_jsonb($13::boolean), true
+               ),
                approved = false, live = false
              WHERE contract = $10`,
             [name.trim(), cleanTagline, cleanDesc, category||"DeFi",
              logo_url||null, website?.trim()||null, twitter?.trim()||null,
-             github?.trim()||null, discord?.trim()||null, contract.trim().toLowerCase(), founderSocial, founderPublic]
+             github?.trim()||null, discord?.trim()||null, contract.trim().toLowerCase(), founderSocial, founderPublic, mainnetClaimed]
           )
           // Re-issue a reference so a resubmission is trackable too, but keep
           // the original if this project already has one.
@@ -283,12 +290,12 @@ export async function POST(req: NextRequest) {
     const reference = await newSubmissionRef()
     await pool.query(
       `INSERT INTO projects (name, tagline, description, category, logo_url, website, twitter, github, discord, contract, contracts, email, city, country, founder_social, trust_profile, approved, live, slug, submission_ref)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,jsonb_build_object('founder_social_public',$16::boolean),false,false,$17,$18)`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,jsonb_build_object('founder_social_public',$16::boolean,'mainnet_claimed',$17::boolean),false,false,$18,$19)`,
       [name.trim(), cleanTagline, cleanDesc, category||"DeFi",
        logo_url||null, website?.trim()||null, twitter?.trim()||null,
        github?.trim()||null, discord?.trim()||null,
        contract?.trim()?.toLowerCase()||null, contractsArr, email.trim(),
-       city?.trim()||null, country?.trim()||null, founderSocial, founderPublic, finalSlug, reference]
+       city?.trim()||null, country?.trim()||null, founderSocial, founderPublic, mainnetClaimed, finalSlug, reference]
     )
     // Reputation-scan the submitted website (VirusTotal) after responding —
     // the verdict lands in url_scans and shows in the admin review panel.

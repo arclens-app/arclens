@@ -1,7 +1,7 @@
 "use client"
 import { useState, useEffect } from "react"
 import ArcLayout from "@/components/ArcLayout"
-import { NodeGuideSection, useColors } from "@/app/node-guide/page"
+import { NodeGuideSection, useColors } from "@/components/NodeGuideContent"
 import { ADD_CHAIN_PARAMS, ARC_CHAIN_ID, ARC_CHAIN_ID_HEX, ARC_CHAIN_NAME, ARC_IS_MAINNET, ARC_RPC_HTTP, ARC_RPC_WS } from "@/lib/constants"
 
 const CHAIN = ADD_CHAIN_PARAMS
