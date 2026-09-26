@@ -201,7 +201,10 @@ async function daySpentE6(): Promise<number> {
     `SELECT COALESCE(SUM(amount_e6),0)::bigint AS s
       FROM lens_payouts
       WHERE chain_id = ${ARC_CHAIN_ID}
-        AND status IN ('complete','pending','simulated')
+        AND (
+          status IN ('complete','simulated')
+          OR (status = 'pending' AND created_at > NOW() - INTERVAL '1 hour')
+        )
         AND created_at > NOW() - INTERVAL '24 hours'`,
   )
   return Number(r.rows[0]?.s || 0)
@@ -262,7 +265,11 @@ export async function payoutForAnswer(args: {
     const d = await pool.query(
       `SELECT DISTINCT builder_wallet FROM lens_payouts
         WHERE asker_id = $1 AND chain_id = ${ARC_CHAIN_ID}
-          AND created_at > NOW() - make_interval(hours => $2::int)`,
+          AND created_at > NOW() - make_interval(hours => $2::int)
+          AND (
+            status IN ('complete', 'accrued', 'simulated')
+            OR (status = 'pending' AND created_at > NOW() - INTERVAL '10 minutes')
+          )`,
       [askerId, DEDUP_HOURS],
     )
     for (const row of d.rows) recent.add(String(row.builder_wallet).toLowerCase())
