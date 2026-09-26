@@ -69,7 +69,7 @@ Arc RPC ─┴─ on-chain indexer (cron) ── TVL / volume / revenue┘
 
 Circle / Arc: Programmable Wallets — User-Controlled (email sign-in, W3S
 challenge flow) and Developer-Controlled (programmatic payouts) · App Kit ·
-Gateway (x402, EIP-3009 settlement) · ERC-8004 agent identity ·
+Gateway (x402, EIP-3009 settlement) · ERC-8004 agent identity #290 on Arc mainnet ·
 USDC & EURC settlement on Arc
 ```
 
@@ -80,7 +80,7 @@ USDC & EURC settlement on Arc
 | **App** | Next.js 16 (App Router), TypeScript, React |
 | **Data** | PostgreSQL (Supabase), a resilient on-chain indexer with rate-limit and drift handling |
 | **AI** | Vercel AI SDK, Gemini, retrieval over a curated Arc knowledge base |
-| **Circle + Arc** | Programmable Wallets — User-Controlled (W3S SDK, email sign-in) and Developer-Controlled (payout signing) · App Kit · Gateway with x402 batching (EIP-3009) · ERC-8004 agent identity · USDC & EURC on Arc |
+| **Circle + Arc** | Programmable Wallets — User-Controlled (W3S SDK, email sign-in) and Developer-Controlled (payout signing) · App Kit · Gateway with x402 batching (EIP-3009) · ERC-8004 agent #290 on Arc mainnet · USDC & EURC on Arc |
 | **Infra** | Vercel |
 
 ## Local development
@@ -109,6 +109,7 @@ Create a `.env.local` with the variables below. The app boots with the **core** 
 | `USDC_ARC_ADDRESS`, `ARCLENS_REGISTRY`, `ATTESTER_PRIVATE_KEY` | Arc | On-chain token, public trust registry, and dedicated registry attester |
 | `PAYOUTS_ENABLED`, `PAYOUT_NETWORK` | Payments | Explicit double gate for real payouts; the configured network must match the active Arc network |
 | `LENS_WALLET_ID`, `PAYOUT_WALLET_PRIVATE_KEY` | Payments | Builder-recognition payouts (`LENS_PAY_*` knobs tune amount/caps) |
+| `LENS_AGENT_ID`, `ERC8004_IDENTITY_REGISTRY` | Agent identity | Links the public Agent Card to Lens AI's ERC-8004 mainnet registration |
 | `SELLER_ADDRESS` | Payments | Receives x402 / Gateway nanopayments |
 | `RESEND_API_KEY` | Email | Transactional email (approvals, campaigns) |
 | `BLOB_READ_WRITE_TOKEN` | Uploads | Vercel Blob for logos/images |

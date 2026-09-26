@@ -22,7 +22,7 @@ export async function GET() {
     type: "https://eips.ethereum.org/EIPS/eip-8004#registration-v1",
     name: "Lens AI",
     description:
-      "The trust & intelligence agent for the Arc ecosystem. Ask who's real on Arc, discover projects, or read a project's live metrics — and every paid call funds the verified builders whose data answers it. Pay-per-call over x402, settled in USDC on Arc.",
+      "The trust & intelligence agent for the Arc ecosystem. Ask what's live on Arc, discover projects, or read a project's available metrics. Eligible builders whose project data grounds an answer may receive a small USDC recognition payment. Pay-per-call over x402, settled in USDC on Arc.",
     image: "https://arclenz.xyz/lens-reveal.png",
     services: [
       { name: "trust-oracle", endpoint: "https://arclenz.xyz/api/agent", version: "1" },

@@ -2,7 +2,7 @@ import { Callout, Tabs } from "nextra/components"
 
 # Agent API
 
-Lens AI exposes a **pay-per-call trust & ecosystem oracle** any agent can query. It's self-describing (a machine-readable manifest), priced over **x402**, and settled in USDC on Arc. Every paid call also funds the builders whose data answered it.
+Lens AI exposes a **pay-per-call trust and ecosystem API** any agent can query. It is self-describing, priced over **x402**, and settled in USDC on Arc mainnet. Eligible builders whose project data grounds a response may receive a small USDC recognition payment.
 
 <Callout type="info">
 **Base URL** `https://arclenz.xyz/api` · **Protocol** `x402` · **Network** `Arc` · **Token** `USDC`
@@ -29,7 +29,7 @@ curl https://arclenz.xyz/api/agent
   "token": "USDC",
   "price": "$0.0010",
   "price_e6": 1000,
-  "pay_header": "x-lens-pay",
+  "pay_header": "payment-signature",
   "actions": {
     "trust":    { "description": "Trust verdict for a project on Arc." },
     "discover": { "description": "Find Arc projects, optionally trusted-only." },
@@ -44,11 +44,11 @@ curl https://arclenz.xyz/api/agent
 POST /api/agent
 ```
 
-All actions are pay-per-call. Send a payment proof in the `x-lens-pay` header. Until a valid proof arrives, the endpoint returns **`402 Payment Required`** with the price in the response headers — the standard x402 challenge/repeat flow.
+All actions are pay-per-call. Send the signed x402 payment payload in the `payment-signature` header. Until a valid payment arrives, the endpoint returns **`402 Payment Required`** with a `PAYMENT-REQUIRED` challenge header.
 
 | Header | Required | Description |
 | --- | --- | --- |
-| `x-lens-pay` | ✓ | An x402 payment proof. Use `sim` against testnet to exercise the flow end-to-end. |
+| `payment-signature` | ✓ | The signed x402 payment payload produced by a compatible client after receiving the payment challenge. |
 | `x-agent-id` | | Optional caller identity, used for per-caller de-duplication of builder payouts (24h). |
 | `content-type` | ✓ | `application/json` |
 
@@ -64,9 +64,7 @@ x-payment-network: Arc
   "code": "payment_required", "price": "$0.0010", ... }
 ```
 
-<Callout type="warning">
-For testnet integration and demos, `x-lens-pay: sim` is accepted and exercises the **real** payout path — a genuine USDC transfer fires to the matched builder and a transaction hash is returned.
-</Callout>
+Production does not accept demo payment proofs. The action runs only after its x402 payment has been verified and settled.
 
 ## Actions
 
@@ -84,7 +82,7 @@ Returns a trust verdict for a single project on Arc.
 ```bash
 curl -X POST https://arclenz.xyz/api/agent \
   -H "content-type: application/json" \
-  -H "x-lens-pay: <x402 payment proof>" \
+  -H "payment-signature: <x402 payment signature>" \
   -d '{"action":"trust","target":"lunex"}'
 ```
 
@@ -115,7 +113,7 @@ Finds projects on Arc, optionally filtered by category and restricted to trusted
 ```bash
 curl -X POST https://arclenz.xyz/api/agent \
   -H "content-type: application/json" \
-  -H "x-lens-pay: <x402 payment proof>" \
+  -H "payment-signature: <x402 payment signature>" \
   -d '{"action":"discover","trusted_only":true,"limit":5}'
 ```
 
@@ -147,7 +145,7 @@ Returns a single project's live metrics plus its trust standing.
 ```bash
 curl -X POST https://arclenz.xyz/api/agent \
   -H "content-type: application/json" \
-  -H "x-lens-pay: <x402 payment proof>" \
+  -H "payment-signature: <x402 payment signature>" \
   -d '{"action":"project","name":"lunex"}'
 ```
 
@@ -167,6 +165,16 @@ curl -X POST https://arclenz.xyz/api/agent \
 
 </Tabs>
 
+## Additional actions
+
+| Action | Purpose | Required input | Price |
+| --- | --- | --- | --- |
+| `metrics` | Returns available verified metrics and recent history for one project. | `name`; optional `days` from 7 to 90 | Current manifest base price |
+| `risk` | Returns ArcLens trust standing and available contract or website risk signals. | `name` | Current manifest base price |
+| `ask` | Returns a full Lens AI answer grounded in ArcLens data and the Arc knowledge base. | `question`, maximum 500 characters | Published in the live manifest |
+
+Always read `GET /api/agent` before paying. The live manifest is the source of truth for current actions and prices.
+
 ## Response fields
 
 | Field | Description |
@@ -182,6 +190,7 @@ curl -X POST https://arclenz.xyz/api/agent \
 | --- | --- |
 | `400` | Malformed JSON, or an unknown action. The manifest is included in the body. |
 | `402` | No valid payment proof. Price is returned in the `x-payment-*` headers. |
+| `429` | Rate limit or daily capacity reached. Respect `Retry-After` when present. |
 | `500` | Unexpected failure. Safe to retry with backoff. |
 
 <Callout type="info">
