@@ -503,12 +503,12 @@ async function sendUsdc(to: string, amountE6: number): Promise<{ txHash: string 
       return { txHash, txId, status: txHash ? "complete" : "pending" }
     } catch (e: any) {
       console.error("[lensPay] dev-controlled send failed, falling back to App Kit:", e?.message || e)
-      // fall through to the App Kit path below
     }
   }
 
-  // SAFETY NET — Circle App Kit + the dev-controlled wallets adapter (the proven
-  // campaign-rewards rail; resolves USDC by name). viem private-key as last resort.
+  // SAFETY NET — Circle App Kit + the dev-controlled wallets adapter. The
+  // installed App Kit release supports both Arc mainnet and Arc testnet.
+  // viem private-key remains the final explicitly configured fallback.
   const { AppKit } = await import("@circle-fin/app-kit")
   const kit = new AppKit()
   let result: any

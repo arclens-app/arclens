@@ -140,7 +140,6 @@ export async function POST(req: NextRequest) {
       title, tagline, description, type,
       tasks, review_questions,
       reward_type, reward_description, reward_usdc_amount,
-      deposit_tx_hash,
       contract_address,
       campaign_logo,
       banner_position,
@@ -156,6 +155,17 @@ export async function POST(req: NextRequest) {
     if (!description?.trim())   return NextResponse.json({ error: "Description required" }, { status: 400 })
     if (!tasks?.length)         return NextResponse.json({ error: "At least one task required" }, { status: 400 })
     if (!review_questions?.length) return NextResponse.json({ error: "At least one review question required" }, { status: 400 })
+
+    if (reward_type === "usdc") {
+      const reward = String(reward_usdc_amount ?? "").trim()
+      const slots = Number(total_slots)
+      if (!/^\d+(\.\d{1,6})?$/.test(reward) || Number(reward) <= 0) {
+        return NextResponse.json({ error: "Enter a valid USDC reward with no more than 6 decimal places" }, { status: 400 })
+      }
+      if (!Number.isSafeInteger(slots) || slots < 1 || slots > 10_000) {
+        return NextResponse.json({ error: "USDC campaigns require between 1 and 10,000 reward slots" }, { status: 400 })
+      }
+    }
 
     // Reject any type's untouched starter template — steps like "Complete the
     // core action" give testers nothing to act on and admins nothing to review.
@@ -307,13 +317,13 @@ export async function POST(req: NextRequest) {
         reward_type || "other",
         reward_description?.trim() || null,
         reward_usdc_amount ? Number(reward_usdc_amount) : null,
-        deposit_tx_hash || null,
+        null,
         contract_address?.trim() || null,
         campaign_logo?.trim() || null,
         banner_position?.trim() || "50% 50%",
         app_url?.trim() || null,
         slug,
-        total_slots ? Number(total_slots) : null,
+        reward_type === "usdc" ? Number(total_slots) : (total_slots ? Number(total_slots) : null),
         is_fcfs !== false,
         Number(min_rank) || 0,
         project_id || null,

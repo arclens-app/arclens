@@ -306,22 +306,33 @@ export default function DashboardPage() {
     setFundingCampaign(true)
     setFundMsg(null)
     try {
-      const { createAdapterFromProvider } = await import("@circle-fin/adapter-viem-v2")
-      const { AppKit } = await import("@circle-fin/app-kit")
-      const adapter = await createAdapterFromProvider({ provider: (window as any).ethereum })
-      const kit     = new AppKit()
-      const result  = await kit.send({
-        from:   { adapter: adapter as any, chain: APP_KIT_CHAIN as any },
-        to:     payoutAddr,
-        amount: totalAmount,
-        token:  "USDC",
-      })
-      const txHash = (result as any).txHash || (result as any).hash || ""
-      await fetch(`/api/trials/${campaign.id}`, {
+      const storageKey = `arclens:campaign-funding:${campaign.id}`
+      let txHash = window.localStorage.getItem(storageKey) || campaign.deposit_tx_hash || ""
+      if (!txHash) {
+        const { createAdapterFromProvider } = await import("@circle-fin/adapter-viem-v2")
+        const { AppKit } = await import("@circle-fin/app-kit")
+        const adapter = await createAdapterFromProvider({ provider: (window as any).ethereum })
+        const kit     = new AppKit()
+        const result  = await kit.send({
+          from:   { adapter: adapter as any, chain: APP_KIT_CHAIN as any },
+          to:     payoutAddr,
+          amount: totalAmount,
+          token:  "USDC",
+        })
+        txHash = (result as any).txHash || (result as any).hash || ""
+        if (!txHash) throw new Error("The wallet did not return a transaction hash")
+        // Preserve the hash until the server confirms it. A temporary RPC error
+        // must never make the founder send the same campaign deposit twice.
+        window.localStorage.setItem(storageKey, txHash)
+      }
+      const verification = await fetch(`/api/trials/${campaign.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ deposit_tx_hash: txHash, creator_wallet: connectedWallet }),
       })
+      const verified = await verification.json().catch(() => ({}))
+      if (!verification.ok) throw new Error(verified.error || "Funding verification failed")
+      window.localStorage.removeItem(storageKey)
       setFundMsg(`✓ $${totalAmount} USDC deposited — testers can claim immediately after completing`)
       if (connectedWallet) {
         fetch(`/api/trials?creator=${connectedWallet}`).then(r => r.json()).then(d => setForgeCampaigns(d.campaigns || [])).catch(() => {})
@@ -329,7 +340,10 @@ export default function DashboardPage() {
       openCampaign(campaign.id)
     } catch (e: any) {
       if (e?.code !== 4001 && !String(e).includes("user rejected")) {
-        setFundMsg("Transaction failed: " + (e?.message || "Unknown error"))
+        const saved = window.localStorage.getItem(`arclens:campaign-funding:${campaign.id}`)
+        setFundMsg(saved
+          ? `Deposit sent, but verification is still pending. Click again to verify the same transaction — you will not be charged twice. ${e?.message || ""}`
+          : "Transaction failed: " + (e?.message || "Unknown error"))
       }
     } finally { setFundingCampaign(false) }
   }
@@ -1072,7 +1086,7 @@ export default function DashboardPage() {
                         )}
 
                         {/* USDC fund banner */}
-                        {camp.reward_type === "usdc" && camp.reward_usdc_amount && (camp.status === "approved" || camp.status === "active") && !camp.deposit_tx_hash && !fundMsg?.startsWith("✓") && (
+                        {camp.reward_type === "usdc" && camp.reward_usdc_amount && camp.status === "approved" && !fundMsg?.startsWith("✓") && (
                           <div style={{ background: "rgba(0,184,122,0.04)", border: "1px solid rgba(0,184,122,0.2)", borderRadius: "10px", padding: "14px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
                             <div>
                               <div style={{ fontSize: "12px", fontWeight: 600, color: green, marginBottom: "2px" }}>Fund this campaign</div>
@@ -1082,7 +1096,11 @@ export default function DashboardPage() {
                             </div>
                             <button onClick={() => fundCampaign(camp)} disabled={fundingCampaign}
                               style={{ height: "34px", padding: "0 16px", background: green, color: "#fff", fontSize: "12px", fontFamily: mono, border: "none", borderRadius: "7px", cursor: fundingCampaign ? "default" : "pointer", opacity: fundingCampaign ? 0.6 : 1, flexShrink: 0, fontWeight: 600 }}>
-                              {fundingCampaign ? "Depositing..." : `Deposit $${(camp.reward_usdc_amount * (camp.total_slots || 10)).toFixed(2)} USDC →`}
+                              {fundingCampaign
+                                ? (camp.deposit_tx_hash ? "Verifying..." : "Depositing...")
+                                : camp.deposit_tx_hash
+                                  ? "Verify existing deposit →"
+                                  : `Deposit $${(camp.reward_usdc_amount * (camp.total_slots || 10)).toFixed(2)} USDC →`}
                             </button>
                           </div>
                         )}

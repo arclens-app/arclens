@@ -4,6 +4,7 @@ import { getSession } from "@/lib/session"
 import { getPool } from "@/lib/dbPool"
 import { APP_KIT_CHAIN, ARC_CHAIN_ID } from "@/lib/constants"
 import { payoutSafetyMessage, payoutsEnabledForActiveNetwork } from "@/lib/payoutSafety"
+import { verifyCampaignFunding } from "@/lib/campaignFunding"
 
 const pool = getPool()
 
@@ -32,7 +33,7 @@ export async function POST(
     // Resolve slug or numeric id
     const isNumeric = /^\d+$/.test(id)
     const campRes = await pool.query(
-      `SELECT id, status, reward_type, reward_usdc_amount, deposit_tx_hash FROM campaigns WHERE ${isNumeric ? "id = $1" : "slug = $1"} AND chain_id = ${ARC_CHAIN_ID}`,
+      `SELECT id, status, reward_type, reward_usdc_amount, deposit_tx_hash, creator_wallet, total_slots FROM campaigns WHERE ${isNumeric ? "id = $1" : "slug = $1"} AND chain_id = ${ARC_CHAIN_ID}`,
       [isNumeric ? Number(id) : id]
     )
     const campaignId: number = campRes.rows[0]?.id
@@ -42,6 +43,26 @@ export async function POST(
     if (campaign.reward_type !== "usdc")   return NextResponse.json({ error: "This campaign does not offer USDC rewards" }, { status: 400 })
     if (!campaign.reward_usdc_amount)      return NextResponse.json({ error: "USDC reward amount not set" }, { status: 400 })
     if (!campaign.deposit_tx_hash)         return NextResponse.json({ error: "Campaign has not been funded by the founder yet" }, { status: 400 })
+    const reusedFunding = await pool.query(
+      `SELECT 1 FROM campaigns
+       WHERE LOWER(deposit_tx_hash) = LOWER($1) AND id != $2 AND chain_id = ${ARC_CHAIN_ID}
+       LIMIT 1`,
+      [campaign.deposit_tx_hash, campaignId]
+    )
+    if (reusedFunding.rows.length) {
+      console.error(`[Claim] blocked reused campaign funding transaction for campaign ${campaignId}`)
+      return NextResponse.json({ error: "Campaign funding could not be verified. Reward claims are temporarily unavailable." }, { status: 503 })
+    }
+    const funding = await verifyCampaignFunding({
+      txHash: campaign.deposit_tx_hash,
+      founderWallet: campaign.creator_wallet,
+      rewardUsdcAmount: campaign.reward_usdc_amount,
+      totalSlots: campaign.total_slots,
+    })
+    if (funding.ok === false) {
+      console.error(`[Claim] blocked unverified campaign funding for campaign ${campaignId}: ${funding.reason}`)
+      return NextResponse.json({ error: "Campaign funding could not be verified. Reward claims are temporarily unavailable." }, { status: 503 })
+    }
     if (!payoutsEnabledForActiveNetwork()) {
       return NextResponse.json({ error: payoutSafetyMessage() }, { status: 503 })
     }

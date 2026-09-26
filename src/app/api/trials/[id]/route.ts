@@ -4,6 +4,7 @@ import { getSession } from "@/lib/session"
 import { getPool } from "@/lib/dbPool"
 import { hasAdminAuthorization } from "@/lib/adminAuth"
 import { ARC_CHAIN_ID } from "@/lib/constants"
+import { verifyCampaignFunding } from "@/lib/campaignFunding"
 
 const pool = getPool()
 
@@ -419,18 +420,46 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   try {
+    const blocked = await enforce(req, "campaign-funding", { limit: 10, windowMs: 60_000 })
+    if (blocked) return blocked
     const { deposit_tx_hash } = await req.json()
     if (!deposit_tx_hash) return NextResponse.json({ error: "Missing deposit transaction" }, { status: 400 })
     const session = getSession(req)
     if (!session) return NextResponse.json({ error: "Sign in with the campaign creator wallet first" }, { status: 401 })
 
+    const campaign = await pool.query(
+      `SELECT id, creator_wallet, reward_type, reward_usdc_amount, total_slots, status
+       FROM campaigns
+       WHERE id = $1 AND creator_wallet = $2 AND chain_id = ${ARC_CHAIN_ID}`,
+      [id, session.addr]
+    )
+    if (!campaign.rows.length) return NextResponse.json({ error: "Campaign not found or not owned by wallet" }, { status: 404 })
+    const row = campaign.rows[0]
+    if (row.status !== "approved") return NextResponse.json({ error: "Campaign is not awaiting funding" }, { status: 409 })
+    if (row.reward_type !== "usdc") return NextResponse.json({ error: "This campaign does not require a USDC deposit" }, { status: 400 })
+
+    const funding = await verifyCampaignFunding({
+      txHash: String(deposit_tx_hash),
+      founderWallet: row.creator_wallet,
+      rewardUsdcAmount: row.reward_usdc_amount,
+      totalSlots: row.total_slots,
+    })
+    if (funding.ok === false) {
+      return NextResponse.json({ error: funding.reason }, { status: funding.pending ? 409 : 400 })
+    }
+
     const result = await pool.query(
       `UPDATE campaigns SET deposit_tx_hash = $1, status = 'active'
        WHERE id = $2 AND creator_wallet = $3 AND status = 'approved' AND chain_id = ${ARC_CHAIN_ID}
+         AND NOT EXISTS (
+           SELECT 1 FROM campaigns used
+           WHERE LOWER(used.deposit_tx_hash) = LOWER($1)
+             AND used.id != campaigns.id AND used.chain_id = ${ARC_CHAIN_ID}
+         )
        RETURNING id`,
-      [deposit_tx_hash, id, session.addr]
+      [String(deposit_tx_hash).toLowerCase(), id, session.addr]
     )
-    if (!result.rows.length) return NextResponse.json({ error: "Campaign not found, not owned by wallet, or not awaiting funding" }, { status: 404 })
+    if (!result.rows.length) return NextResponse.json({ error: "That funding transaction has already been used or the campaign is no longer awaiting funding" }, { status: 409 })
     return NextResponse.json({ success: true })
   } catch {
     return NextResponse.json({ error: "Server error" }, { status: 500 })

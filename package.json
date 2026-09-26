@@ -15,9 +15,9 @@
   },
   "dependencies": {
     "@ai-sdk/google": "^3.0.80",
-    "@circle-fin/adapter-circle-wallets": "^1.2.10",
-    "@circle-fin/adapter-viem-v2": "^1.8.2",
-    "@circle-fin/app-kit": "^1.5.0",
+    "@circle-fin/adapter-circle-wallets": "^1.8.0",
+    "@circle-fin/adapter-viem-v2": "^1.18.0",
+    "@circle-fin/app-kit": "^1.15.3",
     "@circle-fin/w3s-pw-web-sdk": "^1.1.11",
     "@circle-fin/x402-batching": "^2.1.0",
     "@dnd-kit/core": "^6.3.1",

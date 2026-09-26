@@ -698,8 +698,14 @@ export async function POST(req: NextRequest) {
     if (table === "campaigns") {
       let refundFailed = false
       if (action === "approve") {
-        // Deposit already paid at creation — approve goes straight to active
-        await pool.query(`UPDATE campaigns SET status = 'active' WHERE id = $1 AND chain_id = ${ARC_CHAIN_ID}`, [id])
+        // USDC campaigns become active only after their founder funds the full
+        // reward budget and the funding route verifies that transfer on Arc.
+        await pool.query(
+          `UPDATE campaigns
+           SET status = CASE WHEN reward_type = 'usdc' THEN 'approved' ELSE 'active' END
+           WHERE id = $1 AND chain_id = ${ARC_CHAIN_ID}`,
+          [id]
+        )
         // Notify the founder AFTER the response — the admin's click shouldn't
         // wait on a Resend round-trip. runAfter (next/server after) is serverless-safe.
         runAfter(() => sendCampaignEmail(id, "approved"))
