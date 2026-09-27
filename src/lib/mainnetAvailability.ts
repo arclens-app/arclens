@@ -14,6 +14,15 @@ const CURATED_MAINNET_SLUGS = new Set([
   "tower-exchange",
   "xylonet",
   "metamask",
+  // Arc ecosystem partners with explicit, publicly documented Arc mainnet
+  // support. These are integrations/infrastructure, so a project-owned
+  // contract is not required for the availability label.
+  "across",
+  "alchemy",
+  "blockscout",
+  "chainlink",
+  "drpc",
+  "quicknode",
   // Uniswap is officially live on Arc. Its slug takes effect automatically as
   // soon as the official project has a public ArcLens directory record.
   "uniswap",
