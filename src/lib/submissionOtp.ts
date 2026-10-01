@@ -40,6 +40,13 @@ const hash = (code: string) => crypto.createHash("sha256").update(code + PEPPER)
 
 type Result = { ok: true } | { ok: false; error: string; status: number }
 
+const escapeHtml = (value: string) => String(value || "")
+  .replace(/&/g, "&amp;")
+  .replace(/</g, "&lt;")
+  .replace(/>/g, "&gt;")
+  .replace(/"/g, "&quot;")
+  .replace(/'/g, "&#039;")
+
 /** Email a fresh code to the submitter. Rate-limited per address. */
 export async function sendSubmissionCode(email: string, projectName?: string): Promise<Result> {
   await ensureTable()
@@ -103,6 +110,47 @@ export async function sendSubmissionCode(email: string, projectName?: string): P
     return { ok: false, error: "We couldn't send the code right now. Please try again shortly.", status: 502 }
   }
   return { ok: true }
+}
+
+/** Confirm that a verified submission entered the private review queue. */
+export async function sendSubmissionReceipt(
+  email: string,
+  projectName: string,
+  reference: string,
+  isUpdate = false,
+): Promise<void> {
+  const key = process.env.RESEND_API_KEY
+  if (!key) return
+
+  const safeName = escapeHtml(projectName.trim())
+  const safeRef = escapeHtml(reference.trim())
+  const heading = isUpdate ? "Listing update received" : "Project submission received"
+  try {
+    const { Resend } = await import("resend")
+    const resend = new Resend(key)
+    const res = await resend.emails.send({
+      from: "ArcLens <support@mail.arclenz.xyz>",
+      reply_to: process.env.TEAM_EMAIL || "support@arclenz.xyz",
+      to: email,
+      subject: `${heading} — ${reference}`,
+      text: `${heading}\n\n${projectName} is now in the ArcLens review queue. It will not appear publicly until it has been reviewed and approved.\n\nReference: ${reference}\n\nKeep this reference and include it if you contact us about the submission. We will email you when the review is complete.\n\nArcLens — https://arclenz.xyz/ecosystem`,
+      html: `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:40px 20px;background:#060c20;color:#e8ecff;">
+        <div style="margin-bottom:32px;"><span style="font-size:20px;font-weight:700;color:#e8ecff;">Arc</span><span style="font-size:20px;font-weight:700;color:#1a56ff;">Lens</span></div>
+        <div style="font-size:11px;font-family:monospace;text-transform:uppercase;letter-spacing:0.1em;color:#8aaeff;">Under review</div>
+        <h1 style="font-size:22px;font-weight:700;margin:10px 0 12px;color:#e8ecff;">${heading}</h1>
+        <p style="font-size:14px;color:#6b7da8;line-height:1.7;margin:0 0 22px;"><strong style="color:#e8ecff;">${safeName}</strong> is now in the ArcLens review queue. It will not appear publicly until it has been reviewed and approved.</p>
+        <div style="padding:18px;background:#0d1530;border:1px solid rgba(138,174,255,0.35);border-radius:9px;margin-bottom:22px;">
+          <div style="font-size:10px;font-family:monospace;text-transform:uppercase;letter-spacing:0.12em;color:#6b7da8;margin-bottom:8px;">Submission reference</div>
+          <div style="font-size:25px;font-family:'Courier New',monospace;font-weight:700;letter-spacing:2px;color:#ffffff;">${safeRef}</div>
+        </div>
+        <p style="font-size:13px;color:#6b7da8;line-height:1.7;margin:0 0 24px;">Keep this reference and include it if you contact us about the submission. We will email you when the review is complete.</p>
+        <a href="https://arclenz.xyz/ecosystem" style="display:inline-block;padding:12px 22px;background:#1a56ff;color:#fff;text-decoration:none;border-radius:8px;font-size:13px;font-weight:600;">View ArcLens Directory</a>
+      </div>`,
+    })
+    if ((res as { error?: unknown })?.error) console.error("[submissionOtp] receipt:", (res as { error?: unknown }).error)
+  } catch (e) {
+    console.error("[submissionOtp] receipt failed:", e)
+  }
 }
 
 /** Check a submitted code. Consumed on success so it can't be replayed. */

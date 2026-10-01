@@ -40,22 +40,21 @@ const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, ssl: { re
 const FACTS = [
   // ─── Arc network basics ──────────────────────────────────────────────────
   { key: "arc-evm-l1",      topic: "arc-basics", fact: "Arc is Circle's EVM-compatible L1 blockchain, purpose-built to use USDC as the native gas token instead of ETH.", source_url: "/about" },
-  { key: "arc-chain-id",    topic: "arc-basics", fact: "Arc Testnet uses chain ID 5042002 (hex 0x4cef52). The RPC URL is https://rpc.testnet.arc.network.", source_url: "/dev" },
+  { key: "arc-chain-id",    topic: "arc-basics", fact: "Arc mainnet uses chain ID 5042. The public RPC is https://rpc.mainnet.arc.io and the explorer is https://explorer.arc.io.", source_url: "https://docs.arc.io/arc/references/connect-to-arc" },
   { key: "arc-usdc-addr",   topic: "arc-basics", fact: "USDC on Arc has 6 decimals and is at contract address 0x3600000000000000000000000000000000000000.", source_url: "/dev" },
   { key: "arc-finality",    topic: "arc-basics", fact: "Arc finality is sub-second — most transactions confirm in under one second.", source_url: "/" },
   { key: "arc-cheap",       topic: "arc-basics", fact: "Average transfer cost on Arc is a fraction of a cent in USDC, computed live from gas price.", source_url: "/" },
   { key: "arc-evm-compat",  topic: "arc-basics", fact: "Arc is EVM-compatible — any contract that deploys on Ethereum, Polygon, Base, etc. can deploy on Arc with no code changes.", source_url: "https://developers.circle.com" },
 
   // ─── Arc mainnet ─────────────────────────────────────────────────────────
-  // Deliberately says nothing about mainnet chain ID or contract addresses:
-  // those are not public yet, and a confident wrong address is worse than "I
-  // don't know". If asked, the AI should say it will confirm at launch.
-  { key: "arc-mainnet-date",   topic: "arc-mainnet", fact: "Arc mainnet launches on 16 September 2026. Everything on Arc before that date runs on Arc Testnet.", source_url: "/" },
-  { key: "arc-mainnet-change", topic: "arc-mainnet", fact: "At Arc mainnet, transactions settle in real USDC rather than testnet USDC. Testnet balances and testnet activity do not carry over to mainnet — they are separate networks.", source_url: "/" },
+  // Keep production network facts current here. Historical testnet facts may be
+  // retained elsewhere, but they must never be presented as mainnet settings.
+  { key: "arc-mainnet-date",   topic: "arc-mainnet", fact: "Arc mainnet is live. ArcLens reads current production activity from Arc mainnet while preserving testnet activity only as historical data.", source_url: "/" },
+  { key: "arc-mainnet-change", topic: "arc-mainnet", fact: "Arc mainnet and Arc Testnet are separate networks. Testnet balances, transaction hashes and contracts remain historical testnet records and do not automatically become mainnet assets or deployments.", source_url: "/" },
   { key: "arc-mainnet-gas",    topic: "arc-mainnet", fact: "USDC remains the native gas token on Arc mainnet, exactly as on testnet — there is no separate gas coin to hold.", source_url: "/about" },
-  { key: "arc-mainnet-ids",    topic: "arc-mainnet", fact: "Arc mainnet chain ID, RPC URL and contract addresses are not published yet. Do not guess them — the testnet values (chain ID 5042002, rpc.testnet.arc.network) are testnet only and will not work on mainnet.", source_url: "/dev" },
-  { key: "arclens-mainnet",    topic: "arc-mainnet", fact: "ArcLens is preparing for Arc mainnet: hardening the payout path, tightening listing standards, and making sure the directory is accurate for the people who arrive on day one. ArcLens itself is live now on testnet.", source_url: "/" },
-  { key: "arc-mainnet-prep",   topic: "arc-mainnet", fact: "For a builder, getting ready for Arc mainnet means having a working product on a domain the project owns, a verified listing on ArcLens so users can find and check it, and contracts ready to redeploy — testnet deployments do not migrate automatically.", source_url: "/ecosystem" },
+  { key: "arc-mainnet-ids",    topic: "arc-mainnet", fact: "Arc mainnet uses chain ID 5042, RPC https://rpc.mainnet.arc.io and explorer https://explorer.arc.io. Testnet chain ID 5042002 is a separate historical environment.", source_url: "https://docs.arc.io/arc/references/connect-to-arc" },
+  { key: "arclens-mainnet",    topic: "arc-mainnet", fact: "ArcLens is live on Arc mainnet. Its mainnet features include the Arc explorer, Circle email wallets, project mainnet status, the ArcLens trust registry and Lens AI builder-recognition payments.", source_url: "/" },
+  { key: "arc-mainnet-prep",   topic: "arc-mainnet", fact: "Existing ArcLens projects can add a mainnet deployment from the founder dashboard. New projects can state that they are live on mainnet during submission; ArcLens confirms the update before it appears in the temporary Live on Mainnet view.", source_url: "/ecosystem" },
 
   // ─── Listing standard + the domain deadline ──────────────────────────────
   // Founders email and ask this constantly, so Lens must answer it exactly and
@@ -75,9 +74,9 @@ const FACTS = [
   { key: "usdc-native-gas", topic: "usdc", fact: "On Arc, USDC is the native gas token — you pay for every transaction in USDC directly, no ETH wrapper needed.", source_url: "/about" },
 
   // ─── How to use Arc ──────────────────────────────────────────────────────
-  { key: "arc-add-wallet",  topic: "arc-howto", fact: "To add Arc Testnet to a wallet like MetaMask: Network Name = Arc Testnet, RPC URL = https://rpc.testnet.arc.network, Chain ID = 5042002, Currency Symbol = USDC.", source_url: "/dev" },
+  { key: "arc-add-wallet",  topic: "arc-howto", fact: "To add Arc mainnet to an EVM wallet: Network Name = Arc, RPC URL = https://rpc.mainnet.arc.io, Chain ID = 5042, Currency Symbol = USDC, Block Explorer = https://explorer.arc.io.", source_url: "https://docs.arc.io/arc/references/connect-to-arc" },
   { key: "arc-email-wallet",topic: "arc-howto", fact: "Anyone can sign in to ArcLens without MetaMask using email-based Circle Wallets — type your email, get a code, set a PIN, and you have a wallet on Arc.", source_url: "/" },
-  { key: "arc-deploy",      topic: "arc-howto", fact: "To deploy a contract on Arc, target chain ID 5042002 with the standard EVM toolchain (Hardhat, Foundry, Remix). No special compiler flags needed.", source_url: "https://developers.circle.com" },
+  { key: "arc-deploy",      topic: "arc-howto", fact: "To deploy a contract on Arc mainnet, target chain ID 5042 with a standard EVM toolchain such as Hardhat, Foundry or Remix, while following Arc's documented EVM differences.", source_url: "https://docs.arc.io/arc/tutorials/deploy-on-arc" },
   { key: "arc-start",       topic: "arc-howto", fact: "ArcLens has an Arc Beginners section at /start that walks new users through their first steps on Arc.", source_url: "/start" },
 
   // ─── ArcLens platform — what it is ───────────────────────────────────────

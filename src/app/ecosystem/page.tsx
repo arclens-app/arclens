@@ -637,7 +637,7 @@ export default function EcosystemPage() {
             <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "2px", background: "linear-gradient(90deg, #1a56ff, #4070ff 40%, transparent)" }} />
             <div style={{ padding: "18px 20px", borderBottom: "1px solid " + border }}>
               <div style={{ fontSize: "14px", fontWeight: 600, letterSpacing: "-0.025em", marginBottom: "4px", color: t1 }}>Submit your project</div>
-              <div style={{ fontSize: "12px", color: t2, fontWeight: 300 }}>Reviewed before going live · Usually 24 hours</div>
+              <div style={{ fontSize: "12px", color: t2, fontWeight: 300 }}>Every submission is reviewed before publication</div>
             </div>
 
             {submitted ? (
@@ -645,7 +645,7 @@ export default function EcosystemPage() {
                 <div style={{ fontSize: "32px", marginBottom: "12px" }}>{isUpdate ? "✏️" : "🎉"}</div>
                 <div style={{ fontSize: "17px", fontWeight: 600, marginBottom: "6px", color: t1 }}>{isUpdate ? "Update received" : "Submission received"}</div>
                 <div style={{ fontSize: "13px", color: t2, fontWeight: 300, marginBottom: reference ? "26px" : 0 }}>
-                  Every submission is reviewed by a person before it goes live.
+                  Your project is now in the private review queue and will not appear publicly until approved.
                 </div>
                 {reference && (
                   <>
@@ -655,7 +655,7 @@ export default function EcosystemPage() {
                     <div style={{ fontSize: "26px", fontFamily: mono, fontWeight: 700, letterSpacing: "2px", color: "#8aaeff", marginBottom: "10px" }}>{reference}</div>
                     <div style={{ fontSize: "12px", color: t2, fontWeight: 300, lineHeight: 1.7, maxWidth: "380px", margin: "0 auto" }}>
                       Keep this. Quote it in any email about this submission and we can find it instantly.
-                      We&apos;ll write to <span style={{ color: t1 }}>{form.email}</span> once it&apos;s been reviewed.
+                      A copy is being sent to <span style={{ color: t1 }}>{form.email}</span>. We&apos;ll write again once the review is complete.
                     </div>
                   </>
                 )}

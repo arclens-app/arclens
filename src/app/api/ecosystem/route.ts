@@ -3,7 +3,7 @@ import { scanUrl } from "@/lib/urlScan"
 import { getPool } from "@/lib/dbPool"
 import { validateEmail, validateWebsite, validateRepresentativeProfile, validateProjectSocial, hostFromUrl, domainResolves } from "@/lib/submissionGuards"
 import { extractTags } from "@/lib/projectTags"
-import { sendSubmissionCode, verifySubmissionCode } from "@/lib/submissionOtp"
+import { sendSubmissionCode, sendSubmissionReceipt, verifySubmissionCode } from "@/lib/submissionOtp"
 import { ARC_CHAIN_ID, ARC_MAINNET_CHAIN_ID } from "@/lib/constants"
 import { isCuratedMainnetProject } from "@/lib/mainnetAvailability"
 
@@ -264,6 +264,7 @@ export async function POST(req: NextRequest) {
               [ref, contract.trim().toLowerCase()])
           }
           if (website?.trim()) after(() => scanUrl(website))
+          after(() => sendSubmissionReceipt(submitterEmail, name.trim(), ref, true))
           return NextResponse.json({ success: true, updated: true, reference: ref })
         } else {
           return NextResponse.json({ error: "A project with this contract address already exists. Use the same email you registered with to update it." }, { status: 409 })
@@ -300,6 +301,7 @@ export async function POST(req: NextRequest) {
     // Reputation-scan the submitted website (VirusTotal) after responding —
     // the verdict lands in url_scans and shows in the admin review panel.
     if (website?.trim()) after(() => scanUrl(website))
+    after(() => sendSubmissionReceipt(submitterEmail, name.trim(), reference, false))
     return NextResponse.json({ success: true, updated: false, reference })
   } catch (err) {
     console.error("[Ecosystem POST]", err)

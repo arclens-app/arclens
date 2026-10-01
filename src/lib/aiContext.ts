@@ -330,7 +330,7 @@ export async function buildContext(args: {
   // competing with the active mainnet configuration in the system prompt.
   const asksAboutTestnet = /\btestnet\b/i.test(args.userQuery)
   const activeKbHits = ARC_IS_MAINNET && !asksAboutTestnet
-    ? kbHits.filter(hit => !/(arc testnet|5042002|rpc\.testnet|explorer\.testnet|test usdc)/i.test(hit.fact))
+    ? kbHits.filter(hit => !/(\btestnet\b|5042002|rpc\.testnet|explorer\.testnet|test usdc)/i.test(hit.fact))
     : kbHits
   return { route: args.route, role, userAddr, selfQuery: isSelfQuery(args.userQuery), pageData, kbHits: activeKbHits, recentChats }
 }
@@ -380,12 +380,10 @@ export async function backfillEmbeddings(max = 3): Promise<void> {
   } catch { /* best-effort */ }
 }
 
-// Which approved projects does the ANSWER actually name? Lens AI often answers
-// from its knowledge base and cites projects in prose without a tool card, so
-// card-only payouts miss the builders it just learned from. This resolves the
-// projects mentioned in the answer text so they get paid too. Whole-word,
-// case-insensitive, names >= 4 chars to avoid false positives; the payout layer
-// still trust-gates, caps, and de-dups, so over-matching is harmless.
+// Which approved projects does the ANSWER actually name? This is combined with
+// structured tool evidence for attribution. A prose match alone is never enough
+// for a payout. Whole-word, case-insensitive names >= 4 chars keep matching
+// conservative.
 export async function projectSlugsInText(text: string): Promise<string[]> {
   const t = String(text || "")
   if (t.length < 4) return []

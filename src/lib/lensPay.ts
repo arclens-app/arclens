@@ -1,6 +1,7 @@
 import { getPool } from "@/lib/dbPool"
 import { APP_KIT_CHAIN, ARC_CHAIN_ID, CIRCLE_BLOCKCHAIN } from "@/lib/constants"
 import { payoutsEnabledForActiveNetwork } from "@/lib/payoutSafety"
+import { isCuratedMainnetProject } from "@/lib/mainnetAvailability"
 // src/lib/lensPay.ts
 //
 // The Lens AI nanopayment engine — the heart of the Lepton hackathon build.
@@ -567,13 +568,24 @@ export async function getPayoutStats(): Promise<{
 // The public "most-cited builders" board — projects ranked by what Lens AI has
 // paid them, i.e. how much their data has genuinely informed the ecosystem.
 export async function getBuilderBoard(limit = 25): Promise<Array<{
-  rank: number; slug: string; name: string; trust: string; logo: string | null; cites: number; earned_e6: number; earnedUsd: string; unclaimed: boolean
+  rank: number; slug: string; name: string; trust: string; logo: string | null; cites: number; earned_e6: number; earnedUsd: string; unclaimed: boolean; mainnet_confirmed: boolean
 }>> {
   await tableReady
   const r = await pool.query(
     `SELECT lp.project_slug, MAX(lp.project_name) AS name, MAX(lp.trust_label) AS trust,
             MAX(p.logo_url) AS logo, COUNT(*)::int AS cites, COALESCE(SUM(lp.amount_e6),0)::bigint AS earned,
-            BOOL_AND(lp.status = 'accrued') AS unclaimed
+            BOOL_AND(lp.status = 'accrued') AS unclaimed,
+            BOOL_OR(
+              COALESCE((p.trust_profile->>'mainnet_claimed')::bool, false)
+              OR EXISTS (
+                SELECT 1 FROM project_contracts pc
+                 WHERE pc.project_id = p.id
+                   AND pc.chain_id = ${ARC_CHAIN_ID}
+                   AND pc.role = 'deployment'
+                   AND pc.verified_at IS NOT NULL
+                   AND pc.revoked_at IS NULL
+              )
+            ) AS mainnet_confirmed
        FROM lens_payouts lp
        LEFT JOIN projects p ON p.slug = lp.project_slug
       WHERE lp.status IN ('complete','accrued') AND lp.project_slug IS NOT NULL
@@ -586,6 +598,7 @@ export async function getBuilderBoard(limit = 25): Promise<Array<{
   return r.rows.map((x, i) => ({
     rank: i + 1, slug: x.project_slug, name: x.name, trust: x.trust, logo: x.logo || null,
     cites: Number(x.cites), earned_e6: Number(x.earned), earnedUsd: fmtUsd(Number(x.earned)), unclaimed: !!x.unclaimed,
+    mainnet_confirmed: !!x.mainnet_confirmed || isCuratedMainnetProject(String(x.project_slug)),
   }))
 }
 

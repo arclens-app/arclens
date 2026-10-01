@@ -17,7 +17,7 @@ const HAIR = "var(--bdr, rgba(255,255,255,0.08))"
 const SANS = "'Geist', ui-sans-serif, system-ui, -apple-system, sans-serif"
 const MONO = "'DM Mono', ui-monospace, SFMono-Regular, Menlo, monospace"
 
-interface BoardRow { rank: number; slug: string; name: string; trust: string; logo: string | null; cites: number; earnedUsd: string; unclaimed: boolean }
+interface BoardRow { rank: number; slug: string; name: string; trust: string; logo: string | null; cites: number; earnedUsd: string; unclaimed: boolean; mainnet_confirmed: boolean }
 interface Recent { project_name: string; project_slug: string; amountUsd: string; kind: string; created_at: string }
 interface Board { live: boolean; totalPaidUsd: string; payouts: number; builders_paid: number; credited_e6: number; creditedUsd: string; builders_credited: number; builders_total: number; recent: Recent[]; board: BoardRow[] }
 
@@ -100,8 +100,8 @@ export default function LensShowcase() {
               {d?.totalPaidUsd ?? "$0.00"}
             </div>
             <div style={{ fontSize: 15, color: T2, marginTop: 14 }}>
-              paid to <b style={{ color: T1, fontWeight: 700 }}>{builders}</b> verified builder{builders === 1 ? "" : "s"}
-              {(d?.builders_credited ?? 0) > 0 && <>, <b style={{ color: T1, fontWeight: 700 }}>{d?.builders_credited}</b> more credited (pending claim)</>}
+              paid to <b style={{ color: T1, fontWeight: 700 }}>{builders}</b> builder{builders === 1 ? "" : "s"}
+              {(d?.builders_credited ?? 0) > 0 && <>, <b style={{ color: T1, fontWeight: 700 }}>{d?.builders_credited}</b> more pending settlement</>}
               {" "}across <b style={{ color: T1, fontWeight: 700 }}>{cites}</b> citation{cites === 1 ? "" : "s"} — in USDC, on Arc
             </div>
           </div>
@@ -132,7 +132,7 @@ export default function LensShowcase() {
                 {board.length} cited
               </span>
             )}
-            <span style={{ fontSize: 13, color: T3 }}>the builders whose data Lens AI trusts most</span>
+            <span style={{ fontSize: 13, color: T3 }}>recognition for data used in answers, separate from deployment status</span>
           </div>
 
           {board.length === 0 ? (
@@ -152,8 +152,9 @@ export default function LensShowcase() {
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 16, fontWeight: 600, display: "flex", alignItems: "center", gap: 9 }}>
                       <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{b.name}</span><Chip t={b.trust} />
+                      {b.mainnet_confirmed && <span style={{ fontFamily: MONO, fontSize: 9, fontWeight: 600, color: USDC, textTransform: "uppercase", letterSpacing: "0.06em", whiteSpace: "nowrap" }}>Mainnet</span>}
                     </div>
-                    <div style={{ fontSize: 12, color: T3, marginTop: 3 }}>cited {b.cites} time{b.cites === 1 ? "" : "s"}{b.unclaimed ? " · claim a wallet to collect" : " as a trusted answer"}</div>
+                    <div style={{ fontSize: 12, color: T3, marginTop: 3 }}>cited {b.cites} time{b.cites === 1 ? "" : "s"}{b.unclaimed ? " · pending settlement" : " as a trusted answer"}</div>
                   </div>
                   <span style={{ fontFamily: MONO, fontSize: 15, fontWeight: 700, color: b.unclaimed ? "#7aa0ff" : USDC, display: "flex", alignItems: "center", gap: 6 }}>
                     {b.earnedUsd}{b.unclaimed && <span style={{ fontFamily: MONO, fontWeight: 500, fontSize: 9, color: T3, textTransform: "uppercase", letterSpacing: "0.06em" }}>pending</span>}

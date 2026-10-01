@@ -94,6 +94,28 @@ function slugsFromCards(cards: Array<{ tool: string; data: any }>): string[] {
   return Array.from(new Set(out))
 }
 
+// Recognition must follow evidence, not familiarity. A project name appearing
+// in generated prose is not enough on its own: otherwise familiar names can
+// create a self-reinforcing payout loop. One project in the tool evidence is
+// unambiguous; with several, only those actually named in the answer qualify.
+function groundedPayoutSlugs(
+  cards: Array<{ tool: string; data: any }>,
+  namedSlugs: string[],
+  knowledgeSlugs: string[] = [],
+): string[] {
+  const grounded = Array.from(new Set([
+    ...slugsFromCards(cards),
+    ...knowledgeSlugs,
+  ].map(s => String(s).toLowerCase())))
+  if (grounded.length <= 1) return grounded
+  const named = new Set((namedSlugs || []).map(s => String(s).toLowerCase()))
+  const explicitlyUsed = grounded.filter(slug => named.has(slug))
+  // Tool answers sometimes say "the project" instead of repeating its name.
+  // Keep one primary grounded source eligible rather than suppressing a valid
+  // recognition payment because of phrasing.
+  return explicitlyUsed.length > 0 ? explicitlyUsed : grounded.slice(0, 1)
+}
+
 export async function POST(req: NextRequest) {
   const blocked = await enforce(req, "ai-chat", { limit: 20, windowMs: 60_000 })
   if (blocked) return blocked
@@ -248,14 +270,14 @@ export async function POST(req: NextRequest) {
         // the reply. No grounded projects → no payout (free-first).
         let payout: PayoutTrace | null = null
         try {
-          // Pay the builders the answer actually used: projects surfaced as a
-          // tool card, and projects the answer NAMES in prose. We deliberately do
-          // NOT pay every KB fact retrieved — RAG surfaces broad candidates, not
-          // what the answer used, so that would over-pay unrelated projects.
-          const slugs = Array.from(new Set([
-            ...slugsFromCards(cards),
-            ...(await projectSlugsInText(answerText).catch(() => [])),
-          ]))
+          // Pay builders whose project data grounded the answer. Tool results and
+          // project-specific knowledge sources establish evidence; answer text
+          // narrows multi-project results without blocking pronoun-based replies.
+          const namedSlugs = await projectSlugsInText(answerText).catch(() => [])
+          const knowledgeSlugs = ctx.kbHits
+            .map(hit => String(hit.source_url || "").match(/^\/ecosystem\/([^/?#]+)/i)?.[1] || "")
+            .filter(Boolean)
+          const slugs = groundedPayoutSlugs(cards, namedSlugs, knowledgeSlugs)
           if (slugs.length > 0) {
             payout = await payoutForAnswer({
               conversationId: convId,
