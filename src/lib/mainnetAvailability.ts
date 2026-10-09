@@ -26,6 +26,38 @@ const CURATED_MAINNET_SLUGS = new Set([
   // Uniswap is officially live on Arc. Its slug takes effect automatically as
   // soon as the official project has a public ArcLens directory record.
   "uniswap",
+  // Named live at launch in Circle's Arc mainnet announcement and day-one
+  // builder coverage (Sept 2026): credit markets, DEXs, exchanges, wallets,
+  // custody, and tokenized-asset issuers.
+  "aave",
+  "morpho",
+  "curve",
+  "kraken",
+  "bybit",
+  "bitso",
+  "bitvavo",
+  "ledger",
+  "rainbow",
+  "bitgo",
+  "copper",
+  "fireblocks",
+  "blackrock",
+  "securitize",
+  "maple",
+  // Centrifuge-issued Janus Henderson funds went live on Arc Oct 1, 2026.
+  "centrifuge",
+  // Stablecoin issuers whose coins launched natively on Arc mainnet
+  // (JPYC, AUDF, EURAU, BRLA, QCAD, KRW1).
+  "jpyc",
+  "forte-aud",
+  "allunity",
+  "avenia",
+  "stablecorp",
+  "bdacs",
+  // Ecosystem builders with project-owned contracts confirmed on Arc mainnet.
+  "achswap",
+  "paragonfinance",
+  "wheelx",
 ])
 
 export function isCuratedMainnetProject(slug: unknown): boolean {
