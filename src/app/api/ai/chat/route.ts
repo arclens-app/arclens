@@ -278,7 +278,9 @@ export async function POST(req: NextRequest) {
             .map(hit => String(hit.source_url || "").match(/^\/ecosystem\/([^/?#]+)/i)?.[1] || "")
             .filter(Boolean)
           const slugs = groundedPayoutSlugs(cards, namedSlugs, knowledgeSlugs)
-          if (slugs.length > 0) {
+          // Only a real model answer can earn a payout. A busy/fallback reply
+          // still carries keyword KB hits, but no builder's data was used.
+          if (live && slugs.length > 0) {
             payout = await payoutForAnswer({
               conversationId: convId,
               askerId:     session?.addr ? `user:${session.addr}` : `dev:${device || "nodev"}`,

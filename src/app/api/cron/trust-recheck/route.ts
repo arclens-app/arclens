@@ -15,6 +15,7 @@ import { loadPhishingList, hostOf, checkWebsite, analyzeContract, assessProject,
 import { attestOnChain, revokeOnChain, subjectFor } from "@/lib/registry"
 import { getPool } from "@/lib/dbPool"
 import { ARC_CHAIN_ID } from "@/lib/constants"
+import { checkLensAiHealth } from "@/lib/lensHealth"
 
 const pool = getPool()
 
@@ -26,6 +27,10 @@ function isAuthorized(req: NextRequest): boolean {
 
 export async function GET(req: NextRequest) {
   if (!isAuthorized(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+
+  // Lens AI health rides on this daily cron; it emails the team if Gemini is
+  // failing. Runs first so a trust-check error can't skip it.
+  const lensAi = await checkLensAiHealth().catch(() => ({ ok: false }))
 
   try {
     const list = await loadPhishingList()
@@ -106,7 +111,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ ok: true, ...summary })
+    return NextResponse.json({ ok: true, ...summary, lensAiOk: lensAi.ok })
   } catch (e: any) {
     console.error("[trust-recheck]", e?.message || e)
     return NextResponse.json({ error: "Server error" }, { status: 500 })
