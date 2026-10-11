@@ -61,6 +61,8 @@ const CURATED_MAINNET_SLUGS = new Set([
   // Small builders need a public mainnet claim from the project itself (site or
   // post), plus project-owned mainnet contracts. Code-only evidence isn't enough.
   "wizpay",
+  // Arc's own blog (Oct 6, 2026): "Pulsar is currently live on Arc mainnet."
+  "pulsar-money",
 ])
 
 export function isCuratedMainnetProject(slug: unknown): boolean {
