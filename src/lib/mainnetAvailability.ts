@@ -61,7 +61,6 @@ const CURATED_MAINNET_SLUGS = new Set([
   // Apps whose own sites run on Arc mainnet (chain 5042) and reference
   // project-specific contracts deployed on mainnet (checked Oct 11, 2026).
   "flutchfun",
-  "nan",
   "wizpay",
   "sweep-console",
 ])
