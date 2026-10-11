@@ -58,11 +58,9 @@ const CURATED_MAINNET_SLUGS = new Set([
   "achswap",
   "paragonfinance",
   "wheelx",
-  // Apps whose own sites run on Arc mainnet (chain 5042) and reference
-  // project-specific contracts deployed on mainnet (checked Oct 11, 2026).
-  "flutchfun",
+  // Small builders need a public mainnet claim from the project itself (site or
+  // post), plus project-owned mainnet contracts. Code-only evidence isn't enough.
   "wizpay",
-  "sweep-console",
 ])
 
 export function isCuratedMainnetProject(slug: unknown): boolean {
