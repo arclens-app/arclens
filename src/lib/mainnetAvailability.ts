@@ -44,6 +44,10 @@ const CURATED_MAINNET_SLUGS = new Set([
   "blackrock",
   "securitize",
   "maple",
+  "coinbase",
+  "robinhood",
+  "hibachi",
+  "blockdaemon",
   // Centrifuge-issued Janus Henderson funds went live on Arc Oct 1, 2026.
   "centrifuge",
   // Stablecoin issuers whose coins launched natively on Arc mainnet
