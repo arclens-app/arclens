@@ -1195,6 +1195,8 @@ export default function AdminPage() {
                               <option value={`Project does not appear to be deployed or active on ${ARC_CHAIN_NAME}.`}>Not deployed or active on {ARC_CHAIN_NAME}</option>
                               <option value="Your website was flagged as suspicious or malicious by one or more security scanners. Resolve the flag with the scanning vendors (or move to a clean domain), then resubmit — we cannot list projects whose sites security tools warn users about.">Website flagged by security scanners</option>
                               <option value="Insufficient project information — missing website, description, or verifiable links.">Insufficient information</option>
+                              <option value="We couldn't confirm that the project is currently active. Its website and social accounts show no recent activity. Once the project is active again, you're welcome to resubmit using the same project name and email.">Project inactive</option>
+                              <option value="To review your project, we need a way to verify the team behind it. Please resubmit with a founder or builder profile (X, GitHub or LinkedIn). You can mark it private on the form, and it will only be used for review.">Team socials needed</option>
                               <option value="Logo or branding does not meet listing standards.">Logo or branding quality</option>
                               <option value="Project category or description appears misleading.">Misleading category or description</option>
                               <option value="A duplicate or near-identical listing already exists.">Duplicate listing</option>
