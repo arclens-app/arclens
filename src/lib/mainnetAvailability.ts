@@ -48,6 +48,13 @@ const CURATED_MAINNET_SLUGS = new Set([
   "robinhood",
   "hibachi",
   "blockdaemon",
+  // Named in Arc's mainnet launch post as live today: crosschain (LayerZero,
+  // Stargate), wallets (Bron) and compliance (Elliptic). Payments firms the
+  // post says "will be enabling" stay out until they confirm they're live.
+  "layerzero",
+  "stargate",
+  "bron",
+  "elliptic",
   // Centrifuge-issued Janus Henderson funds went live on Arc Oct 1, 2026.
   "centrifuge",
   // Stablecoin issuers whose coins launched natively on Arc mainnet
@@ -67,6 +74,16 @@ const CURATED_MAINNET_SLUGS = new Set([
   "wizpay",
   // Arc's own blog (Oct 6, 2026): "Pulsar is currently live on Arc mainnet."
   "pulsar-money",
+  // @CashTella_ (Oct 7, 2026): "TELLA IS LIVE ON ARC MAINNET!"
+  "tella",
+  // @TollyLabs (Sep 16, 2026): "Arc mainnet is live. Tolly is live with it."
+  "tolly",
+  // aka.fun launchpad, live on Arc mainnet since launch week (KuCoin coverage,
+  // ~$250K first-day volume). Applies once its submission is approved.
+  "aka-fun",
+  // Argus launchpad (argus.world, @Arguspad), live since Arc mainnet launch.
+  // Not the Circle-partner Argus security oracle at argusarc.dev.
+  "argus-world",
 ])
 
 export function isCuratedMainnetProject(slug: unknown): boolean {
