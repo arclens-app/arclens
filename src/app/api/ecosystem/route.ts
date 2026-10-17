@@ -6,6 +6,7 @@ import { extractTags } from "@/lib/projectTags"
 import { sendSubmissionCode, sendSubmissionReceipt, verifySubmissionCode } from "@/lib/submissionOtp"
 import { ARC_CHAIN_ID, ARC_MAINNET_CHAIN_ID } from "@/lib/constants"
 import { isCuratedMainnetProject } from "@/lib/mainnetAvailability"
+import { getIp } from "@/lib/ratelimit"
 
 const pool = getPool()
 
@@ -214,7 +215,7 @@ export async function POST(req: NextRequest) {
   // spam traps.
   const submitterEmail = email.trim().toLowerCase()
   if (!code || !String(code).trim()) {
-    const sent = await sendSubmissionCode(submitterEmail, name)
+    const sent = await sendSubmissionCode(submitterEmail, name, getIp(req))
     if (sent.ok === false) return NextResponse.json({ error: sent.error }, { status: sent.status })
     return NextResponse.json({ needsVerification: true, email: submitterEmail })
   }

@@ -12,12 +12,17 @@
 // the same address, and vice versa.
 import crypto from "crypto"
 import { getPool } from "@/lib/dbPool"
+import { rateLimit } from "@/lib/ratelimit"
 
 const pool = getPool()
 
 const CODE_TTL_MS   = 15 * 60 * 1000   // long enough to find the email
 const RESEND_WAIT_MS = 60 * 1000       // between sends, per address
 const MAX_ATTEMPTS   = 5
+// Each verified code also triggers a receipt email, so the daily cap is kept
+// well under half of Resend's ~100/day to leave room for approval mail.
+const CODES_PER_IP_HOUR = 5
+const CODES_PER_DAY     = Number(process.env.SUBMISSION_CODE_DAILY_MAX || 30)
 
 let tableReady: Promise<unknown> | null = null
 function ensureTable() {
@@ -47,8 +52,13 @@ const escapeHtml = (value: string) => String(value || "")
   .replace(/"/g, "&quot;")
   .replace(/'/g, "&#039;")
 
-/** Email a fresh code to the submitter. Rate-limited per address. */
-export async function sendSubmissionCode(email: string, projectName?: string): Promise<Result> {
+/**
+ * Email a fresh code to the submitter. Rate-limited per address, per IP and
+ * globally per day. The per-address cooldown alone fell to address rotation,
+ * and Resend allows ~100 emails a day for the whole app — a scripted or agent
+ * caller could otherwise spend that budget and stop approval mail going out.
+ */
+export async function sendSubmissionCode(email: string, projectName?: string, ip = "unknown"): Promise<Result> {
   await ensureTable()
 
   const prior = await pool.query("SELECT last_sent_at FROM submission_codes WHERE email = $1", [email])
@@ -58,6 +68,16 @@ export async function sendSubmissionCode(email: string, projectName?: string): P
       const wait = Math.ceil((RESEND_WAIT_MS - elapsed) / 1000)
       return { ok: false, error: `Please wait ${wait} seconds before requesting another code.`, status: 429 }
     }
+  }
+
+  const perIp = await rateLimit(`submission-code:ip:${ip}`, CODES_PER_IP_HOUR, 60 * 60 * 1000)
+  if (!perIp.allowed) {
+    const mins = Math.max(1, Math.ceil(perIp.resetIn / 60_000))
+    return { ok: false, error: `Too many verification codes requested. Try again in ${mins} minutes.`, status: 429 }
+  }
+  const daily = await rateLimit("submission-code:global", CODES_PER_DAY, 24 * 60 * 60 * 1000)
+  if (!daily.allowed) {
+    return { ok: false, error: "Submissions are at capacity for today. Please try again tomorrow.", status: 429 }
   }
 
   const code = String(crypto.randomInt(0, 1_000_000)).padStart(6, "0")
