@@ -6,6 +6,7 @@ import { TrustBadge } from "@/components/TrustBadge"
 import { trustBadge } from "@/lib/trustBadge"
 import { safeExternalUrl } from "@/lib/submissionGuards"
 import Spotlight from "@/components/Spotlight"
+import AgentSubmitPanel from "@/components/AgentSubmitPanel"
 
 interface Project {
   id: number
@@ -639,6 +640,7 @@ export default function EcosystemPage() {
               <div style={{ fontSize: "14px", fontWeight: 600, letterSpacing: "-0.025em", marginBottom: "4px", color: t1 }}>Submit your project</div>
               <div style={{ fontSize: "12px", color: t2, fontWeight: 300 }}>Every submission is reviewed before publication</div>
             </div>
+            {!submitted && !awaitingCode && <AgentSubmitPanel />}
 
             {submitted ? (
               <div style={{ padding: "44px 28px", textAlign: "center" }}>
