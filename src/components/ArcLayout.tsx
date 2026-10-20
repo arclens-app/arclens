@@ -876,7 +876,7 @@ export default function ArcLayout({ children, active, lockDark }: { children: Re
         {/* FOOTER */}
         <div style={{ padding: "10px 12px", borderTop: "1px solid " + bdr }}>
           <div style={{ fontSize: "9px", fontFamily: mono, color: t3, lineHeight: 1.8 }}>
-            <div>Chain ID <span style={{ color: t2 }}>2588</span></div>
+            <div>Chain ID <span style={{ color: t2 }}>{ARC_CHAIN_ID}</span></div>
             <div>Gas token <span style={{ color: usdc }}>USDC</span></div>
             <div>Base fee <span style={{ color: t2 }}>160 Gwei ≈ $0.01</span></div>
             <div>Finality <span style={{ color: "#8aaeff" }}>{"< 1 second"}</span></div>
