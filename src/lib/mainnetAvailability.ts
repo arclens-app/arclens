@@ -84,6 +84,16 @@ const CURATED_MAINNET_SLUGS = new Set([
   // Argus launchpad (argus.world, @Arguspad), live since Arc mainnet launch.
   // Not the Circle-partner Argus security oracle at argusarc.dev.
   "argus-world",
+  // Listed builders that announced their own mainnet launch on X and are
+  // still posting: @nan_arc (Oct 13), @architectpay (Oct 20), @mlswapx
+  // (Oct 17), @Elligentt (Oct 12), @APEXIS_DeFi (ApexiSwap, Sep 28) and
+  // @blockmachine_io (Arc RPC, Oct 8).
+  "nan",
+  "architect-pay",
+  "mlswap",
+  "elligentt",
+  "apexiswap",
+  "blockmachine",
 ])
 
 export function isCuratedMainnetProject(slug: unknown): boolean {
