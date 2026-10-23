@@ -94,6 +94,9 @@ const CURATED_MAINNET_SLUGS = new Set([
   "elligentt",
   "apexiswap",
   "blockmachine",
+  // Extended moved its perpetuals settlement from Starknet to Arc on
+  // Oct 22, 2026 (USDC and cirBTC collateral). Applies once listed.
+  "extended",
 ])
 
 export function isCuratedMainnetProject(slug: unknown): boolean {
