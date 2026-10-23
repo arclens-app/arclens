@@ -97,6 +97,9 @@ const CURATED_MAINNET_SLUGS = new Set([
   // Extended moved its perpetuals settlement from Starknet to Arc on
   // Oct 22, 2026 (USDC and cirBTC collateral). Applies once listed.
   "extended",
+  // @arc (Oct 23, 2026): Aster supports USDC collateral on Arc with
+  // USDC-margined perps on BTC, ETH and SOL live. Applies once listed.
+  "aster",
 ])
 
 export function isCuratedMainnetProject(slug: unknown): boolean {
