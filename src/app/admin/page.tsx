@@ -2722,6 +2722,7 @@ export default function AdminPage() {
                 ["branding",   "Misleading branding",    "Name could be mistaken for another company"],
                 ["duplicate",  "Duplicate listing",      "Same project already listed"],
                 ["no_domain",  "No project domain",      "Points at free hosting, not an owned domain"],
+                ["inactive",   "Project inactive",       "No recent activity on site, socials or chain"],
                 ["incomplete", "Incomplete information", "Missing details needed to verify"],
                 ["other",      "Other",                  "Use the note below to explain"],
               ].map(([k, l, d]) => (

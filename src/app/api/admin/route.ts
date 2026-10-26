@@ -191,6 +191,11 @@ const HIDE_REASONS: Record<string, { label: string; line: string; fix: string }>
     line:  "the listing points at a free hosting subdomain rather than a project domain",
     fix:   "Point the listing at a domain you own and reply here. A live contract with real on-chain usage also qualifies.",
   },
+  inactive: {
+    label: "Project inactive",
+    line:  "we could not find recent activity from the project. The website, social accounts and on-chain activity have been quiet for some time",
+    fix:   "When the project is active again, reply to this email with a recent update, such as a new release, an announcement or live contract activity, and we will restore your listing.",
+  },
   incomplete: {
     label: "Incomplete information",
     line:  "the listing is missing information we need to verify the project",
