@@ -193,6 +193,14 @@ export default function ArcLayout({ children, active, lockDark }: { children: Re
     setShowConnectModal(true)
   }
 
+  // Pages can open this same sign-in modal (email or wallet) instead of running
+  // their own browser-wallet-only connect, e.g. the Arc Trials campaign page.
+  useEffect(() => {
+    const open = () => connect()
+    window.addEventListener("arclens:open-connect", open)
+    return () => window.removeEventListener("arclens:open-connect", open)
+  }, [])
+
   function rememberConnectedWallet(addr: string, type: "metamask" | "circle") {
     // Update the visible state first. Storage is best-effort and must never
     // make a successfully authenticated wallet appear disconnected.

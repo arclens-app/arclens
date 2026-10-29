@@ -171,7 +171,6 @@ export default function CampaignDetailPage() {
   const [completions, setCompletions] = useState<Completion[]>([])
   const [loading, setLoading]         = useState(true)
   const wallet    = useArcStore(s => s.walletAddr)
-  const setWallet = useArcStore(s => s.setWallet)
   const [isOwner, setIsOwner]         = useState(false)
 
   // Submission flow: 0..tasks.length-1 = task steps, tasks.length = review, tasks.length+1 = done
@@ -411,15 +410,11 @@ export default function CampaignDetailPage() {
     }
   }
 
-  async function connectWallet() {
-    try {
-      if (!(window as any).ethereum) return
-      const accounts = await (window as any).ethereum.request({ method: "eth_requestAccounts" })
-      if (accounts?.[0]) {
-        localStorage.setItem("arclens-wallet", accounts[0].toLowerCase())
-        setWallet(accounts[0])
-      }
-    } catch { }
+  // Open the site-wide sign-in modal (ArcLayout) so testers can use email
+  // (Circle) or a browser wallet. The old browser-wallet-only connect did
+  // nothing on phones without an injected wallet, and skipped the session.
+  function connectWallet() {
+    window.dispatchEvent(new Event("arclens:open-connect"))
   }
 
   // Re-mint the session cookie via personal_sign and resubmit the edit.
@@ -863,14 +858,14 @@ export default function CampaignDetailPage() {
                 ) : !wallet ? (
                   <div style={{ padding: "36px 20px", textAlign: "center" }}>
                     <div style={{ fontSize: 13, color: "var(--t2,#6b7da8)", marginBottom: 16, lineHeight: 1.6 }}>
-                      Connect your wallet to participate and earn <strong style={{ color: rm.color }}>{rm.label}</strong>
+                      Sign in to participate and earn <strong style={{ color: rm.color }}>{rm.label}</strong>
                     </div>
                     <button onClick={connectWallet}
                       style={{ height: 42, padding: "0 28px", background: "#1a56ff", color: "#fff", border: "none", borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
-                      Connect Wallet
+                      Sign in to start
                     </button>
                     <div style={{ fontSize: 10, fontFamily: "var(--font-mono,monospace)", color: "var(--t3,#2e3a5c)", marginTop: 12 }}>
-                      MetaMask, Rabby, or any injected wallet
+                      Sign in with email, or connect MetaMask, Rabby or any wallet
                     </div>
                   </div>
 
@@ -1975,13 +1970,13 @@ function InviteCodesPanel({ codes, appUrl, productName, note, walletConnected, o
           </span>
         </div>
         <div style={{ fontSize: 12, color: "var(--t2,#6b7da8)", marginBottom: 12, lineHeight: 1.6 }}>
-          Connect your wallet to reveal an invite code. Codes are only shown to participants — connect to claim your access.
+          Sign in to reveal an invite code. Codes are only shown to participants. Use your email or a wallet.
         </div>
         <button onClick={onConnect}
           style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%", height: 42,
             background: "linear-gradient(135deg, #1a56ff 0%, #2563ff 100%)", color: "#fff", border: "none", borderRadius: 9,
             fontSize: 13, fontWeight: 700, cursor: "pointer", letterSpacing: "-0.01em" }}>
-          Connect wallet to reveal code →
+          Sign in to reveal code →
         </button>
       </div>
     )
