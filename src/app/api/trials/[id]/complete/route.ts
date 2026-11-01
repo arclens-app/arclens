@@ -312,10 +312,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       }
     }
 
-    // Validate at least one review answer has meaningful content
+    // Validate at least one review answer has meaningful content. Campaigns
+    // with no review questions (e.g. partner sign-up campaigns) skip this.
     const totalWords = Object.values(review_answers as Record<string, string>)
       .join(" ").split(/\s+/).filter(Boolean).length
-    if (totalWords < 15) {
+    const hasQuestions = Array.isArray(campaign.review_questions) && campaign.review_questions.length > 0
+    if (hasQuestions && totalWords < 15) {
       return NextResponse.json({ error: "Please provide more detailed feedback before submitting" }, { status: 400 })
     }
 

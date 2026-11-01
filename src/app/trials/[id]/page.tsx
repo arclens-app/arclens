@@ -1043,7 +1043,7 @@ export default function CampaignDetailPage() {
                     {/* How this works — shown only before the first step */}
                     {flowStep === 0 && !isReviewStep && (
                       <div style={{ padding: "10px 20px", borderBottom: "1px solid var(--bdr,rgba(255,255,255,0.06))", display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
-                        {(["Do the steps", "Write feedback", `Earn ${rm.label}`] as string[]).map((s, i, arr) => (
+                        {(campaign.review_questions.length ? ["Do the steps", "Write feedback", `Earn ${rm.label}`] : ["Do the steps", "Submit", `Earn ${rm.label}`]).map((s, i, arr) => (
                           <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
                             <div style={{ width: 16, height: 16, borderRadius: "50%", background: "rgba(26,86,255,0.1)", border: "1px solid rgba(26,86,255,0.25)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 8, fontWeight: 700, color: "#8aaeff", fontFamily: "var(--font-mono,monospace)" }}>{i + 1}</div>
                             <span style={{ fontSize: 11, color: "var(--t2,#6b7da8)", fontFamily: "var(--font-mono,monospace)" }}>{s}</span>
@@ -1056,7 +1056,7 @@ export default function CampaignDetailPage() {
                     <div style={{ padding: "14px 20px", borderBottom: "1px solid var(--bdr,rgba(255,255,255,0.06))", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                       <div style={{ fontSize: 11, fontFamily: "var(--font-mono,monospace)", color: "var(--t2,#6b7da8)" }}>
                         {isReviewStep
-                          ? `All ${totalSteps} steps done · Share your feedback`
+                          ? `All ${totalSteps} steps done · ${campaign.review_questions.length ? "Share your feedback" : "Submit to finish"}`
                           : `Step ${flowStep + 1} of ${totalSteps}`}
                       </div>
                       {/* Progress dots — click any completed step to jump back to it */}
@@ -1281,7 +1281,7 @@ export default function CampaignDetailPage() {
                                   onClick={() => setFlowStep(s => s + 1)}
                                   disabled={!proofOk}
                                   style={{ flex: 1, height: 42, background: proofOk ? "#1a56ff" : "var(--surf2,#0e1224)", color: proofOk ? "#fff" : "var(--t2,#6b7da8)", border: proofOk ? "none" : "1px solid var(--bdr,rgba(255,255,255,0.06))", borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: proofOk ? "pointer" : "default", letterSpacing: "-0.01em" }}>
-                                  {!proofOk ? "Add proof to continue" : flowStep < totalSteps - 1 ? `Done — Next step →` : `Done — Share feedback →`}
+                                  {!proofOk ? "Add proof to continue" : flowStep < totalSteps - 1 ? `Done — Next step →` : (campaign.review_questions.length ? `Done — Share feedback →` : `Done — Finish →`)}
                                 </button>
                               </div>
                             )
@@ -1290,9 +1290,11 @@ export default function CampaignDetailPage() {
                       ) : (
                         /* Feedback questions */
                         <div>
-                          <div style={{ fontSize: 13, fontWeight: 600, color: "var(--t1,#e8ecff)", marginBottom: 4 }}>Share your feedback</div>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: "var(--t1,#e8ecff)", marginBottom: 4 }}>{campaign.review_questions.length ? "Share your feedback" : "All steps done"}</div>
                           <p style={{ fontSize: 12, color: "var(--t2,#6b7da8)", marginBottom: 18, lineHeight: 1.5 }}>
-                            Be specific — reference what you actually did, what you saw, and what could be better.
+                            {campaign.review_questions.length
+                              ? "Be specific — reference what you actually did, what you saw, and what could be better."
+                              : "Submit to record that you took part in this campaign."}
                           </p>
                           {campaign.review_questions.map(q => {
                             const words  = wordCount(answers[q.id] || "")
