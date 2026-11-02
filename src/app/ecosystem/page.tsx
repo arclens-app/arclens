@@ -115,6 +115,8 @@ export default function EcosystemPage() {
   const [codeInput, setCodeInput]       = useState("")
   const [codeError, setCodeError]       = useState("")
   const [resendAt, setResendAt]         = useState(0)
+  const [codeResent, setCodeResent]     = useState(false)
+  const [now, setNow]                   = useState(() => Date.now())
   const [reference, setReference]       = useState("")
   const [nameWarn, setNameWarn]       = useState("")
   const [similarNames, setSimilarNames] = useState<string[]>([])
@@ -141,6 +143,17 @@ export default function EcosystemPage() {
     obs.observe(el)
     return () => obs.disconnect()
   }, [mounted])
+
+  // Tick once a second only while the resend cooldown is running. Without it
+  // nothing re-renders when the 60s ends, so the resend link stayed disabled.
+  useEffect(() => {
+    if (!awaitingCode || resendAt <= Date.now()) return
+    const id = setInterval(() => {
+      setNow(Date.now())
+      if (Date.now() >= resendAt) clearInterval(id)
+    }, 1000)
+    return () => clearInterval(id)
+  }, [awaitingCode, resendAt])
 
   // Reset page when column count changes (window resize)
   useEffect(() => { setPage(1) }, [cols])
@@ -284,8 +297,10 @@ export default function EcosystemPage() {
       })
       const data = await res.json()
       if (data.needsVerification) {
+        setCodeResent(awaitingCode)
         setAwaitingCode(true)
         setCodeError("")
+        setNow(Date.now())
         setResendAt(Date.now() + 60_000)
       } else if (data.success) {
         setSubmitted(true)
@@ -676,13 +691,14 @@ export default function EcosystemPage() {
                 </div>
                 <input
                   value={codeInput}
-                  onChange={e => { setCodeInput(e.target.value.replace(/\D/g, "").slice(0, 6)); setCodeError("") }}
+                  onChange={e => { setCodeInput(e.target.value.replace(/\D/g, "").slice(0, 6)); setCodeError(""); setCodeResent(false) }}
                   onKeyDown={e => { if (e.key === "Enter" && codeInput.length === 6) submitProject(codeInput) }}
                   inputMode="numeric" autoFocus placeholder="000000"
                   style={{ width: "190px", height: "52px", textAlign: "center", fontSize: "24px", fontFamily: mono, letterSpacing: "8px",
                            background: "rgba(255,255,255,0.03)", border: "1px solid " + (codeError ? "rgba(224,51,72,0.5)" : border),
                            borderRadius: "10px", color: t1, outline: "none", marginBottom: "12px" }} />
                 {codeError && <div style={{ fontSize: "12px", color: "#e03348", marginBottom: "12px" }}>{codeError}</div>}
+                {codeResent && !codeError && <div style={{ fontSize: "12px", color: "#8aaeff", marginBottom: "12px" }}>A new code is on its way. Use the latest one, as earlier codes no longer work.</div>}
                 <div style={{ display: "flex", gap: "10px", justifyContent: "center", marginTop: "8px" }}>
                   <button onClick={() => submitProject(codeInput)} disabled={submitting || codeInput.length !== 6}
                     style={{ height: "42px", padding: "0 26px", background: codeInput.length === 6 ? "#1a56ff" : "rgba(26,86,255,0.25)",
@@ -698,11 +714,13 @@ export default function EcosystemPage() {
                 </div>
                 <button
                   onClick={() => { setCodeInput(""); submitProject() }}
-                  disabled={submitting || Date.now() < resendAt}
+                  disabled={submitting || now < resendAt}
                   style={{ marginTop: "18px", background: "none", border: "none", padding: 0, fontSize: "12px", fontFamily: mono,
-                           color: Date.now() < resendAt ? t3 : "#8aaeff", cursor: Date.now() < resendAt ? "default" : "pointer",
-                           textDecoration: Date.now() < resendAt ? "none" : "underline", textUnderlineOffset: "2px" }}>
-                  Didn&apos;t get it? Send another code
+                           color: now < resendAt ? t3 : "#8aaeff", cursor: now < resendAt ? "default" : "pointer",
+                           textDecoration: now < resendAt ? "none" : "underline", textUnderlineOffset: "2px" }}>
+                  {submitting ? "Sending…" : now < resendAt
+                    ? `Didn't get it? Send another code in ${Math.ceil((resendAt - now) / 1000)}s`
+                    : "Didn't get it? Send another code"}
                 </button>
               </div>
             ) : (
