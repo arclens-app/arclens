@@ -2,6 +2,7 @@
 import { useEffect, useState, useRef } from "react"
 import { useParams, useSearchParams, useRouter } from "next/navigation"
 import { circleSignMessage } from "@/lib/circleSign"
+import { imageSrc } from "@/lib/imageSrc"
 
 interface Project {
   name: string
@@ -15,7 +16,7 @@ interface Project {
 function imgSrc(url: string | null) {
   if (!url) return null
   if (/\.blob\.vercel-storage\.com\//i.test(url)) return url
-  return `/api/image-proxy?url=${encodeURIComponent(url)}`
+  return imageSrc(url)
 }
 
 function shortAddr(addr: string) {

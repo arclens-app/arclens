@@ -9,6 +9,7 @@ import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSo
 import { CSS } from "@dnd-kit/utilities"
 import { CAMPAIGN_TYPES as TYPES, CONTRACT_REQUIRED, CONTRACT_HIDDEN, CAMPAIGN_TEMPLATES as TEMPLATES, matchesDefaultTemplate } from "@/lib/campaignTypes"
 import { APP_KIT_CHAIN, ARC_CHAIN_NAME, CAMPAIGN_USDC_ENABLED } from "@/lib/constants"
+import { imageSrc } from "@/lib/imageSrc"
 
 type ProofType = "none" | "x_link" | "tx_hash" | "url" | "screenshot"
 interface Task { id: string; title: string; description: string; contract_address?: string; proof_type?: ProofType }
@@ -1239,7 +1240,7 @@ export default function CreateCampaignPage() {
             const previewLogo = rawLogo.startsWith("blob:") || rawLogo.startsWith("data:")
               ? rawLogo
               : rawLogo
-                ? `/api/image-proxy?url=${encodeURIComponent(rawLogo)}`
+                ? imageSrc(rawLogo)
                 : ""
             const bx = Number.isFinite(bannerPos?.x) ? bannerPos.x : 50
             const by = Number.isFinite(bannerPos?.y) ? bannerPos.y : 50

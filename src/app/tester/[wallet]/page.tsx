@@ -5,6 +5,7 @@ import ArcLayout from "@/components/ArcLayout"
 import { WalletAvatar } from "@/components/WalletAvatar"
 import { useArcStore } from "@/store/arc"
 import { getTypeMeta } from "@/lib/campaignTypes"
+import { imageSrc } from "@/lib/imageSrc"
 
 interface Reputation {
   wallet: string
@@ -60,7 +61,7 @@ function timeAgo(d: string) {
 function imgSrc(url: string | null) {
   if (!url) return null
   if (/\.blob\.vercel-storage\.com\//i.test(url)) return url
-  return `/api/image-proxy?url=${encodeURIComponent(url)}`
+  return imageSrc(url)
 }
 
 function ScoreRing({ score, size = 36 }: { score: number; size?: number }) {

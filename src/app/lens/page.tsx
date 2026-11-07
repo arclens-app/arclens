@@ -9,6 +9,7 @@ import { useEffect, useState } from "react"
 import ArcLayout from "@/components/ArcLayout"
 import LensFace, { type LensState } from "@/components/LensFace"
 import { CIRCLE_BLOCKCHAIN } from "@/lib/constants"
+import { imageSrc } from "@/lib/imageSrc"
 
 // ArcLens theme tokens — adapt to light/dark exactly like the rest of the app.
 const T1 = "var(--t1, #e8ecff)", T2 = "var(--t2, #6b7da8)", T3 = "var(--t3, #2e3a5c)"
@@ -40,7 +41,7 @@ function ago(ts: string) {
 function Avatar({ name, logo, size = 36 }: { name: string; logo?: string | null; size?: number }) {
   const [err, setErr] = useState(false)
   if (logo && !err) {
-    const src = /\.blob\.vercel-storage\.com\//i.test(logo) ? logo : `/api/image-proxy?url=${encodeURIComponent(logo)}`
+    const src = /\.blob\.vercel-storage\.com\//i.test(logo) ? logo : imageSrc(logo)
     return <img src={src} alt="" onError={() => setErr(true)} style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", flexShrink: 0, background: "#0e1224", border: `1px solid ${HAIR}` }} />
   }
   const c = PAL[(name?.charCodeAt(0) || 0) % PAL.length]

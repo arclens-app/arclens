@@ -8,9 +8,9 @@
 // matters when a blocklist is judging us by what we link to.
 //
 // Scanning by hand does not scale and the free VirusTotal tier caps us at
-// 4 req/min and 500/day, so this takes a small batch every 15 minutes and
-// rotates through everything: never-scanned listings first, then anything
-// stuck or older than a week. ~384 checks/day, well inside the cap.
+// 4 req/min and 500/day, so this takes a small batch once a day and rotates
+// through everything: never-scanned listings first, then anything stuck or
+// older than a week.
 //
 // Results land in `url_scans` and surface in the admin panel, where a flagged
 // listing can be hidden in one click.

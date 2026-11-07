@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react"
 import ArcLayout from "@/components/ArcLayout"
 import { ARC_CHAIN_NAME } from "@/lib/constants"
+import { imageSrc } from "@/lib/imageSrc"
 
 interface Builder {
   address: string
@@ -27,7 +28,7 @@ function proxiedAvatar(url: string | null | undefined, fallbackAddress: string):
   if (!url) return dicebear(fallbackAddress)
   if (url.startsWith("blob:") || url.startsWith("data:")) return url
   if (/\.blob\.vercel-storage\.com\//i.test(url)) return url
-  return `/api/image-proxy?url=${encodeURIComponent(url)}`
+  return imageSrc(url)
 }
 
 function shortAddr(addr: string) {

@@ -10,6 +10,7 @@ import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSo
 import { CSS } from "@dnd-kit/utilities"
 import { getTypeMeta } from "@/lib/campaignTypes"
 import { ARC_CHAIN_NAME } from "@/lib/constants"
+import { imageSrc } from "@/lib/imageSrc"
 
 type ProofType = "none" | "x_link" | "tx_hash" | "url" | "screenshot"
 interface Task {
@@ -634,7 +635,7 @@ export default function CampaignDetailPage() {
             <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 3, background: `linear-gradient(90deg, ${tm.color}, ${tm.color}40)` }} />
             {(campaign.campaign_logo || campaign.project_logo) && (
               <img
-                src={`/api/image-proxy?url=${encodeURIComponent((campaign.campaign_logo || campaign.project_logo)!)}`}
+                src={imageSrc((campaign.campaign_logo || campaign.project_logo)!)}
                 alt=""
                 onError={e => (e.currentTarget.style.display = "none")}
                 style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: (campaign as any).banner_position || "50% 50%" }}
@@ -1163,7 +1164,7 @@ export default function CampaignDetailPage() {
                                   </div>
                                   {hasImage ? (
                                     <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
-                                      <img src={/\.blob\.vercel-storage\.com\//i.test(value) ? value : `/api/image-proxy?url=${encodeURIComponent(value)}`}
+                                      <img src={/\.blob\.vercel-storage\.com\//i.test(value) ? value : imageSrc(value)}
                                         alt="proof"
                                         style={{ width: 96, height: 72, objectFit: "cover", borderRadius: 6, border: "1px solid var(--bdr,rgba(255,255,255,0.06))" }} />
                                       <div style={{ flex: 1, minWidth: 0 }}>
@@ -1703,7 +1704,7 @@ export default function CampaignDetailPage() {
                     {(campaign.project_name || "?").slice(0, 1).toUpperCase()}
                   </span>
                   {(campaign.project_logo || campaign.campaign_logo) && (
-                    <img src={`/api/image-proxy?url=${encodeURIComponent((campaign.project_logo || campaign.campaign_logo)!)}`} alt="" onError={e => (e.currentTarget.style.display = "none")} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
+                    <img src={imageSrc((campaign.project_logo || campaign.campaign_logo)!)} alt="" onError={e => (e.currentTarget.style.display = "none")} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
                   )}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>

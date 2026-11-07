@@ -4,6 +4,7 @@ import { useParams } from "next/navigation"
 import ArcLayout from "@/components/ArcLayout"
 import { useArcStore } from "@/store/arc"
 import { detectWallets } from "@/context/web3modal"
+import { imageSrc } from "@/lib/imageSrc"
 
 // Must mirror the format on the server in src/app/api/builder/route.ts
 function buildClaimMessage(address: string, timestamp: number): string {
@@ -56,7 +57,7 @@ function proxiedAvatar(url: string | null | undefined): string | null {
   if (!url) return null
   if (url.startsWith("blob:") || url.startsWith("data:")) return url
   if (/\.blob\.vercel-storage\.com\//i.test(url)) return url
-  return `/api/image-proxy?url=${encodeURIComponent(url)}`
+  return imageSrc(url)
 }
 
 function shortAddr(addr: string) {

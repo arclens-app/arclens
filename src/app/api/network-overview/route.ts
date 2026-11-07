@@ -107,7 +107,7 @@ export async function GET() {
         blocks,
         transactions,
       },
-      { headers: { "Cache-Control": "public, max-age=10, stale-while-revalidate=20" } },
+      { headers: { "Cache-Control": "public, max-age=10, s-maxage=15, stale-while-revalidate=30" } },
     )
   } catch (error) {
     console.error("[network-overview]", error)

@@ -5,6 +5,7 @@ import { detectWallets, EIP6963Provider } from "@/context/web3modal"
 import ArcLensAI from "@/components/ArcLensAI"
 import WalletPanel from "@/components/WalletPanel"
 import { ADD_CHAIN_PARAMS, ARC_CHAIN_ID, ARC_CHAIN_NAME } from "@/lib/constants"
+import { pollWhileVisible } from "@/lib/pollWhileVisible"
 
 const NAV = [
   { section: "", items: [
@@ -619,7 +620,7 @@ export default function ArcLayout({ children, active, lockDark }: { children: Re
     if (!mounted) return
     async function fetchStats() {
       try {
-        const response = await fetch("/api/arc-status", { cache: "no-store" })
+        const response = await fetch("/api/arc-status")
         const data = await response.json()
         if (!response.ok || !Number.isSafeInteger(data.blockNumber) || !data.gasPriceWei) {
           throw new Error(data.error || "Arc status unavailable")
@@ -631,8 +632,7 @@ export default function ArcLayout({ children, active, lockDark }: { children: Re
       } catch { setConnected(false) }
     }
     fetchStats()
-    const t = setInterval(fetchStats, 30000)
-    return () => clearInterval(t)
+    return pollWhileVisible(fetchStats, 30000)
   }, [mounted])
 
   useEffect(() => {

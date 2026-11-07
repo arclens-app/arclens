@@ -15,7 +15,7 @@
     },
     {
       "path": "/api/cron/rescan-urls",
-      "schedule": "20 */6 * * *"
+      "schedule": "20 5 * * *"
     }
   ]
 }

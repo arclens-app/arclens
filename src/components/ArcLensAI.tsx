@@ -13,6 +13,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { usePathname } from "next/navigation"
 import LensFace, { type LensState } from "@/components/LensFace"
+import { imageSrc } from "@/lib/imageSrc"
 
 interface Msg {
   role: "user" | "assistant"
@@ -184,7 +185,7 @@ function TokenAvatar({ name, logo }: { name: string; logo?: string | null }) {
   const c = palette[(name?.charCodeAt(0) || 0) % palette.length]
   const [imgOk, setImgOk] = useState(true)
   if (logo && imgOk) {
-    return <img src={`/api/image-proxy?url=${encodeURIComponent(logo)}`} alt="" onError={() => setImgOk(false)}
+    return <img src={imageSrc(logo)} alt="" onError={() => setImgOk(false)}
       style={{ width: 26, height: 26, borderRadius: "50%", flexShrink: 0, objectFit: "cover", background: SURF2, border: `1px solid ${BDR}` }} />
   }
   return <span style={{ width: 26, height: 26, borderRadius: "50%", flexShrink: 0, background: `linear-gradient(135deg, ${c}, ${c}aa)`, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 11, fontWeight: 700 }}>{(name || "?")[0].toUpperCase()}</span>
@@ -193,7 +194,7 @@ function TokenAvatar({ name, logo }: { name: string; logo?: string | null }) {
 function EventThumb({ image, title }: { image?: string | null; title: string }) {
   const [ok, setOk] = useState(true)
   if (image && ok) {
-    return <img src={`/api/image-proxy?url=${encodeURIComponent(image)}`} alt="" onError={() => setOk(false)}
+    return <img src={imageSrc(image)} alt="" onError={() => setOk(false)}
       style={{ width: 48, height: 30, borderRadius: 6, flexShrink: 0, objectFit: "cover", background: SURF2, border: `1px solid ${BDR}` }} />
   }
   return <span style={{ width: 48, height: 30, borderRadius: 6, flexShrink: 0, background: `linear-gradient(135deg, ${ARC}33, ${ARC}11)`, border: `1px solid ${BDR}`, display: "flex", alignItems: "center", justifyContent: "center", color: T2, fontSize: 13, fontWeight: 700 }}>{(title || "?")[0].toUpperCase()}</span>

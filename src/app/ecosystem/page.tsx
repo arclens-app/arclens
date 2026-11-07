@@ -7,6 +7,7 @@ import { trustBadge } from "@/lib/trustBadge"
 import { safeExternalUrl } from "@/lib/submissionGuards"
 import Spotlight from "@/components/Spotlight"
 import AgentSubmitPanel from "@/components/AgentSubmitPanel"
+import { imageSrc } from "@/lib/imageSrc"
 
 interface Project {
   id: number
@@ -83,7 +84,7 @@ interface TrendingProject {
 function imgSrc(url: string | null): string | null {
   if (!url) return null
   if (/\.blob\.vercel-storage\.com\//i.test(url)) return url
-  return `/api/image-proxy?url=${encodeURIComponent(url)}`
+  return imageSrc(url)
 }
 
 const CATEGORIES = ["All", "Infrastructure", "DeFi", "AI", "Payments", "NFT", "Gaming", "Social", "Developer Tools", "Bridge", "Identity", "Wallet", "Exchange", "Lending", "Prediction Market", "RWA", "DAO", "Stablecoin", "Derivatives", "Insurance", "Launchpad", "Oracle", "Analytics", "Finance", "Trading", "Custody", "Other"]
@@ -199,7 +200,7 @@ export default function EcosystemPage() {
       try {
         const [res, visibilityRes] = await Promise.all([
           fetch("/api/ecosystem"),
-          fetch("/api/ecosystem/visibility", { cache: "no-store" }),
+          fetch("/api/ecosystem/visibility"),
         ])
         const [data, visibility] = await Promise.all([
           res.json(),

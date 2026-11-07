@@ -1,6 +1,7 @@
 "use client"
 import { useEffect, useState, useRef } from "react"
 import ArcLayout from "@/components/ArcLayout"
+import { imageSrc } from "@/lib/imageSrc"
 
 interface Event {
   id: number | string
@@ -26,7 +27,7 @@ interface Event {
 function imgSrc(url: string | null): string | null {
   if (!url) return null
   if (/\.blob\.vercel-storage\.com\//i.test(url)) return url
-  return `/api/image-proxy?url=${encodeURIComponent(url)}`
+  return imageSrc(url)
 }
 
 const EVENT_TYPES = ["All", "Hackathon", "Conference", "Workshop", "Office Hours", "AMA", "Demo Day", "Community Call", "Twitter Space", "Grant Round", "Governance Vote", "Meetup", "Webinar", "Launch", "Ecosystem Sprint", "Other"]

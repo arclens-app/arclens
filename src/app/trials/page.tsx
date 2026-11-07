@@ -5,6 +5,7 @@ import ArcLayout from "@/components/ArcLayout"
 import { WalletAvatar } from "@/components/WalletAvatar"
 import { useArcStore } from "@/store/arc"
 import { TYPE_META, getTypeMeta } from "@/lib/campaignTypes"
+import { imageSrc } from "@/lib/imageSrc"
 
 interface Campaign {
   id: number
@@ -68,7 +69,7 @@ function imgSrc(url: string | null) {
   // Vercel Blob URLs are clean CDN links not blocked by ad-blockers — serve
   // them directly and skip the proxy round-trip. Only legacy imgbb needs it.
   if (/\.blob\.vercel-storage\.com\//i.test(url)) return url
-  return `/api/image-proxy?url=${encodeURIComponent(url)}`
+  return imageSrc(url)
 }
 
 function slotsLeft(c: Campaign) {

@@ -3,6 +3,7 @@ import { useEffect, useState, useRef } from "react"
 import ArcLayout from "@/components/ArcLayout"
 import { SkeletonRow, SkeletonStatsBand } from "@/components/ArcSkeleton"
 import { ARC_CHAIN_ID, ARC_CHAIN_NAME } from "@/lib/constants"
+import { pollWhileVisible } from "@/lib/pollWhileVisible"
 
 function timeAgo(ts: number) {
   const s = Math.floor(Date.now() / 1000) - ts
@@ -36,7 +37,7 @@ export default function Home() {
     if (!mounted) return
     async function fetchAll() {
       try {
-        const response = await fetch("/api/network-overview", { cache: "no-store" })
+        const response = await fetch("/api/network-overview")
         const data = await response.json()
         if (!response.ok || !Number.isSafeInteger(data.blockNumber) || !data.gasPriceWei) {
           throw new Error(data.error || "Arc network data unavailable")
@@ -83,8 +84,7 @@ export default function Home() {
       } catch { setConnected(false) }
     }
     fetchAll()
-    const t = setInterval(fetchAll, 30000)
-    return () => clearInterval(t)
+    return pollWhileVisible(fetchAll, 30000)
   }, [mounted])
 
   if (!mounted) return <div style={{ minHeight: "100vh", background: "#060812" }} />

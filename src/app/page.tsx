@@ -3,6 +3,7 @@ import { useEffect, useState, useRef } from "react"
 import { safeExternalUrl } from "@/lib/submissionGuards"
 import ArcLayout from "@/components/ArcLayout"
 import { ARC_CHAIN_ID, ARC_CHAIN_NAME } from "@/lib/constants"
+import { imageSrc } from "@/lib/imageSrc"
 
 interface Project {
   id: number; name: string; tagline: string; category: string; slug?: string
@@ -168,7 +169,7 @@ function Globe3D({ projects }: { projects: Project[] }) {
               mat.map = new THREE.CanvasTexture(c2)
               mat.needsUpdate = true
             }
-            img.src = `/api/image-proxy?url=${encodeURIComponent(dot.logo_url)}`
+            img.src = imageSrc(dot.logo_url)
           }
 
           /* Pulse ring */
@@ -350,7 +351,7 @@ function BuilderReel({ projects }: { projects: Project[] }) {
             style={{ display: "flex", alignItems: "center", gap: "10px", padding: "0 28px", textDecoration: "none", borderRight: "1px solid rgba(255,255,255,0.05)", flexShrink: 0, height: "64px" }}>
             <div style={{ width: "28px", height: "28px", borderRadius: "50%", overflow: "hidden", background: "rgba(26,86,255,0.1)", border: "1px solid rgba(26,86,255,0.2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "10px", fontWeight: 700, color: "#8aaeff", flexShrink: 0 }}>
               {p.logo_url
-                ? <img src={`/api/image-proxy?url=${encodeURIComponent(p.logo_url)}`} alt={p.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={e => (e.currentTarget.style.display = "none")} />
+                ? <img src={imageSrc(p.logo_url)} alt={p.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={e => (e.currentTarget.style.display = "none")} />
                 : p.name.slice(0, 2).toUpperCase()}
             </div>
             <span style={{ fontSize: "12px", color: "#6b7da8", whiteSpace: "nowrap", fontWeight: 500 }}>{p.name}</span>
@@ -409,7 +410,7 @@ export default function HomePage() {
     if (!mounted) return
     async function load() {
       try {
-        const response = await fetch("/api/arc-status", { cache: "no-store" })
+        const response = await fetch("/api/arc-status")
         const data = await response.json()
         if (!response.ok || !Number.isSafeInteger(data.blockNumber) || !data.gasPriceWei) {
           throw new Error(data.error || "Arc status unavailable")
@@ -586,7 +587,7 @@ export default function HomePage() {
                   {/* Logo */}
                   <div style={{ width: "100%", aspectRatio: "1", borderRadius: "14px", overflow: "hidden", background: "rgba(26,86,255,0.06)", border: `1px solid ${bdr}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "22px", fontWeight: 700, color: arc, flexShrink: 0 }}>
                     {p.logo_url
-                      ? <img src={`/api/image-proxy?url=${encodeURIComponent(p.logo_url)}`} alt={p.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={e => (e.currentTarget.style.display = "none")} />
+                      ? <img src={imageSrc(p.logo_url)} alt={p.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={e => (e.currentTarget.style.display = "none")} />
                       : p.name[0]}
                   </div>
                   {/* Info */}

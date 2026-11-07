@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback, useRef } from "react"
 import ArcLayout from "@/components/ArcLayout"
 import { ARC_IS_MAINNET } from "@/lib/constants"
+import { pollWhileVisible } from "@/lib/pollWhileVisible"
 
 function timeAgo(ts: string) {
   const s = Math.floor((Date.now() - new Date(ts).getTime()) / 1000)
@@ -222,8 +223,7 @@ export default function BridgePage() {
   useEffect(() => {
     if (!mounted) return
     loadBridgeData()
-    const interval = setInterval(loadBridgeData, 30000)
-    return () => clearInterval(interval)
+    return pollWhileVisible(loadBridgeData, 30000)
   }, [mounted, loadBridgeData])
 
   // Live "last updated" counter

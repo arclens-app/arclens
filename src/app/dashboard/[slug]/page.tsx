@@ -10,6 +10,7 @@ import LensEarningsPanel from "@/components/LensEarningsPanel"
 import { freeHostOf, hostFromUrl } from "@/lib/submissionGuards"
 import { trustBadge } from "@/lib/trustBadge"
 import { APP_KIT_CHAIN, ARC_EXPLORER_URL, CAMPAIGN_USDC_ENABLED } from "@/lib/constants"
+import { imageSrc } from "@/lib/imageSrc"
 
 interface Project {
   id: number; name: string; slug: string; tagline: string; description: string
@@ -660,7 +661,7 @@ export default function DashboardPage() {
                 ? <img
                     src={project.logo_url.startsWith("blob:") || project.logo_url.startsWith("data:")
                       ? project.logo_url
-                      : `/api/image-proxy?url=${encodeURIComponent(project.logo_url)}`}
+                      : imageSrc(project.logo_url)}
                     alt={project.name}
                     style={{ width: "100%", height: "100%", objectFit: "cover" }}
                     onError={e => (e.currentTarget.style.display = "none")} />
@@ -1237,7 +1238,7 @@ export default function DashboardPage() {
                                                   {isScreenshot ? (
                                                     <div style={{ display: "flex", gap: 10, alignItems: "center", flex: 1, minWidth: 0 }}>
                                                       <a href={value} target="_blank" rel="noopener noreferrer" style={{ flexShrink: 0 }}>
-                                                        <img src={/\.blob\.vercel-storage\.com\//i.test(value) ? value : `/api/image-proxy?url=${encodeURIComponent(value)}`}
+                                                        <img src={/\.blob\.vercel-storage\.com\//i.test(value) ? value : imageSrc(value)}
                                                           alt={t.title || "proof screenshot"}
                                                           style={{ width: 56, height: 42, objectFit: "cover", borderRadius: 5, border: "1px solid " + bdr, cursor: "zoom-in", display: "block" }} />
                                                       </a>
@@ -1390,7 +1391,7 @@ export default function DashboardPage() {
               <div style={{ display: "flex", alignItems: "center", gap: "16px", marginBottom: "18px", paddingBottom: "18px", borderBottom: "1px solid " + bdr }}>
                 <div style={{ width: 64, height: 64, borderRadius: 12, background: surf2, border: "1px solid " + bdr, flexShrink: 0, overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" }}>
                   {editForm.logo_url
-                    ? <img src={editForm.logo_url.startsWith("http") ? `/api/image-proxy?url=${encodeURIComponent(editForm.logo_url)}` : editForm.logo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={e => (e.currentTarget.style.display = "none")} />
+                    ? <img src={editForm.logo_url.startsWith("http") ? imageSrc(editForm.logo_url) : editForm.logo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={e => (e.currentTarget.style.display = "none")} />
                     : <span style={{ fontSize: 22, fontWeight: 700, color: t3, fontFamily: mono }}>{(project.name || "?").slice(0, 1).toUpperCase()}</span>}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>

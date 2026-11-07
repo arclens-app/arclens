@@ -8,11 +8,12 @@ import { trustBadge } from "@/lib/trustBadge"
 import { safeExternalUrl } from "@/lib/submissionGuards"
 import AskLens from "@/components/AskLens"
 import { ARC_CHAIN_NAME } from "@/lib/constants"
+import { imageSrc } from "@/lib/imageSrc"
 
 function imgSrc(url: string | null): string | null {
   if (!url) return null
   if (/\.blob\.vercel-storage\.com\//i.test(url)) return url
-  return `/api/image-proxy?url=${encodeURIComponent(url)}`
+  return imageSrc(url)
 }
 
 interface Project {

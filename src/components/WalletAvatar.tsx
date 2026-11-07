@@ -1,5 +1,6 @@
 "use client"
 import React from "react"
+import { imageSrc } from "@/lib/imageSrc"
 
 function walletToGradient(wallet: string): { from: string; to: string } {
   const clean = wallet.replace("0x", "").toLowerCase().padEnd(40, "0")
@@ -12,7 +13,7 @@ function walletToGradient(wallet: string): { from: string; to: string } {
 
 export function WalletAvatar({ wallet, size = 32, pfpUrl, style }: { wallet: string; size?: number; pfpUrl?: string | null; style?: React.CSSProperties }) {
   const { from, to } = walletToGradient(wallet)
-  const proxied = pfpUrl ? `/api/image-proxy?url=${encodeURIComponent(pfpUrl)}` : null
+  const proxied = pfpUrl ? imageSrc(pfpUrl) : null
   if (proxied) {
     return (
       <div style={{ width: size, height: size, borderRadius: "50%", overflow: "hidden", flexShrink: 0, ...style }}>
