@@ -15,6 +15,7 @@ import { enforce } from "@/lib/ratelimit"
 import { getSession } from "@/lib/session"
 import { ARC_EXPLORER_API, ARC_RPC_HTTP } from "@/lib/constants"
 import { buildVerifyMessage, type VerifyChallengePayload } from "@/lib/verifyChallenge"
+import { deployerFromCreationTx, TX_HASH_RE } from "@/lib/creationTx"
 
 const ARCSCAN = ARC_EXPLORER_API
 const CHALLENGE_TTL_MS = 10 * 60 * 1000
@@ -68,7 +69,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json()
-    const { address, name, type, description, website, twitter, email } = body
+    const { address, name, type, description, website, twitter, email, deploy_tx } = body
     if (!address?.trim()) return NextResponse.json({ error: "Contract address required" }, { status: 400 })
     if (!name?.trim())    return NextResponse.json({ error: "Contract name required" }, { status: 400 })
     if (!email?.trim())   return NextResponse.json({ error: "Email required" }, { status: 400 })
@@ -93,6 +94,7 @@ export async function POST(req: NextRequest) {
       issued_at: now.toISOString(),
       expires_at: expires.toISOString(),
       issued_to_wallet: sess.addr,
+      deploy_tx: TX_HASH_RE.test(String(deploy_tx || "").trim().toLowerCase()) ? String(deploy_tx).trim().toLowerCase() : null,
     }
 
     let deployer: string | null = null
@@ -102,7 +104,7 @@ export async function POST(req: NextRequest) {
       const code = await provider.getCode(addr)
       if (code === "0x") deployerStatus = "not_a_contract"
       else {
-        deployer = await fetchDeployer(addr)
+        deployer = (await fetchDeployer(addr)) ?? (await deployerFromCreationTx(addr, payload.deploy_tx))
         if (!deployer) deployerStatus = "unindexed"
       }
     } catch { deployerStatus = "unindexed" }

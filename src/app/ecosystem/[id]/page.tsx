@@ -6,6 +6,7 @@ import TvlCards from "./TvlCards"
 import { TrustBadge } from "@/components/TrustBadge"
 import { trustBadge } from "@/lib/trustBadge"
 import { safeExternalUrl } from "@/lib/submissionGuards"
+import { linkify } from "@/components/Linkify"
 import AskLens from "@/components/AskLens"
 import { ARC_CHAIN_NAME, ARC_EXPLORER_URL } from "@/lib/constants"
 import { imageSrc } from "@/lib/imageSrc"
@@ -382,21 +383,25 @@ export default function ProjectPage() {
     // their own public accounts, and the quiet report link handles the rest.
     // 1) Claimed project → its owner's builder profile (wallet-proven ownership).
     if (fp?.address && fp.display_name) {
-      return { internal: true, url: `/builder/${fp.address}`, label: fp.display_name, note: "builder profile" }
+      return { internal: true, links: [{ url: `/builder/${fp.address}`, label: fp.display_name }], note: "builder profile" }
     }
     // 2) Self-disclosed handle typed on the listing (taken at face value).
     if (s) {
-      let url: string, label: string
-      if (/^https?:\/\//i.test(s)) { url = s; label = s.replace(/^https?:\/\/(www\.)?/i, "").replace(/\/$/, "") }
-      else if (s.startsWith("@"))  { url = "https://x.com/" + s.slice(1); label = s }
-      else if (/\.[a-z]{2,}/i.test(s)) { url = "https://" + s; label = s.replace(/\/$/, "") }
-      else { url = "https://x.com/" + s; label = "@" + s }
-      return { internal: false, url, label, note: "self-disclosed" }
+      const toLink = (t: string): { url: string; label: string } | null => {
+        if (/^https?:\/\//i.test(t)) { const url = safeExternalUrl(t); return url ? { url, label: t.replace(/^https?:\/\/(www\.)?/i, "").replace(/\/$/, "") } : null }
+        if (t.startsWith("@"))  return { url: "https://x.com/" + t.slice(1), label: t }
+        if (/\.[a-z]{2,}/i.test(t)) { const url = safeExternalUrl(t); return url ? { url, label: t.replace(/\/$/, "") } : null }
+        return { url: "https://x.com/" + t, label: "@" + t }
+      }
+      // Founders sometimes list several profiles in one field ("a & b", "a, b")
+      const tokens = s.split(/[\s,&]+/).filter(t => /^https?:\/\//i.test(t) || t.startsWith("@") || /\.[a-z]{2,}/i.test(t))
+      const links = (tokens.length > 1 ? tokens : [s]).map(toLink).filter((l): l is { url: string; label: string } => !!l)
+      if (links.length) return { internal: false, links, note: "self-disclosed" }
     }
     // 3) Owner wallet with no name or handle — link to the profile (track record
     //    still shows), but never present a raw hex as the founder's name.
     if (fp?.address) {
-      return { internal: true, url: `/builder/${fp.address}`, label: "Builder profile", note: "project owner" }
+      return { internal: true, links: [{ url: `/builder/${fp.address}`, label: "Builder profile" }], note: "project owner" }
     }
     return null
   })()
@@ -478,8 +483,8 @@ export default function ProjectPage() {
           <div style={{ padding: "16px 28px", display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
             {safeExternalUrl(project.website)  && <a href={safeExternalUrl(project.website)!}  target="_blank" rel="nofollow ugc noopener noreferrer" style={{ height: "34px", padding: "0 16px", display: "flex", alignItems: "center", background: "rgba(26,86,255,0.08)", color: "#8aaeff", fontSize: "12px", fontFamily: mono, border: "1px solid rgba(26,86,255,0.2)", borderRadius: "7px", textDecoration: "none", gap: "6px" }}>🌐 Website</a>}
             {twitterUrl       && <a href={twitterUrl}       target="_blank" rel="nofollow ugc noopener noreferrer" style={{ height: "34px", padding: "0 16px", display: "flex", alignItems: "center", background: "transparent", color: t2, fontSize: "12px", fontFamily: mono, border: "1px solid " + bdr, borderRadius: "7px", textDecoration: "none", gap: "6px" }}>𝕏 Twitter</a>}
-            {project.github   && <a href={project.github}   target="_blank" rel="nofollow ugc noopener noreferrer" style={{ height: "34px", padding: "0 16px", display: "flex", alignItems: "center", background: "transparent", color: t2, fontSize: "12px", fontFamily: mono, border: "1px solid " + bdr, borderRadius: "7px", textDecoration: "none", gap: "6px" }}>⌥ GitHub</a>}
-            {project.discord  && <a href={project.discord}  target="_blank" rel="nofollow ugc noopener noreferrer" style={{ height: "34px", padding: "0 16px", display: "flex", alignItems: "center", background: "transparent", color: t2, fontSize: "12px", fontFamily: mono, border: "1px solid " + bdr, borderRadius: "7px", textDecoration: "none", gap: "6px" }}>Discord</a>}
+            {safeExternalUrl(project.github)  && <a href={safeExternalUrl(project.github)!}  target="_blank" rel="nofollow ugc noopener noreferrer" style={{ height: "34px", padding: "0 16px", display: "flex", alignItems: "center", background: "transparent", color: t2, fontSize: "12px", fontFamily: mono, border: "1px solid " + bdr, borderRadius: "7px", textDecoration: "none", gap: "6px" }}>⌥ GitHub</a>}
+            {safeExternalUrl(project.discord) && <a href={safeExternalUrl(project.discord)!} target="_blank" rel="nofollow ugc noopener noreferrer" style={{ height: "34px", padding: "0 16px", display: "flex", alignItems: "center", background: "transparent", color: t2, fontSize: "12px", fontFamily: mono, border: "1px solid " + bdr, borderRadius: "7px", textDecoration: "none", gap: "6px" }}>Discord</a>}
             {project.contract && <button onClick={() => window.open(`${ARC_EXPLORER_URL}/address/${project.contract}`, "_blank", "noopener,noreferrer")} style={{ height: "34px", padding: "0 16px", display: "flex", alignItems: "center", background: "transparent", color: "#8aaeff", fontSize: "12px", fontFamily: mono, border: "1px solid rgba(26,86,255,0.2)", borderRadius: "7px", cursor: "pointer", gap: "6px" }}>✦ Contract ↗</button>}
             <div style={{ flex: 1 }} />
             <AskLens prompt={`Tell me about ${project.name} on Arc: what it does, its real numbers, who built it, and whether it's trusted.`} />
@@ -495,10 +500,12 @@ export default function ProjectPage() {
               <div style={{ height: "1px", background: bdr }} />
               <div style={{ padding: "13px 28px", display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
                 <span style={{ fontSize: "9px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.1em" }}>Founder</span>
-                <a href={founder.url} {...(founder.internal ? {} : { target: "_blank", rel: "noopener noreferrer" })}
-                  style={{ fontSize: "12px", fontFamily: mono, color: "#8aaeff", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "5px" }}>
-                  {founder.label} <span style={{ color: t3 }}>{founder.internal ? "→" : "↗"}</span>
-                </a>
+                {founder.links.map(l => (
+                  <a key={l.url} href={l.url} {...(founder.internal ? {} : { target: "_blank", rel: "nofollow ugc noopener noreferrer" })}
+                    style={{ fontSize: "12px", fontFamily: mono, color: "#8aaeff", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "5px" }}>
+                    {l.label} <span style={{ color: t3 }}>{founder.internal ? "→" : "↗"}</span>
+                  </a>
+                ))}
                 <span style={{ fontSize: "10px", fontFamily: mono, color: t3 }}>· {founder.note}</span>
               </div>
             </>
@@ -509,7 +516,7 @@ export default function ProjectPage() {
         {project.description && (
           <div style={{ background: surf, border: "1px solid " + bdr, borderRadius: "14px", padding: "24px 28px", marginBottom: "16px" }}>
             <div style={{ fontSize: "10px", fontFamily: mono, color: t3, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "14px" }}>About</div>
-            <p style={{ fontSize: "14px", color: t2, lineHeight: 1.85, margin: 0, whiteSpace: "pre-wrap" }}>{project.description}</p>
+            <p style={{ fontSize: "14px", color: t2, lineHeight: 1.85, margin: 0, whiteSpace: "pre-wrap" }}>{linkify(project.description, "desc")}</p>
           </div>
         )}
 

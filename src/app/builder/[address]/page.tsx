@@ -5,6 +5,7 @@ import ArcLayout from "@/components/ArcLayout"
 import { useArcStore } from "@/store/arc"
 import { detectWallets } from "@/context/web3modal"
 import { imageSrc } from "@/lib/imageSrc"
+import { linkify } from "@/components/Linkify"
 import { ARC_EXPLORER_URL } from "@/lib/constants"
 
 // Must mirror the format on the server in src/app/api/builder/route.ts
@@ -386,7 +387,7 @@ export default function BuilderPage() {
                   </div>
                   {profile?.bio && (
                     <p style={{ margin: "0 0 14px", fontSize: "14px", color: t2, lineHeight: 1.7, maxWidth: "520px" }}>
-                      {profile.bio}
+                      {linkify(profile.bio, "bio")}
                     </p>
                   )}
                   {!isClaimed && !isOwner && (

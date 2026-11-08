@@ -103,6 +103,7 @@ export default function TvlTrackingPanel({ slug, token, connectedWallet, theme }
   const [role, setRole] = useState<"deployment" | "tvl" | "revenue" | "treasury" | "volume">("deployment")
   const [label, setLabel] = useState("")
   const [startBlock, setStartBlock] = useState("")
+  const [deployTx, setDeployTx] = useState("")
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState("")
   const [submitSuccess, setSubmitSuccess] = useState("")
@@ -222,6 +223,7 @@ export default function TvlTrackingPanel({ slug, token, connectedWallet, theme }
         role,
         label: label.trim() || null,
       }
+      if (deployTx.trim()) body.deploy_tx = deployTx.trim()
       if (startBlock.trim()) body.start_block = Number(startBlock)
       if (role === "volume") {
         body.volume_method        = volMethod
@@ -319,6 +321,7 @@ export default function TvlTrackingPanel({ slug, token, connectedWallet, theme }
       setAddr("")
       setLabel("")
       setStartBlock("")
+      setDeployTx("")
       setVolMethod("swap_event")
       setVolPreset("custom")
       setVolSignature("")
@@ -633,6 +636,19 @@ export default function TvlTrackingPanel({ slug, token, connectedWallet, theme }
               disabled={submitting}
             />
           </div>
+          <div>
+            <label style={labelStyle}>Deployment transaction</label>
+            <input
+              value={deployTx}
+              onChange={e => setDeployTx(e.target.value)}
+              placeholder="0x… the transaction that deployed this contract"
+              style={{ ...inputStyle, fontFamily: mono }}
+              disabled={submitting}
+            />
+            <div style={{ marginTop: "5px", fontSize: "11px", fontFamily: mono, color: t2, lineHeight: 1.6 }}>
+              Proves who deployed it. Find it as the first transaction on the contract&apos;s explorer page. Not needed if the contract has an owner() you control.
+            </div>
+          </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "10px" }}>
             <div>
               <label style={labelStyle}>Role</label>
@@ -927,7 +943,7 @@ export default function TvlTrackingPanel({ slug, token, connectedWallet, theme }
                     ) : challenge.deployer_status === "not_a_contract" ? (
                       <>No bytecode at that address on Arc — this isn&apos;t a contract.</>
                     ) : (
-                      <>Couldn&apos;t reach arcscan to look up the deployer. You can still sign + submit — the server re-checks on submission.</>
+                      <>Couldn&apos;t confirm who controls this contract yet. Add its deployment transaction above and request a new message, or sign with the owner wallet if the contract has one.</>
                     )}
                   </div>
                 </>

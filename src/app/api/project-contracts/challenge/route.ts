@@ -26,6 +26,7 @@ import { getSession } from "@/lib/session"
 import { ARC_EXPLORER_API, ARC_RPC_HTTP } from "@/lib/constants"
 import { dataArgTypes } from "@/lib/tvl"
 import { buildChallengeMessage, type AuthorizedCandidate, type ChallengePayload } from "@/lib/deployerSig"
+import { deployerFromCreationTx, TX_HASH_RE } from "@/lib/creationTx"
 import { getPool } from "@/lib/dbPool"
 import { validateProjectSocial, validateRepresentativeProfile, validateWebsite } from "@/lib/submissionGuards"
 
@@ -83,6 +84,7 @@ const AUTHORITY_ABI = [
 async function resolveAuthorizedSigners(
   addr: string,
   provider: ethers.JsonRpcProvider,
+  deployTx?: string | null,
 ): Promise<AuthorizedCandidate[]> {
   const out: AuthorizedCandidate[] = []
   const seen = new Set<string>()
@@ -96,6 +98,7 @@ async function resolveAuthorizedSigners(
 
   add(await fetchDeployer(addr), "deployer")
   add(await fetchCreationTxSender(addr), "deployer_tx_sender")
+  add(await deployerFromCreationTx(addr, deployTx), "deployer")
 
   const contract = new ethers.Contract(addr, AUTHORITY_ABI, provider)
   for (const [fn, method] of [["owner", "owner"], ["getOwner", "owner"], ["admin", "admin"]] as const) {
@@ -150,6 +153,7 @@ export async function POST(req: NextRequest) {
     const {
       slug, address, role, label, start_block,
       volume_method, volume_event_signature, volume_amount_arg, volume_stablecoin_id,
+      deploy_tx,
     } = body
 
     // Resolve & authorize the project.
@@ -242,6 +246,7 @@ export async function POST(req: NextRequest) {
       issued_at: now.toISOString(),
       expires_at: expires.toISOString(),
       issued_to_wallet: sess.addr,
+      deploy_tx: TX_HASH_RE.test(String(deploy_tx || "").trim().toLowerCase()) ? String(deploy_tx).trim().toLowerCase() : null,
     }
 
     // Look up the on-chain deployer so the client can show the founder
@@ -259,7 +264,7 @@ export async function POST(req: NextRequest) {
       if (code === "0x") {
         deployerStatus = "not_a_contract"
       } else {
-        authorizedSigners = await resolveAuthorizedSigners(payload.contract_address, provider)
+        authorizedSigners = await resolveAuthorizedSigners(payload.contract_address, provider, payload.deploy_tx)
         deployer = authorizedSigners[0]?.address ?? null
         if (!deployer) deployerStatus = "unindexed"
       }

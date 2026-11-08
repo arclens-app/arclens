@@ -11,6 +11,8 @@ export interface VerifyChallengePayload {
   issued_at: string
   expires_at: string
   issued_to_wallet: string
+  // Deployment tx hash the claimant supplied as deployer proof (checked over RPC)
+  deploy_tx?: string | null
 }
 
 export function buildVerifyMessage(p: VerifyChallengePayload): string {

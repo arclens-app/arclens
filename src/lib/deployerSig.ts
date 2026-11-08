@@ -204,6 +204,8 @@ export interface ChallengePayload {
   expires_at: string         // ISO 8601, typically +10min
   // Audit: the hot-wallet session that requested this challenge
   issued_to_wallet: string   // lowercase 0x…
+  // Deployment tx hash the founder supplied as deployer proof (checked over RPC)
+  deploy_tx?: string | null
 }
 
 export function buildChallengeMessage(p: ChallengePayload): string {

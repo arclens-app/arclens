@@ -9,6 +9,7 @@ import type { DragEndEvent } from "@dnd-kit/core"
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
 import { getTypeMeta } from "@/lib/campaignTypes"
+import { linkify } from "@/components/Linkify"
 import { ARC_CHAIN_NAME } from "@/lib/constants"
 import { imageSrc } from "@/lib/imageSrc"
 
@@ -71,15 +72,6 @@ interface Campaign {
 // heading-like lines (no ending punctuation) become subheads. Content-safe by
 // construction — every line renders as SOMETHING; worst case it stays a <p>.
 
-function linkify(text: string, keyBase: string): ReactNode[] {
-  const parts = text.split(/(https?:\/\/[^\s]+)/g)
-  return parts.map((part, i) =>
-    /^https?:\/\//.test(part)
-      ? <a key={`${keyBase}-${i}`} href={part} target="_blank" rel="noopener noreferrer"
-          style={{ color: "#8aaeff", textDecoration: "none", wordBreak: "break-all" }}>{part.replace(/^https?:\/\//, "")}</a>
-      : part
-  )
-}
 
 function FormattedDescription({ text }: { text: string }) {
   const lines = text.split(/\r?\n/)
@@ -808,7 +800,7 @@ export default function CampaignDetailPage() {
                                   </div>
                                   <div style={{ paddingTop: 5, minWidth: 0 }}>
                                     <div style={{ fontSize: 14, fontWeight: 650, color: "var(--t1,#e8ecff)", letterSpacing: "-0.01em" }}>{t.title}</div>
-                                    {t.description && <div style={{ fontSize: 12.5, color: "var(--t2,#6b7da8)", lineHeight: 1.6, marginTop: 3, maxWidth: "56ch" }}>{t.description}</div>}
+                                    {t.description && <div style={{ fontSize: 12.5, color: "var(--t2,#6b7da8)", lineHeight: 1.6, marginTop: 3, maxWidth: "56ch" }}>{linkify(t.description, "task")}</div>}
                                     <div style={{ marginTop: 8 }}>
                                       {hasInternal ? (
                                         <span style={{ fontSize: 9.5, fontFamily: "var(--font-mono,monospace)", color: "#00d990", background: "rgba(0,217,144,0.08)", padding: "3px 9px", borderRadius: 4, letterSpacing: "0.04em" }}>✓ auto-verified on-chain</span>
@@ -1118,7 +1110,7 @@ export default function CampaignDetailPage() {
                               </div>
                               {campaign.tasks[flowStep].description && (
                                 <div style={{ fontSize: 13, color: "var(--t2,#6b7da8)", lineHeight: 1.6 }}>
-                                  {campaign.tasks[flowStep].description}
+                                  {linkify(campaign.tasks[flowStep].description, "step")}
                                 </div>
                               )}
                             </div>

@@ -27,6 +27,7 @@ export default function RegistryPage() {
   const [name, setName]         = useState("")
   const [type, setType]         = useState("")
   const [desc, setDesc]         = useState("")
+  const [deployTx, setDeployTx] = useState("")
   const [website, setWebsite]   = useState("")
   const [twitter, setTwitter]   = useState("")
   const [email, setEmail]       = useState("")
@@ -177,6 +178,7 @@ export default function RegistryPage() {
           name:        name.trim(),
           type:        type.trim() || undefined,
           description: desc.trim() || undefined,
+          deploy_tx:   deployTx.trim() || undefined,
           website:     website.trim() || undefined,
           twitter:     twitter.trim() || undefined,
           email:       email.trim(),
@@ -198,7 +200,7 @@ export default function RegistryPage() {
         setStatusMsg(
           ch.deployer
             ? `Your connected wallet doesn't match the on-chain deployer (${ch.deployer.slice(0,10)}…${ch.deployer.slice(-6)}). Either switch to that wallet and try again, or use the offline-signing flow from your project's dashboard if the deployer key lives in cold storage / a Safe multisig.`
-            : "Couldn't read the on-chain deployer (arcscan may be slow). Try again in a minute."
+            : "Couldn't confirm who deployed this contract. Add the transaction that deployed it above, then try again."
         )
         setSubmitting(false); return
       }
@@ -261,7 +263,7 @@ export default function RegistryPage() {
         <div style={{ marginBottom: "24px" }}>
           <div style={{ fontSize: "10px", fontFamily: mono, color: "#323e62", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "8px" }}>Developers</div>
           <div style={{ fontSize: "28px", fontWeight: 700, letterSpacing: "-0.04em", marginBottom: "5px" }}>Contract Registry</div>
-          <div style={{ fontSize: "13px", color: "#6b7da8", fontWeight: 300 }}>Claim your contract's identity on Arc. Your name appears everywhere on ArcLens — transaction feeds, address pages, search results, and the approval manager.</div>
+          <div style={{ fontSize: "13px", color: "#6b7da8", fontWeight: 300 }}>Claim your contract's identity on Arc. Claimed contracts are listed in the ArcLens registry with their name and badge.</div>
         </div>
 
         {/* HOW IT WORKS */}
@@ -342,6 +344,11 @@ export default function RegistryPage() {
                   <label style={{ display: "block", fontSize: "9.5px", fontFamily: mono, color: "#3a4870", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "5px" }}>Description</label>
                   <input style={inputStyle} value={desc} onChange={e => setDesc(e.target.value)} placeholder="What does this contract do?" />
                 </div>
+                <div style={{ marginBottom: "10px" }}>
+                  <label style={{ display: "block", fontSize: "9.5px", fontFamily: mono, color: "#3a4870", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "5px" }}>Deployment Transaction</label>
+                  <input style={inputStyle} value={deployTx} onChange={e => setDeployTx(e.target.value)} placeholder="0x… the transaction that deployed this contract" />
+                  <div style={{ marginTop: "5px", fontSize: "10.5px", fontFamily: mono, color: "#3a4870", lineHeight: 1.6 }}>Proves who deployed it. Find it as the first transaction on the contract's explorer page.</div>
+                </div>
                 <button onClick={checkDeployer} disabled={checkingDeployer || !addr || !name}
                   style={{ height: "34px", padding: "0 16px", background: deployerChecked ? "rgba(0,184,122,0.08)" : "rgba(26,86,255,0.1)", color: deployerChecked ? "#00d990" : "#8aaeff", fontSize: "12px", fontWeight: 600, border: "1px solid " + (deployerChecked ? "rgba(0,184,122,0.2)" : "rgba(26,86,255,0.2)"), borderRadius: "7px", cursor: (checkingDeployer||!addr||!name) ? "not-allowed" : "pointer", fontFamily: "'Geist',sans-serif", opacity: (checkingDeployer||!addr||!name) ? .6 : 1 }}>
                   {checkingDeployer ? "Checking..." : deployerChecked ? "✓ Contract verified on Arc" : "Verify Contract Exists"}
@@ -418,9 +425,9 @@ export default function RegistryPage() {
             <div style={{ background: surf, border: "1px solid " + border, borderRadius: "12px", overflow: "hidden", position: "sticky", top: "68px" }}>
               <div style={{ padding: "11px 16px", borderBottom: "1px solid " + border, fontSize: "9px", fontFamily: mono, color: "#3a4870", textTransform: "uppercase", letterSpacing: "0.1em" }}>How it appears in ArcLens</div>
 
-              {/* IN TX FEED */}
+              {/* IN THE REGISTRY */}
               <div style={{ padding: "12px 16px", borderBottom: "1px solid " + border }}>
-                <div style={{ fontSize: "8.5px", fontFamily: mono, color: "#3a4870", marginBottom: "8px", textTransform: "uppercase", letterSpacing: "0.08em" }}>In transaction feeds</div>
+                <div style={{ fontSize: "8.5px", fontFamily: mono, color: "#3a4870", marginBottom: "8px", textTransform: "uppercase", letterSpacing: "0.08em" }}>In the ArcLens registry</div>
                 <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 0" }}>
                   <div style={{ width: "28px", height: "28px", borderRadius: "50%", background: "rgba(26,86,255,0.1)", border: "1px solid rgba(26,86,255,0.2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "11px", fontWeight: 700, fontFamily: mono, color: "#8aaeff" }}>
                     {name ? name[0].toUpperCase() : "?"}
@@ -432,15 +439,6 @@ export default function RegistryPage() {
                     </div>
                     <div style={{ fontSize: "9.5px", fontFamily: mono, color: "#3a4870" }}>{addr ? addr.slice(0,8)+"..."+addr.slice(-4) : "0x0000...0000"}</div>
                   </div>
-                </div>
-              </div>
-
-              {/* IN APPROVAL MANAGER */}
-              <div style={{ padding: "12px 16px", borderBottom: "1px solid " + border }}>
-                <div style={{ fontSize: "8.5px", fontFamily: mono, color: "#3a4870", marginBottom: "8px", textTransform: "uppercase", letterSpacing: "0.08em" }}>In approval manager</div>
-                <div style={{ fontSize: "11px", fontFamily: mono, color: "#6b7da8" }}>
-                  Spender: <span style={{ color: "var(--t1, #eef2ff)", fontWeight: 500 }}>{name || "Your Contract"}</span>
-                  <span style={{ marginLeft: "6px" }}><Badge badge={source ? "verified" : "claimed"} /></span>
                 </div>
               </div>
 

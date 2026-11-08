@@ -21,6 +21,7 @@ import { getSession } from "@/lib/session"
 import { ARC_CHAIN_ID, ARC_EXPLORER_API, ARC_RPC_HTTP } from "@/lib/constants"
 import { canonicalEventSignature, dataArgTypes } from "@/lib/tvl"
 import { getPool } from "@/lib/dbPool"
+import { deployerFromCreationTx } from "@/lib/creationTx"
 import { validateProjectSocial, validateRepresentativeProfile, validateWebsite } from "@/lib/submissionGuards"
 import {
   buildChallengeMessage,
@@ -99,6 +100,7 @@ const AUTHORITY_ABI = [
 async function resolveAuthorizedSigners(
   addr: string,
   provider: ethers.JsonRpcProvider,
+  deployTx?: string | null,
 ): Promise<AuthorizedCandidate[]> {
   const out: AuthorizedCandidate[] = []
   const seen = new Set<string>()
@@ -115,6 +117,8 @@ async function resolveAuthorizedSigners(
   add(await fetchDeployer(addr), "deployer")
   // B — creation-tx sender EOA (the founder's wallet behind a factory deploy).
   add(await fetchCreationTxSender(addr), "deployer_tx_sender")
+  // A2 — deployment tx the founder supplied, read over RPC (explorer fallback).
+  add(await deployerFromCreationTx(addr, deployTx), "deployer")
   // C — current on-chain authority: owner()/getOwner()/admin().
   const c = new ethers.Contract(addr, AUTHORITY_ABI, provider)
   for (const [fn, method] of [["owner", "owner"], ["getOwner", "owner"], ["admin", "admin"]] as const) {
@@ -344,10 +348,10 @@ export async function POST(req: NextRequest) {
     //    authoritatively from chain/explorer, never from the request. This is
     //    the plug-and-play proof ladder: direct creator, creation-tx sender
     //    (factory deploys), owner()/admin(), and proxy admin slot.
-    const authorizedSigners = await resolveAuthorizedSigners(payload.contract_address, provider)
+    const authorizedSigners = await resolveAuthorizedSigners(payload.contract_address, provider, payload.deploy_tx)
     if (authorizedSigners.length === 0) {
       return NextResponse.json(
-        { error: "Couldn't resolve any on-chain authority for this contract on Arc. It may not be indexed yet, or arcscan is unreachable." },
+        { error: "Couldn't confirm who controls this contract on Arc. Add the transaction that deployed it and try again." },
         { status: 502 },
       )
     }

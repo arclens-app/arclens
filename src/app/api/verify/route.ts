@@ -6,6 +6,7 @@ import { getSession } from "@/lib/session"
 import { ARC_CHAIN_ID, ARC_EXPLORER_API, ARC_RPC_HTTP } from "@/lib/constants"
 import { verifyDeployerSignature } from "@/lib/deployerSig"
 import { buildVerifyMessage } from "@/lib/verifyChallenge"
+import { deployerFromCreationTx } from "@/lib/creationTx"
 import { getPool } from "@/lib/dbPool"
 
 const pool = getPool()
@@ -127,9 +128,10 @@ export async function POST(req: NextRequest) {
   const email = payload.email
 
   // 3. Server-side fetch of the on-chain deployer (never accept client-supplied).
-  const onChainDeployer = await fetchDeployer(addr)
+  //    Explorer first; otherwise the deployment tx the claimant supplied, read over RPC.
+  const onChainDeployer = (await fetchDeployer(addr)) ?? (await deployerFromCreationTx(addr, payload.deploy_tx))
   if (!onChainDeployer) {
-    return NextResponse.json({ error: "Couldn't verify deployer on Arc. Try again in a few minutes." }, { status: 502 })
+    return NextResponse.json({ error: "Couldn't confirm who deployed this contract. Add the transaction that deployed it and try again." }, { status: 422 })
   }
 
   // 4. Verify the off-chain signature: EOA personal_sign OR EIP-1271 contract wallet.
