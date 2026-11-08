@@ -56,6 +56,9 @@ const nextConfig: NextConfig = {
       { source: "/tx/:hash",       destination: `${ARC_EXPLORER_URL}/tx/:hash`,       permanent: false },
       { source: "/address/:addr",  destination: `${ARC_EXPLORER_URL}/address/:addr`,  permanent: false },
       { source: "/bridge",         destination: "/",                                  permanent: false },
+      { source: "/approvals",      destination: ARC_EXPLORER_URL,                     permanent: false },
+      // The query string (?q=) is carried over to the explorer search
+      { source: "/search",         destination: `${ARC_EXPLORER_URL}/search-results`, permanent: false },
     ]
   },
   async rewrites() {

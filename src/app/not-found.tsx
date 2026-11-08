@@ -59,9 +59,9 @@ export default function NotFound() {
               style={{ height: "40px", padding: "0 22px", background: "transparent", color: "var(--t2, #6b7da8)", fontSize: "13px", fontWeight: 500, border: "1px solid var(--bdr, rgba(255,255,255,0.06))", borderRadius: "9px", cursor: "pointer", fontFamily: "'Geist', sans-serif" }}>
               Go back
             </button>
-            <button onClick={() => window.location.href = "/search"}
+            <button onClick={() => window.location.href = "/ecosystem"}
               style={{ height: "40px", padding: "0 22px", background: "transparent", color: "#8aaeff", fontSize: "13px", fontWeight: 500, border: "1px solid rgba(26,86,255,0.25)", borderRadius: "9px", cursor: "pointer", fontFamily: "'Geist', sans-serif" }}>
-              Search Arc
+              Browse Ecosystem
             </button>
           </div>
 

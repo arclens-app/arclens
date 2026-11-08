@@ -309,9 +309,7 @@ export default function BuilderPage() {
   }
 
   const BUILDER_STATS = [
-    { label: "Contracts Deployed", value: fmtNum(stats.contractsDeployed), color: "#8aaeff", sub: "Smart contracts on Arc" },
     { label: "Projects Shipped",   value: fmtNum(stats.projectsShipped),   color: usdc,      sub: "Live on Arc Ecosystem" },
-    { label: "Contract Activity",  value: fmtNum(stats.contractActivity),   color: arc,       sub: "Txns on their contracts" },
   ]
 
   return (
@@ -616,7 +614,7 @@ export default function BuilderPage() {
             })()}
 
             {/* BUILDER STATS */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px", marginBottom: "20px" }}>
+            <div style={{ display: "grid", gridTemplateColumns: `repeat(${BUILDER_STATS.length}, 1fr)`, gap: "12px", marginBottom: "20px" }}>
               {BUILDER_STATS.map(s => (
                 <div key={s.label} style={{ background: surf, border: "1px solid " + bdr, borderRadius: "12px", padding: "20px 18px" }}>
                   <div style={{ fontSize: "24px", fontWeight: 700, color: s.color, letterSpacing: "-0.03em", marginBottom: "4px" }}>{s.value}</div>

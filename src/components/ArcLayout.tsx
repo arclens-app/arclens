@@ -20,9 +20,6 @@ const NAV = [
     { id: "events",       label: "Events",            icon: "◆", href: "/events" },
     { id: "start",        label: "Arc Beginners",     icon: "◈", href: "/start" },
   ]},
-  { section: "TOOLS", items: [
-    { id: "approvals",    label: "Approval Manager",  icon: "⚠", href: "/approvals", tag: "SAFETY" },
-  ]},
   { section: "DEVELOPERS", items: [
     { id: "builders",     label: "Builder Profiles",  icon: "◎", href: "/builders" },
     { id: "dev",          label: "Dev Console",       icon: "⌘", href: "/dev" },
@@ -171,9 +168,11 @@ export default function ArcLayout({ children, active, lockDark }: { children: Re
 
   async function fetchWalletBal(addr: string) {
     try {
-      const res  = await fetch("/api/blockscout?path=" + encodeURIComponent("v2/addresses/" + addr))
+      const res  = await fetch("/api/wallet-balances/" + addr)
       const data = await res.json()
-      const bal  = Number(data.coin_balance || 0) / 1e18
+      const usdc = (data.balances || []).find((b: { symbol: string }) => b.symbol === "USDC")
+      if (!usdc) throw new Error("No balance")
+      const bal  = Number(usdc.amount)
       const balStr = "$" + bal.toLocaleString(undefined, { maximumFractionDigits: 2 })
       useArcStore.setState(s => ({ walletBal: balStr, myProject: s.myProject }))
     } catch { useArcStore.setState({ walletBal: null }) }
@@ -665,7 +664,7 @@ export default function ArcLayout({ children, active, lockDark }: { children: Re
     if (/^0x[0-9a-fA-F]{40}$/i.test(q)) { window.open(`${ARC_EXPLORER_URL}/address/${q}`, "_blank", "noopener,noreferrer"); return }
     if (/^0x[0-9a-fA-F]{64}$/i.test(q)) { window.open(`${ARC_EXPLORER_URL}/tx/${q}`, "_blank", "noopener,noreferrer"); return }
     if (/^\d+$/.test(q)) { window.open(`${ARC_EXPLORER_URL}/block/${q}`, "_blank", "noopener,noreferrer"); return }
-    window.location.href = "/search?q=" + encodeURIComponent(q)
+    window.open(`${ARC_EXPLORER_URL}/search-results?q=${encodeURIComponent(q)}`, "_blank", "noopener,noreferrer")
   }
 
   function addNetwork() {

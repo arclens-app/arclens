@@ -4,14 +4,13 @@ import ArcLayout from "@/components/ArcLayout"
 import { useArcStore } from "@/store/arc"
 import { ADD_CHAIN_PARAMS, ARC_CHAIN_ID, ARC_CHAIN_ID_HEX, ARC_CHAIN_NAME, ARC_IS_MAINNET, ARC_NETWORK, ARC_RPC_HTTP, CIRCLE_BLOCKCHAIN } from "@/lib/constants"
 
-async function rpc(method: string, params: unknown[] = []) {
-  const res = await fetch("/api/rpc", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ jsonrpc: "2.0", method, params, id: 1 }),
-  })
+// Block number and gas price come from the cached /api/arc-status, since the public
+// RPC rejects many direct browser requests
+async function rpc(method: "eth_blockNumber" | "eth_gasPrice") {
+  const res = await fetch("/api/arc-status")
   const data = await res.json()
-  return data.result
+  if (method === "eth_blockNumber") return "0x" + Number(data.blockNumber).toString(16)
+  return "0x" + BigInt(data.gasPriceWei).toString(16)
 }
 
 interface ChainStat { label: string; value: string; color: string; sub: string }

@@ -3,12 +3,11 @@ import { NextRequest, NextResponse } from "next/server"
 import { timingSafeEqual } from "crypto"
 import { privateKeyToAccount } from "viem/accounts"
 import { getPool } from "@/lib/dbPool"
-import { ARC_CHAIN_ID, ARC_EXPLORER_API } from "@/lib/constants"
+import { ARC_CHAIN_ID, ARC_RPC_HTTP } from "@/lib/constants"
 
 const pool = getPool()
 
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || ""
-const ARCSCAN        = ARC_EXPLORER_API
 
 // Resolve the payout (DCW) address from any of these, in order of preference:
 //   1. PAYOUT_WALLET_ADDRESS               — explicit env (preferred)
@@ -64,7 +63,11 @@ export async function GET(req: NextRequest) {
     // is the single number we care about. We do NOT also sum the ERC20 view —
     // it's the same balance under a different lens and double-counts.
     const [coinRes, commitRes] = await Promise.all([
-      fetch(`${ARCSCAN}/addresses/${payoutAddr}`, { headers: { Accept: "application/json" } }),
+      fetch(ARC_RPC_HTTP, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_getBalance", params: [payoutAddr, "latest"] }),
+        signal: AbortSignal.timeout(8000),
+      }),
       pool.query(`
         SELECT COALESCE(SUM(
           (c.total_slots - (
@@ -89,12 +92,13 @@ export async function GET(req: NextRequest) {
     if (coinRes.ok) {
       try {
         const data = await coinRes.json()
-        usdc = Number(data.coin_balance || 0) / 1e18
+        if (!data.result) throw new Error("No balance")
+        usdc = Number(BigInt(data.result)) / 1e18
       } catch {
-        fetchError = "Arcscan returned malformed JSON"
+        fetchError = "Arc RPC returned no balance"
       }
     } else {
-      fetchError = `Arcscan responded ${coinRes.status}`
+      fetchError = `Arc RPC responded ${coinRes.status}`
     }
 
     const committed = Number(commitRes.rows[0]?.committed || 0)

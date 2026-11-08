@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react"
 import ArcLayout from "@/components/ArcLayout"
 import { useArcStore } from "@/store/arc"
-import { ARC_CHAIN_NAME, ARC_EXPLORER_URL } from "@/lib/constants"
+import { ARC_CHAIN_NAME, ARC_EXPLORER_URL, ARC_RPC_HTTP } from "@/lib/constants"
 
 const PROTECTED_NAMES = ["usdc","circle","arc bridge","arclens","uniswap","aave","compound","metamask","official","verified"]
 
@@ -122,25 +122,14 @@ export default function RegistryPage() {
     setWarnings([])
     try {
       // Check contract exists
-      const codeRes  = await fetch("/api/rpc", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", method: "eth_getCode", params: [addr.trim(), "latest"], id: 1 }) })
+      const codeRes  = await fetch(ARC_RPC_HTTP, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", method: "eth_getCode", params: [addr.trim(), "latest"], id: 1 }) })
       const codeData = await codeRes.json()
       if (!codeData.result || codeData.result === "0x") {
         alert(`This address has no contract code on ${ARC_CHAIN_NAME}. Are you on the right network?`); return
       }
 
-      // Get deployer from Blockscout — FIX: was always setting null due to broken ternary
-      const bsRes  = await fetch("/api/blockscout?path=v2/addresses/" + addr.trim())
-      const bsData = await bsRes.json()
-      let deployerAddr = bsData.creator_address_hash || ""
-
-      // Fallback: try smart-contracts endpoint if address lookup didn't return deployer
-      if (!deployerAddr) {
-        const scRes  = await fetch("/api/blockscout?path=v2/smart-contracts/" + addr.trim())
-        const scData = await scRes.json()
-        deployerAddr = scData.deployer_address || scData.creator_address_hash || ""
-      }
-
-      setDeployer(deployerAddr)
+      // The deployer itself is checked on the server when the claim is submitted
+      setDeployer("")
       setDeployerChecked(true)
 
       // Name warnings

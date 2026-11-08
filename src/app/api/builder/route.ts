@@ -5,7 +5,7 @@ import { verifyMessage } from "viem"
 import { enforce } from "@/lib/ratelimit"
 import { getSession } from "@/lib/session"
 import { getPool } from "@/lib/dbPool"
-import { ARC_EXPLORER_API } from "@/lib/constants"
+
 
 const pool = getPool()
 
@@ -128,41 +128,12 @@ export async function GET(req: NextRequest) {
       .map((p: any) => p.contract as string | null)
       .filter((c): c is string => !!c && /^0x[0-9a-fA-F]{40}$/i.test(c))
 
-    let contractsDeployed = 0
-    let contractActivity  = 0
-    let firstSeen: string | null = null
-
-    try {
-      const [txsRes, ...contractRes] = await Promise.all([
-        fetch(`${ARC_EXPLORER_API}/addresses/${address}/transactions?limit=50`, {
-          headers: { Accept: "application/json" },
-          next: { revalidate: 60 },
-        }),
-        ...contractAddresses.map(c =>
-          fetch(`${ARC_EXPLORER_API}/addresses/${c}`, {
-            headers: { Accept: "application/json" },
-            next: { revalidate: 60 },
-          })
-        ),
-      ])
-
-      if (txsRes.ok) {
-        const data = await txsRes.json()
-        const txs: any[] = data.items || []
-        contractsDeployed = txs.filter(
-          (t: any) => t.from?.hash?.toLowerCase() === address && t.created_contract != null
-        ).length
-        const oldest = txs[txs.length - 1]
-        if (oldest?.timestamp) firstSeen = oldest.timestamp
-      }
-
-      for (const res of contractRes) {
-        if (res?.ok) {
-          const d = await res.json()
-          contractActivity += parseInt(d.transactions_count || "0")
-        }
-      }
-    } catch {}
+    // On-chain history stats came from the explorer API, which no longer serves
+    // other sites; the profile links to the explorer instead
+    void contractAddresses
+    const contractsDeployed = 0
+    const contractActivity  = 0
+    const firstSeen: string | null = null
 
     return NextResponse.json({
       // email is intentionally excluded from the public response — private field
