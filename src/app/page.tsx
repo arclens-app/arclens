@@ -2,7 +2,7 @@
 import { useEffect, useState, useRef } from "react"
 import { safeExternalUrl } from "@/lib/submissionGuards"
 import ArcLayout from "@/components/ArcLayout"
-import { ARC_CHAIN_ID, ARC_CHAIN_NAME } from "@/lib/constants"
+import { ARC_CHAIN_ID, ARC_CHAIN_NAME, ARC_EXPLORER_URL } from "@/lib/constants"
 import { imageSrc } from "@/lib/imageSrc"
 
 interface Project {
@@ -643,13 +643,13 @@ export default function HomePage() {
                 <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: usdc, animation: "hpulse 2s infinite" }} />
                 <span style={{ fontSize: "13px", fontWeight: 600, color: "#e8ecff" }}>Live Blocks</span>
               </div>
-              <a href="/overview" style={{ fontSize: "11px", fontFamily: mono, color: link, textDecoration: "none", opacity: 0.6 }}>Full explorer →</a>
+              <a href={ARC_EXPLORER_URL} target="_blank" rel="noopener noreferrer" style={{ fontSize: "11px", fontFamily: mono, color: link, textDecoration: "none", opacity: 0.6 }}>Full explorer →</a>
             </div>
             {recentBlocks.length === 0 ? (
               <div style={{ padding: "48px 0", textAlign: "center", fontFamily: mono, fontSize: "11px", color: t3 }}>Connecting...</div>
             ) : recentBlocks.map((b: any, i: number) => (
               <div key={b.number}
-                onClick={() => window.location.href = "/overview"}
+                onClick={() => window.open(`${ARC_EXPLORER_URL}/block/${b.number}`, "_blank", "noopener,noreferrer")}
                 onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.02)")}
                 onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
                 style={{ display: "flex", alignItems: "center", gap: "14px", padding: "16px 10px", borderBottom: `1px solid rgba(255,255,255,0.03)`, cursor: "pointer", transition: "background .1s", borderRadius: "6px" }}>
@@ -674,7 +674,7 @@ export default function HomePage() {
             Your home for<br />everything Arc.
           </h2>
           <div style={{ display: "flex", gap: "12px", justifyContent: "center", flexWrap: "wrap" }}>
-            <a href="/overview" style={{ height: "46px", padding: "0 32px", background: arc, color: "#fff", fontSize: "14px", fontWeight: 600, borderRadius: "10px", textDecoration: "none", display: "inline-flex", alignItems: "center" }}>
+            <a href={ARC_EXPLORER_URL} target="_blank" rel="noopener noreferrer" style={{ height: "46px", padding: "0 32px", background: arc, color: "#fff", fontSize: "14px", fontWeight: 600, borderRadius: "10px", textDecoration: "none", display: "inline-flex", alignItems: "center" }}>
               Explore the Chain
             </a>
             <a href="/ecosystem" style={{ height: "46px", padding: "0 32px", background: "transparent", color: "#e8ecff", fontSize: "14px", fontWeight: 500, borderRadius: "10px", textDecoration: "none", display: "inline-flex", alignItems: "center", border: `1px solid rgba(255,255,255,0.1)` }}>

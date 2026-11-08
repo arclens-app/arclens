@@ -12,7 +12,7 @@
 import { tool, jsonSchema } from "ai"
 import { getPayoutStats, getBuilderBoard } from "@/lib/lensPay"
 import { getPool } from "@/lib/dbPool"
-import { ARC_CHAIN_ID, ARC_MAINNET_CHAIN_ID, ARC_RPC_HTTP } from "@/lib/constants"
+import { ARC_CHAIN_ID, ARC_EXPLORER_URL, ARC_MAINNET_CHAIN_ID, ARC_RPC_HTTP } from "@/lib/constants"
 import { curatedMainnetProjectSlugs, isCuratedMainnetProject } from "@/lib/mainnetAvailability"
 
 const pool = getPool()
@@ -435,7 +435,7 @@ export function buildTools() {
             value_usdc: valueUsdc > 0 ? "$" + valueUsdc.toFixed(6) : "$0 (a contract call, e.g. an ERC-20 transfer)",
             status: receipt ? (hexToInt(receipt.status) === 1 ? "success" : "failed") : "pending",
             block: tx.blockNumber ? hexToInt(tx.blockNumber).toLocaleString() : null,
-            link: `/tx/${h}`,
+            link: `${ARC_EXPLORER_URL}/tx/${h}`,
           }
         } catch { return { found: false, note: "Couldn't reach the Arc RPC just now." } }
       },
@@ -459,7 +459,7 @@ export function buildTools() {
             found: true, address: a,
             usdc_balance: "$" + (hexToInt(balHex) / 1e18).toFixed(4),
             tx_count: hexToInt(cntHex),
-            link: `/address/${a}`,
+            link: `${ARC_EXPLORER_URL}/address/${a}`,
           }
         } catch { return { found: false, note: "Couldn't reach the Arc RPC just now." } }
       },

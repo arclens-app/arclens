@@ -14,6 +14,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { usePathname } from "next/navigation"
 import LensFace, { type LensState } from "@/components/LensFace"
 import { imageSrc } from "@/lib/imageSrc"
+import { ARC_EXPLORER_URL } from "@/lib/constants"
 
 interface Msg {
   role: "user" | "assistant"
@@ -481,7 +482,7 @@ function renderCards(cards: DataCard[]): React.ReactNode {
               {d.block && <Stat label="Block" value={d.block} />}
             </div>
           </div>
-          {d.link && <a href={d.link} style={{ display: "block", padding: "10px 14px", borderTop: `1px solid ${BDR}`, fontFamily: MONO, fontSize: "11px", color: ARC, textDecoration: "none" }}>View on explorer →</a>}
+          {d.link && <a href={d.link} target="_blank" rel="noopener noreferrer" style={{ display: "block", padding: "10px 14px", borderTop: `1px solid ${BDR}`, fontFamily: MONO, fontSize: "11px", color: ARC, textDecoration: "none" }}>View on explorer →</a>}
         </CardShell>
       )
     }
@@ -497,7 +498,7 @@ function renderCards(cards: DataCard[]): React.ReactNode {
               <Stat label="Transactions" value={String(d.tx_count ?? "—")} />
             </div>
           </div>
-          {d.link && <a href={d.link} style={{ display: "block", padding: "10px 14px", borderTop: `1px solid ${BDR}`, fontFamily: MONO, fontSize: "11px", color: ARC, textDecoration: "none" }}>View on explorer →</a>}
+          {d.link && <a href={d.link} target="_blank" rel="noopener noreferrer" style={{ display: "block", padding: "10px 14px", borderTop: `1px solid ${BDR}`, fontFamily: MONO, fontSize: "11px", color: ARC, textDecoration: "none" }}>View on explorer →</a>}
         </CardShell>
       )
     }
@@ -588,7 +589,7 @@ function renderPayout(p: PayoutTrace): React.ReactNode {
       {rows.map((b, i) => {
         const accruedRow = b.status === "accrued"
         return (
-          <a key={`p${i}`} href={b.txHash ? `/tx/${b.txHash}` : `/ecosystem/${b.slug}`}
+          <a key={`p${i}`} href={b.txHash ? `${ARC_EXPLORER_URL}/tx/${b.txHash}` : `/ecosystem/${b.slug}`} {...(b.txHash ? { target: "_blank", rel: "noopener noreferrer" } : {})}
              style={{ display: "flex", alignItems: "center", gap: "7px", textDecoration: "none", color: T1, padding: "3px 0", fontSize: "12px" }}>
             <span style={{ flexShrink: 0 }}>🪙</span>
             <span style={{ flex: 1, minWidth: 0, color: T2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>

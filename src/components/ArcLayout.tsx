@@ -4,7 +4,7 @@ import { useArcStore } from "@/store/arc"
 import { detectWallets, EIP6963Provider } from "@/context/web3modal"
 import ArcLensAI from "@/components/ArcLensAI"
 import WalletPanel from "@/components/WalletPanel"
-import { ADD_CHAIN_PARAMS, ARC_CHAIN_ID, ARC_CHAIN_NAME } from "@/lib/constants"
+import { ADD_CHAIN_PARAMS, ARC_CHAIN_ID, ARC_CHAIN_NAME, ARC_EXPLORER_URL } from "@/lib/constants"
 import { pollWhileVisible } from "@/lib/pollWhileVisible"
 
 const NAV = [
@@ -19,10 +19,6 @@ const NAV = [
     { id: "trials",       label: "Arc Trials",        icon: "✦", href: "/trials" },
     { id: "events",       label: "Events",            icon: "◆", href: "/events" },
     { id: "start",        label: "Arc Beginners",     icon: "◈", href: "/start" },
-  ]},
-  { section: "EXPLORER", items: [
-    { id: "overview",     label: "Overview",          icon: "◈", href: "/overview" },
-    { id: "transactions", label: "Transactions",      icon: "⇄", href: "/transactions" },
   ]},
   { section: "TOOLS", items: [
     { id: "approvals",    label: "Approval Manager",  icon: "⚠", href: "/approvals", tag: "SAFETY" },
@@ -666,9 +662,9 @@ export default function ArcLayout({ children, active, lockDark }: { children: Re
     const q = searchQ.trim().replace(/\s/g, "")
     if (!q) return
     setSearchQ("")
-    if (/^0x[0-9a-fA-F]{40}$/i.test(q)) { window.location.href = "/address/" + q; return }
-    if (/^0x[0-9a-fA-F]{64}$/i.test(q)) { window.location.href = "/tx/" + q; return }
-    if (/^\d+$/.test(q)) { window.location.href = "/blocks"; return }
+    if (/^0x[0-9a-fA-F]{40}$/i.test(q)) { window.open(`${ARC_EXPLORER_URL}/address/${q}`, "_blank", "noopener,noreferrer"); return }
+    if (/^0x[0-9a-fA-F]{64}$/i.test(q)) { window.open(`${ARC_EXPLORER_URL}/tx/${q}`, "_blank", "noopener,noreferrer"); return }
+    if (/^\d+$/.test(q)) { window.open(`${ARC_EXPLORER_URL}/block/${q}`, "_blank", "noopener,noreferrer"); return }
     window.location.href = "/search?q=" + encodeURIComponent(q)
   }
 
@@ -826,7 +822,7 @@ export default function ArcLayout({ children, active, lockDark }: { children: Re
                 <div style={{ fontSize: "9.5px", fontFamily: mono, color: usdc }}>Connected</div>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "4px" }}>
-                <div onClick={() => { window.location.href = "/address/" + walletAddr; setSidebarOpen(false) }}
+                <div onClick={() => { window.open(`${ARC_EXPLORER_URL}/address/${walletAddr}`, "_blank", "noopener,noreferrer"); setSidebarOpen(false) }}
                   style={{ fontSize: "10.5px", fontFamily: mono, color: "#8aaeff", cursor: "pointer", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>
                   {walletAddr.slice(0,8)}...{walletAddr.slice(-6)}
                 </div>

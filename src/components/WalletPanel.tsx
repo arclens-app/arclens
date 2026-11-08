@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useState } from "react"
 import { parseUnits, isAddress } from "ethers"
 import { circleRestorePin, circleSendTransaction } from "@/lib/circleSign"
-import { CIRBTC_ADDRESS, EURC_ADDRESS, USDC_ADDRESS } from "@/lib/constants"
+import { ARC_EXPLORER_URL, CIRBTC_ADDRESS, EURC_ADDRESS, USDC_ADDRESS } from "@/lib/constants"
 
 // Supported Arc assets. cirBTC deliberately has no guessed dollar price: the
 // wallet reads its balance from chain but excludes it from the fiat total.
@@ -249,7 +249,7 @@ export default function WalletPanel({ open, onClose, walletAddr, walletType, ema
               <div style={{ display: "flex", gap: "10px" }}>
                 {isCircle
                   ? <button onClick={() => { resetSend(); setView("send") }} style={primaryBtn}><SendIcon /> Send</button>
-                  : <a href={"/address/" + walletAddr} style={{ ...primaryBtn, textDecoration: "none" }}><SendIcon /> Manage</a>}
+                  : <a href={`${ARC_EXPLORER_URL}/address/${walletAddr}`} target="_blank" rel="noopener noreferrer" style={{ ...primaryBtn, textDecoration: "none" }}><SendIcon /> Activity</a>}
                 <button onClick={() => setView("receive")} style={ghostBtn}><RecvIcon /> Receive</button>
               </div>
               {!isCircle && <div style={{ marginTop: "12px", fontSize: "11px", color: T3, lineHeight: 1.6 }}>Sending is handled by your own wallet. Receive works for everyone.</div>}
@@ -298,7 +298,7 @@ export default function WalletPanel({ open, onClose, walletAddr, walletType, ema
                   <div style={{ width: 56, height: 56, borderRadius: "50%", background: "rgba(0,200,150,0.12)", color: GREEN, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "26px", margin: "0 auto 16px" }}>✓</div>
                   <div style={{ fontSize: "18px", fontWeight: 700 }}>Sent {fmtAmount(amount, token.symbol)} {token.symbol}</div>
                   <div style={{ fontSize: "12.5px", color: T2, margin: "6px 0 20px" }}>to {to.slice(0, 8)}…{to.slice(-6)}</div>
-                  <a href={`/tx/${txHash}`} style={{ ...ghostBtn, display: "inline-flex", textDecoration: "none" }}>View on explorer</a>
+                  <a href={`${ARC_EXPLORER_URL}/tx/${txHash}`} target="_blank" rel="noopener noreferrer" style={{ ...ghostBtn, display: "inline-flex", textDecoration: "none" }}>View on explorer</a>
                   <button onClick={() => { resetSend(); setView("overview") }} style={{ ...primaryBtn, width: "100%", marginTop: "12px", justifyContent: "center" }}>Done</button>
                 </div>
               ) : confirming ? (

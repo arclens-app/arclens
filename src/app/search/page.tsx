@@ -3,7 +3,7 @@ import { useEffect, useState, useRef } from "react"
 import { useSearchParams } from "next/navigation"
 import { Suspense } from "react"
 import ArcLayout from "@/components/ArcLayout"
-import { ARC_CHAIN_NAME } from "@/lib/constants"
+import { ARC_CHAIN_NAME, ARC_EXPLORER_URL } from "@/lib/constants"
 
 function timeAgo(ts: number) {
   const s = Math.floor(Date.now() / 1000) - ts
@@ -123,9 +123,9 @@ function SearchContent() {
   async function runSearch(q: string) {
     if (!q.trim()) return
     // Direct route for addresses and hashes
-    if (/^0x[0-9a-fA-F]{40}$/.test(q.trim())) { window.location.href = "/address/" + q.trim(); return }
-    if (/^0x[0-9a-fA-F]{64}$/.test(q.trim())) { window.location.href = "/tx/" + q.trim(); return }
-    if (/^\d+$/.test(q.trim())) { window.location.href = "/blocks"; return }
+    if (/^0x[0-9a-fA-F]{40}$/.test(q.trim())) { window.location.href = `${ARC_EXPLORER_URL}/address/${q.trim()}`; return }
+    if (/^0x[0-9a-fA-F]{64}$/.test(q.trim())) { window.location.href = `${ARC_EXPLORER_URL}/tx/${q.trim()}`; return }
+    if (/^\d+$/.test(q.trim())) { window.location.href = `${ARC_EXPLORER_URL}/block/${q.trim()}`; return }
 
     setLoading(true); setAiResult(null); setRows([])
     try {
@@ -202,7 +202,7 @@ function SearchContent() {
                   <span style={{ fontSize:"11px", fontFamily:mono, color:t3 }}>Looking up address on {ARC_CHAIN_NAME}...</span>
                 </div>
               ) : addrPreview && (
-                <div onClick={() => window.location.href="/address/"+addrPreview.address}
+                <div onClick={() => window.open(`${ARC_EXPLORER_URL}/address/${addrPreview.address}`, "_blank", "noopener,noreferrer")}
                   onMouseEnter={e => (e.currentTarget.style.background=surf2)}
                   onMouseLeave={e => (e.currentTarget.style.background="transparent")}
                   style={{ padding:"14px 18px", cursor:"pointer", transition:"background .1s" }}>
@@ -295,8 +295,8 @@ function SearchContent() {
             ) : rows.map((row, i) => (
               <div key={row.hash+i}
                 onClick={() => {
-                  if (row.label==="holder"||row.label==="contract") window.location.href="/address/"+row.from
-                  else window.location.href="/tx/"+row.hash
+                  if (row.label==="holder"||row.label==="contract") window.open(`${ARC_EXPLORER_URL}/address/${row.from}`, "_blank", "noopener,noreferrer")
+                  else window.open(`${ARC_EXPLORER_URL}/tx/${row.hash}`, "_blank", "noopener,noreferrer")
                 }}
                 onMouseEnter={e => (e.currentTarget.style.background=surf2)}
                 onMouseLeave={e => (e.currentTarget.style.background="transparent")}

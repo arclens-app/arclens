@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react"
 import ArcLayout from "@/components/ArcLayout"
 import { NodeGuideSection, useColors } from "@/components/NodeGuideContent"
-import { ADD_CHAIN_PARAMS, ARC_CHAIN_ID, ARC_CHAIN_ID_HEX, ARC_CHAIN_NAME, ARC_IS_MAINNET, ARC_RPC_HTTP, ARC_RPC_WS } from "@/lib/constants"
+import { ADD_CHAIN_PARAMS, ARC_CHAIN_ID, ARC_CHAIN_ID_HEX, ARC_CHAIN_NAME, ARC_EXPLORER_URL, ARC_IS_MAINNET, ARC_RPC_HTTP, ARC_RPC_WS } from "@/lib/constants"
 
 const CHAIN = ADD_CHAIN_PARAMS
 
@@ -328,7 +328,7 @@ export default function StartPage() {
             {[
               { n: "01", title: "Add Arc to your wallet", body: `Arc works with Rabby, MetaMask, or any EVM wallet. One click adds ${ARC_CHAIN_NAME} automatically.`, extra: <><AddNetBtn added={netAdded} error={netError} onAdd={addNetwork} /><NetBox mono={mono} surf2={surf2} t2={t2} t3={t3} link={link} usdc={usdc} /></> },
               { n: "02", title: "Get testnet USDC", body: "Arc gas is paid in USDC. Get free testnet USDC in 30 seconds — paste your address and request.", extra: <Row><FlatLink href="https://faucets.chain.link/arc-testnet" label="Chainlink Faucet" /><FlatLink href="https://faucet.circle.com" label="Circle Faucet" /></Row> },
-              { n: "03", title: "Make your first transaction", body: "Open ArcLens Explorer and watch live blocks. Send USDC to any address — gas costs fractions of a cent.", extra: <Row><FlatLink href="/overview" label="Open Explorer" /><FlatLink href="/wallets" label="Wallet Activity" /></Row> },
+              { n: "03", title: "Make your first transaction", body: "Open the Arc explorer and watch live blocks. Send USDC to any address — gas costs fractions of a cent.", extra: <Row><FlatLink href={ARC_EXPLORER_URL} label="Open Explorer ↗" /><FlatLink href={`${ARC_EXPLORER_URL}/txs`} label="Latest Transactions ↗" /></Row> },
               { n: "04", title: "Try an Arc app", body: "Browse every project building on Arc — DeFi, payments, NFTs, infrastructure. Each has contract details and community reviews.", extra: <FlatLink href="/ecosystem" label="Browse Ecosystem" /> },
               { n: "05", title: "Check upcoming events", body: "Hackathons, community calls, AMAs, and launch events across the Arc ecosystem.", extra: <FlatLink href="/events" label="See Events" /> },
             ].map((s, i, arr) => (
@@ -471,7 +471,7 @@ export default function StartPage() {
             <LM id="L3" n="L3" title="Your contract is live on Arc" deliverable="A deployed contract address starting with 0x" time="30-60 min"
               aiBest="Claude — claude-sonnet-4-5" aiBestHref="https://claude.ai" aiAlt="Gemini 2.5 Pro" aiWhy="Best model for writing clean, safe Solidity — reads your spec and produces deployable code"
               done={done.has("L3")} onToggle={toggleDone}
-              checkpoint={["You have a contract address (0x...) from Remix", "You can find it on ArcLens Explorer — your deploy transaction is there", "You saved the contract ABI — you need it in Landmark 4"]}>
+              checkpoint={["You have a contract address (0x...) from Remix", "You can find it on the Arc explorer — your deploy transaction is there", "You saved the contract ABI — you need it in Landmark 4"]}>
               <SL label="1" title="Generate your contract with AI">
                 <P>Open <a href="https://claude.ai" target="_blank" rel="noopener noreferrer" style={{ color: link }}>Claude.ai</a> (free — use <strong style={{ color: t1 }}>claude-sonnet-4-5</strong>, or claude-sonnet-4-6 if you have Pro) and paste this prompt. Fill in the spec from your Landmark 2 session. The more specific you are, the better the contract.</P>
                 <CodeCard id="contractprompt" label="Contract generation prompt" code={CONTRACT_PROMPT} />

@@ -7,7 +7,7 @@ import { TrustBadge } from "@/components/TrustBadge"
 import { trustBadge } from "@/lib/trustBadge"
 import { safeExternalUrl } from "@/lib/submissionGuards"
 import AskLens from "@/components/AskLens"
-import { ARC_CHAIN_NAME } from "@/lib/constants"
+import { ARC_CHAIN_NAME, ARC_EXPLORER_URL } from "@/lib/constants"
 import { imageSrc } from "@/lib/imageSrc"
 
 function imgSrc(url: string | null): string | null {
@@ -480,7 +480,7 @@ export default function ProjectPage() {
             {twitterUrl       && <a href={twitterUrl}       target="_blank" rel="nofollow ugc noopener noreferrer" style={{ height: "34px", padding: "0 16px", display: "flex", alignItems: "center", background: "transparent", color: t2, fontSize: "12px", fontFamily: mono, border: "1px solid " + bdr, borderRadius: "7px", textDecoration: "none", gap: "6px" }}>𝕏 Twitter</a>}
             {project.github   && <a href={project.github}   target="_blank" rel="nofollow ugc noopener noreferrer" style={{ height: "34px", padding: "0 16px", display: "flex", alignItems: "center", background: "transparent", color: t2, fontSize: "12px", fontFamily: mono, border: "1px solid " + bdr, borderRadius: "7px", textDecoration: "none", gap: "6px" }}>⌥ GitHub</a>}
             {project.discord  && <a href={project.discord}  target="_blank" rel="nofollow ugc noopener noreferrer" style={{ height: "34px", padding: "0 16px", display: "flex", alignItems: "center", background: "transparent", color: t2, fontSize: "12px", fontFamily: mono, border: "1px solid " + bdr, borderRadius: "7px", textDecoration: "none", gap: "6px" }}>Discord</a>}
-            {project.contract && <button onClick={() => window.location.href = "/address/" + project.contract} style={{ height: "34px", padding: "0 16px", display: "flex", alignItems: "center", background: "transparent", color: "#8aaeff", fontSize: "12px", fontFamily: mono, border: "1px solid rgba(26,86,255,0.2)", borderRadius: "7px", cursor: "pointer", gap: "6px" }}>✦ Contract ↗</button>}
+            {project.contract && <button onClick={() => window.open(`${ARC_EXPLORER_URL}/address/${project.contract}`, "_blank", "noopener,noreferrer")} style={{ height: "34px", padding: "0 16px", display: "flex", alignItems: "center", background: "transparent", color: "#8aaeff", fontSize: "12px", fontFamily: mono, border: "1px solid rgba(26,86,255,0.2)", borderRadius: "7px", cursor: "pointer", gap: "6px" }}>✦ Contract ↗</button>}
             <div style={{ flex: 1 }} />
             <AskLens prompt={`Tell me about ${project.name} on Arc: what it does, its real numbers, who built it, and whether it's trusted.`} />
             <button onClick={share} style={{ height: "34px", padding: "0 16px", background: "#1a56ff", color: "#fff", fontSize: "12px", fontFamily: mono, border: "none", borderRadius: "7px", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}>Share on 𝕏</button>
@@ -537,9 +537,9 @@ export default function ProjectPage() {
                 </div>
               )}
             </div>
-            <button onClick={() => window.location.href = "/address/" + project.contract}
+            <button onClick={() => window.open(`${ARC_EXPLORER_URL}/address/${project.contract}`, "_blank", "noopener,noreferrer")}
               style={{ marginTop: "14px", height: "34px", padding: "0 16px", background: "rgba(26,86,255,0.06)", color: "#8aaeff", fontSize: "12px", fontFamily: mono, border: "1px solid rgba(26,86,255,0.2)", borderRadius: "7px", cursor: "pointer" }}>
-              View on ArcLens Explorer ↗
+              View on Arc Explorer ↗
             </button>
           </div>
         )}

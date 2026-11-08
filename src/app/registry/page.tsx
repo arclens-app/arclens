@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react"
 import ArcLayout from "@/components/ArcLayout"
 import { useArcStore } from "@/store/arc"
-import { ARC_CHAIN_NAME } from "@/lib/constants"
+import { ARC_CHAIN_NAME, ARC_EXPLORER_URL } from "@/lib/constants"
 
 const PROTECTED_NAMES = ["usdc","circle","arc bridge","arclens","uniswap","aave","compound","metamask","official","verified"]
 
@@ -486,7 +486,7 @@ export default function RegistryPage() {
               <div style={{ padding: "48px", textAlign: "center", fontFamily: mono, fontSize: "11px", color: "#3a4870" }}>No contracts registered yet. Be the first.</div>
             ) : contracts.map((c, i) => (
               <div key={i}
-                onClick={() => window.location.href = "/address/" + c.address}
+                onClick={() => window.open(`${ARC_EXPLORER_URL}/address/${c.address}`, "_blank", "noopener,noreferrer")}
                 onMouseEnter={e => (e.currentTarget.style.background = "rgba(128,128,128,0.04)")}
                 onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
                 style={{ display: "flex", alignItems: "center", gap: "14px", padding: "13px 18px", borderBottom: "1px solid rgba(128,128,128,0.06)", cursor: "pointer" }}>

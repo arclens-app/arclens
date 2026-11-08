@@ -5,6 +5,7 @@ import ArcLayout from "@/components/ArcLayout"
 import { useArcStore } from "@/store/arc"
 import { detectWallets } from "@/context/web3modal"
 import { imageSrc } from "@/lib/imageSrc"
+import { ARC_EXPLORER_URL } from "@/lib/constants"
 
 // Must mirror the format on the server in src/app/api/builder/route.ts
 function buildClaimMessage(address: string, timestamp: number): string {
@@ -701,7 +702,7 @@ export default function BuilderPage() {
 
             {/* ON-CHAIN ACTIVITY LINK */}
             <div style={{ marginTop: "16px", textAlign: "center" }}>
-              <a href={`/address/${address}`}
+              <a href={`${ARC_EXPLORER_URL}/address/${address}`} target="_blank" rel="noopener noreferrer"
                 style={{ fontSize: "11px", fontFamily: mono, color: t3, textDecoration: "none", transition: "color .12s" }}
                 onMouseEnter={e => e.currentTarget.style.color = t2}
                 onMouseLeave={e => e.currentTarget.style.color = t3}>

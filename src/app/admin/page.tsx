@@ -1501,7 +1501,7 @@ export default function AdminPage() {
                             {expandedContract === c.address ? "Hide ▲" : "Review ▼"}
                           </button>
                           {!c.verified && <ActionBtn onClick={() => act(c.address, "approve", "contracts")} disabled={acting} color="green">Approve</ActionBtn>}
-                          <a href={"/address/"+c.address} target="_blank" rel="noopener noreferrer"
+                          <a href={`${ARC_EXPLORER_URL}/address/${c.address}`} target="_blank" rel="noopener noreferrer"
                             style={{ height:"30px", padding:"0 10px", display:"flex", alignItems:"center", background:"transparent", color:"#8aaeff", fontSize:"11px", border:"1px solid rgba(26,86,255,0.2)", borderRadius:"5px", textDecoration:"none" }}>
                             View ↗
                           </a>

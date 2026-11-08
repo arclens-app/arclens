@@ -9,6 +9,7 @@
 // a `tvl` field with: { latest, series, revenue_series, contracts }.
 
 import { useEffect, useMemo, useState } from "react"
+import { ARC_EXPLORER_URL } from "@/lib/constants"
 
 interface Contract {
   id: number
@@ -359,7 +360,7 @@ export default function TvlCards({ project, tvl, theme, slug }: Props) {
                   fontSize: "11px", fontFamily: mono, alignItems: "center",
                 }}>
                   <div style={{ minWidth: 0 }}>
-                    <a href={`/address/${b.contract_address}`}
+                    <a href={`${ARC_EXPLORER_URL}/address/${b.contract_address}`} target="_blank" rel="noopener noreferrer"
                        style={{ color: ACCENT_S, textDecoration: "none", display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {b.contract_label || `${b.contract_address.slice(0, 8)}…${b.contract_address.slice(-6)}`}
                     </a>
