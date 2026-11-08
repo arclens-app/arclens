@@ -1,5 +1,6 @@
 export const runtime = "nodejs"
 import { NextRequest, NextResponse } from "next/server"
+import { revalidatePath } from "next/cache"
 import { verifyMessage } from "viem"
 import { enforce } from "@/lib/ratelimit"
 import { getSession } from "@/lib/session"
@@ -231,6 +232,8 @@ export async function POST(req: NextRequest) {
        telegram?.trim() || null, email?.trim()?.toLowerCase() || null]
     )
 
+    // Refresh this builder's day-cached page and share image
+    revalidatePath(`/builder/${addr}`, "layout")
     return NextResponse.json({ success: true })
   } catch (err) {
     console.error("[Builder POST]", err)

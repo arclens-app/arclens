@@ -4,6 +4,11 @@ import { getPool } from "@/lib/dbPool"
 const pool = getPool()
 const BASE = process.env.NEXT_PUBLIC_BASE_URL || "https://arclenz.xyz"
 
+// Cached for a day so share previews and crawlers don't re-query the database on every
+// visit. Admin changes refresh it straight away (see revalidatePath in /api/admin)
+export const revalidate = 86400
+export async function generateStaticParams() { return [] }
+
 // Per-builder share preview: a shared /builder/<address> link shows the builder's
 // name, what they've shipped, and their avatar — not the generic site banner.
 export async function generateMetadata(

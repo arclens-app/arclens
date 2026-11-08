@@ -632,6 +632,18 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const res = await handlePost(req)
+  // Any admin change can alter a listing's name, logo or badge, so refresh the day-cached
+  // project, builder and campaign pages and their share images
+  if (res.ok) {
+    revalidatePath("/ecosystem/[id]", "layout")
+    revalidatePath("/builder/[address]", "layout")
+    revalidatePath("/trials/[id]", "layout")
+  }
+  return res
+}
+
+async function handlePost(req: NextRequest) {
   const blocked = await enforce(req, "admin-auth", { limit: 30, windowMs: 60_000 })
   if (blocked) return blocked
 

@@ -7,6 +7,9 @@ import { fileURLToPath } from "url"
 import { getPool } from "@/lib/dbPool"
 
 export const runtime = "nodejs"
+// Drawn once a day per listing instead of on every share or crawl
+export const revalidate = 86400
+export async function generateStaticParams() { return [] }
 export const alt = "Project on ArcLens"
 export const size = { width: 1200, height: 630 }
 export const contentType = "image/png"

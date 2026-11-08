@@ -5,6 +5,11 @@ import { ARC_CHAIN_ID, ARC_CHAIN_NAME } from "@/lib/constants"
 const pool = getPool()
 const BASE = process.env.NEXT_PUBLIC_BASE_URL || "https://arclenz.xyz"
 
+// Cached for a day so share previews and crawlers don't re-query the database on every
+// visit. Admin changes refresh it straight away (see revalidatePath in /api/admin)
+export const revalidate = 86400
+export async function generateStaticParams() { return [] }
+
 export async function generateMetadata(
   { params }: { params: Promise<{ id: string }> }
 ): Promise<Metadata> {

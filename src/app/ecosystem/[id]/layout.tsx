@@ -4,6 +4,11 @@ import { getPool } from "@/lib/dbPool"
 const pool = getPool()
 const BASE = process.env.NEXT_PUBLIC_BASE_URL || "https://arclenz.xyz"
 
+// Cached for a day so share previews and crawlers don't re-query the database on every
+// visit. Admin changes refresh it straight away (see revalidatePath in /api/admin)
+export const revalidate = 86400
+export async function generateStaticParams() { return [] }
+
 // Per-project share preview: a shared /ecosystem/<slug> link shows THIS project's
 // name, trust signal, tagline, and its own logo — not the generic site banner.
 // Mirrors the campaign (trials) generateMetadata pattern already used here.
