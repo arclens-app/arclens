@@ -5,7 +5,7 @@ const pool = getPool()
 
 // This deliberately bypasses the long-lived directory cache. The main
 // directory payload can remain inexpensive to serve, while moderation changes
-// (hide/restore) take effect within a minute instead of hours later.
+// (hide/restore) take effect within five minutes instead of hours later.
 export async function GET() {
   try {
     const result = await pool.query(
@@ -13,7 +13,7 @@ export async function GET() {
     )
     return NextResponse.json(
       { liveProjectIds: result.rows.map(row => String(row.id)) },
-      { headers: { "Cache-Control": "public, max-age=0, s-maxage=60" } },
+      { headers: { "Cache-Control": "public, max-age=0, s-maxage=300" } },
     )
   } catch (error) {
     console.error("[ecosystem/visibility]", error)

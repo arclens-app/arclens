@@ -105,6 +105,11 @@ function parseCookieHeader(header: string | null): Record<string, string> {
   return out
 }
 
+// Readable companion to the httpOnly session cookie. It holds no secret, only
+// "1", so the browser can tell whether a session might exist before asking the
+// server, and anonymous visitors never make that call.
+const SESSION_HINT_COOKIE = "arclens-signed-in"
+
 /** Attach a fresh session cookie to an outgoing response. */
 export function attachSessionCookie(res: NextResponse, data: Omit<SessionData, "iat" | "exp">) {
   const value = signSession(data)
@@ -117,6 +122,15 @@ export function attachSessionCookie(res: NextResponse, data: Omit<SessionData, "
     path:     "/",
     maxAge:   SESSION_TTL_SEC,
   })
+  res.cookies.set({
+    name:     SESSION_HINT_COOKIE,
+    value:    "1",
+    httpOnly: false,
+    secure:   process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path:     "/",
+    maxAge:   SESSION_TTL_SEC,
+  })
 }
 
 export function clearSessionCookie(res: NextResponse) {
@@ -124,6 +138,15 @@ export function clearSessionCookie(res: NextResponse) {
     name:     COOKIE_NAME,
     value:    "",
     httpOnly: true,
+    secure:   process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path:     "/",
+    maxAge:   0,
+  })
+  res.cookies.set({
+    name:     SESSION_HINT_COOKIE,
+    value:    "",
+    httpOnly: false,
     secure:   process.env.NODE_ENV === "production",
     sameSite: "lax",
     path:     "/",
@@ -180,4 +203,4 @@ export function clearOtpProof(res: NextResponse) {
   })
 }
 
-export { COOKIE_NAME as SESSION_COOKIE_NAME }
+export { COOKIE_NAME as SESSION_COOKIE_NAME, SESSION_HINT_COOKIE }

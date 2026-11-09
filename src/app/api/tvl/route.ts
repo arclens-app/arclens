@@ -4,10 +4,8 @@
 // analytics tools can swap us in by URL. All numeric fields are present
 // even when null so consumers don't have to existence-check every field.
 //
-// Cache-Control: served via Vercel's CDN with s-maxage=60 → the function
-// only runs for the first request in each minute under heavy traffic.
-// The indexer writes every 5 min so 60s freshness is overkill — but it
-// keeps lists feeling alive for analysts checking in often.
+// Cache-Control: served from Vercel's CDN for an hour (s-maxage=3600) to stay
+// within the free plan. The TVL indexer crons are paused, so the data changes rarely.
 
 import { NextResponse } from "next/server"
 import { getPool } from "@/lib/dbPool"
@@ -100,7 +98,7 @@ export async function GET() {
       },
       {
         headers: {
-          "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300",
+          "Cache-Control": "public, s-maxage=3600, stale-while-revalidate=86400",
           "Access-Control-Allow-Origin": "*",
         },
       },

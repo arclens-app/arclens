@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
 import { rateLimit, getIp } from "@/lib/ratelimit"
-import { put } from "@vercel/blob"
 
 // 5 MB — anything larger is almost certainly not a profile picture or logo
 const MAX_BYTES = 5 * 1024 * 1024
@@ -55,31 +54,10 @@ export async function POST(req: NextRequest) {
   const bytes = await file.arrayBuffer()
   const safeName = (file.name || "upload").replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 60)
 
-  // ── Primary: Vercel Blob ──────────────────────────────────────────────────
-  // Platform-native, no third-party rate caps. imgbb's free key gets throttled
-  // at campaign scale (220+ testers uploading proof screenshots), which was
-  // surfacing as "image host is busy". Blob scales with the deployment.
-  // A random suffix keeps filenames unique so two testers' "screenshot.png"
-  // don't collide.
-  if (process.env.BLOB_READ_WRITE_TOKEN) {
-    try {
-      const ext  = (safeName.match(/\.[a-z0-9]+$/i)?.[0] || ".png")
-      const rand = Math.random().toString(36).slice(2, 10)
-      const blob = await put(`uploads/${Date.now()}-${rand}${ext}`, bytes, {
-        access: "public",
-        contentType: file.type || "image/png",
-        // Pass the token explicitly rather than relying on the SDK's import-time
-        // env read — guarantees it resolves regardless of when the var is injected.
-        token: process.env.BLOB_READ_WRITE_TOKEN,
-      })
-      return NextResponse.json({ url: blob.url })
-    } catch (e) {
-      console.error("[upload] vercel blob failed, falling back to imgbb", e)
-      // fall through to imgbb
-    }
-  }
-
-  // ── Fallback: imgbb ───────────────────────────────────────────────────────
+  // Uploads go to imgbb. Vercel Blob is no longer used here: on the free plan
+  // every uncached image read counts against a 10k/month operations cap, and
+  // hitting it suspended the store for 30 days (Nov 2026).
+  // ── imgbb ─────────────────────────────────────────────────────────────────
   if (!process.env.IMGBB_API_KEY) {
     return NextResponse.json({ error: "Image hosting isn't configured. Contact support." }, { status: 500 })
   }

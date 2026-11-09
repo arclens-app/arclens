@@ -5,6 +5,7 @@ import { ImageResponse } from "next/og"
 import { readFile } from "fs/promises"
 import { fileURLToPath } from "url"
 import { getPool } from "@/lib/dbPool"
+import { imageSrc } from "@/lib/imageSrc"
 
 export const runtime = "nodejs"
 // Drawn once a day per listing instead of on every share or crawl
@@ -16,6 +17,8 @@ export const contentType = "image/png"
 
 const pool = getPool()
 const BASE = process.env.NEXT_PUBLIC_BASE_URL || "https://arclenz.xyz"
+// Blob files are fetched directly; anything else goes through the image proxy.
+const absolute = (src: string) => (src.startsWith("/") ? BASE + src : src)
 
 export default async function Image({ params }: { params: Promise<{ address: string }> }) {
   const { address } = await params
@@ -57,7 +60,7 @@ export default async function Image({ params }: { params: Promise<{ address: str
   let avatarData: string | null = null
   if (prof?.avatar_url) {
     try {
-      const r = await fetch(`${BASE}/api/image-proxy?url=${encodeURIComponent(prof.avatar_url)}`)
+      const r = await fetch(absolute(imageSrc(prof.avatar_url)))
       const ct = r.headers.get("content-type") || ""
       if (r.ok && ct.startsWith("image/")) {
         const buf = Buffer.from(await r.arrayBuffer())

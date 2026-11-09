@@ -67,7 +67,7 @@ export async function GET() {
     `)
 
     return NextResponse.json({ builders: res.rows }, {
-      headers: { "Cache-Control": "public, s-maxage=120, stale-while-revalidate=300" },
+      headers: { "Cache-Control": "public, s-maxage=1800, stale-while-revalidate=3600" },
     })
   } catch (err) {
     console.error("[Builders GET]", err)

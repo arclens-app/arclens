@@ -14,7 +14,7 @@ export async function GET() {
     const [stats, board] = await Promise.all([getPayoutStats(), getBuilderBoard(100)])
     return NextResponse.json(
       { live: payoutsLive(), ...stats, board },
-      { headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600" } },
+      { headers: { "Cache-Control": "public, s-maxage=1800, stale-while-revalidate=3600" } },
     )
   } catch (e: any) {
     console.error("[lens/board]", e?.message || e)

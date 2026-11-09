@@ -148,7 +148,9 @@ export default function ArcLayout({ children, active, lockDark }: { children: Re
     // Browser storage is a convenience, not the authority. A verified Circle
     // login already has a signed, HTTP-only session cookie, so recover from it
     // if storage was cleared, blocked, or a hot reload interrupted final UI
-    // state after the wallet was created.
+    // state after the wallet was created. Only ask the server when the readable
+    // hint cookie says a session exists, so anonymous visits cost no server call.
+    if (!document.cookie.split(/;s*/).includes("arclens-signed-in=1")) return
     fetch("/api/auth/session", { credentials: "include" })
       .then(r => r.json())
       .then(session => {
@@ -627,7 +629,7 @@ export default function ArcLayout({ children, active, lockDark }: { children: Re
       } catch { setConnected(false) }
     }
     fetchStats()
-    return pollWhileVisible(fetchStats, 30000)
+    return pollWhileVisible(fetchStats, 120000)
   }, [mounted])
 
   useEffect(() => {

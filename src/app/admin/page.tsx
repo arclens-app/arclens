@@ -1,5 +1,6 @@
 ﻿"use client"
 import { useEffect, useState } from "react"
+import { imageSrc } from "@/lib/imageSrc"
 import ArcLayout from "@/components/ArcLayout"
 import { ARC_CHAIN_NAME, ARC_EXPLORER_URL } from "@/lib/constants"
 import { CAMPAIGN_TYPE_LABELS } from "@/lib/campaignTypes"
@@ -1152,7 +1153,7 @@ export default function AdminPage() {
                         <div className="admin-submission-card" style={{ background:surf, border:"1px solid "+bdr, borderRadius:"12px", padding:"18px 22px", display:"flex", alignItems:"center", gap:"16px" }}>
                           <div style={{ width:"44px", height:"44px", borderRadius:"10px", background:"rgba(26,86,255,0.08)", border:"1px solid rgba(26,86,255,0.15)", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", overflow:"hidden" }}>
                             {s.logo_url
-                              ? <img src={`/api/image-proxy?url=${encodeURIComponent(s.logo_url)}`} alt={s.name} style={{ width:"100%", height:"100%", objectFit:"cover" }} onError={e=>(e.currentTarget.style.display="none")} />
+                              ? <img src={imageSrc(s.logo_url)} alt={s.name} style={{ width:"100%", height:"100%", objectFit:"cover" }} onError={e=>(e.currentTarget.style.display="none")} />
                               : <span style={{ fontSize:"16px", fontWeight:700, color:"#8aaeff" }}>{s.name?.[0]}</span>
                             }
                           </div>
@@ -1433,7 +1434,7 @@ export default function AdminPage() {
                     <div key={p.id} style={{ background:surf, border:"1px solid "+bdr, borderRadius:"10px", padding:"14px 18px", display:"flex", alignItems:"center", gap:"14px" }}>
                       <div style={{ width:"38px", height:"38px", borderRadius:"8px", background:"rgba(26,86,255,0.06)", border:"1px solid "+bdr, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", overflow:"hidden" }}>
                         {p.logo_url
-                          ? <img src={`/api/image-proxy?url=${encodeURIComponent(p.logo_url!)}`} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }} onError={e=>(e.currentTarget.style.display="none")} />
+                          ? <img src={imageSrc(p.logo_url!)} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }} onError={e=>(e.currentTarget.style.display="none")} />
                           : <span style={{ fontSize:"13px", fontWeight:700, color:t3 }}>{p.name?.[0]}</span>
                         }
                       </div>
@@ -1684,7 +1685,7 @@ export default function AdminPage() {
                           return (
                             <div key={p.id} style={{ background:surf, border:"1px solid "+bdr, borderRadius:"10px", padding:"12px 16px", display:"flex", alignItems:"center", gap:"12px", flexWrap:"wrap" }}>
                               <div style={{ width:"34px", height:"34px", borderRadius:"8px", overflow:"hidden", background:"rgba(26,86,255,0.06)", border:"1px solid "+bdr, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                                {p.logo_url?<img src={`/api/image-proxy?url=${encodeURIComponent(p.logo_url)}`} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }} onError={e=>(e.currentTarget.style.display="none")} />:<span style={{ fontSize:"13px", fontWeight:700, color:t3 }}>{p.name?.[0]}</span>}
+                                {p.logo_url?<img src={imageSrc(p.logo_url)} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }} onError={e=>(e.currentTarget.style.display="none")} />:<span style={{ fontSize:"13px", fontWeight:700, color:t3 }}>{p.name?.[0]}</span>}
                               </div>
                               <div style={{ minWidth:"120px", flex:"0 0 auto" }}>
                                 <div style={{ fontSize:"12px", fontWeight:600, color:t1 }}>{p.name}</div>
@@ -1743,7 +1744,7 @@ export default function AdminPage() {
                               banner and the project logo would be stretched instead. */}
                           {(c.campaign_logo || c.project_logo) ? (
                             <div style={{ position:"relative", width:"100%", aspectRatio:"16 / 5", background:surf2, borderBottom:"1px solid "+bdr, overflow:"hidden" }}>
-                              <img src={`/api/image-proxy?url=${encodeURIComponent((c.campaign_logo || c.project_logo)!)}`} alt=""
+                              <img src={imageSrc((c.campaign_logo || c.project_logo)!)} alt=""
                                 onError={e => (e.currentTarget.style.display = "none")}
                                 style={{ position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"cover" }} />
                               {!c.campaign_logo && (
@@ -1763,7 +1764,7 @@ export default function AdminPage() {
                               <div style={{ flex:1, minWidth:0 }}>
                                 <div style={{ display:"flex", alignItems:"center", gap:"10px", marginBottom:"6px" }}>
                                   {(c.campaign_logo||c.project_logo) && (
-                                    <img src={`/api/image-proxy?url=${encodeURIComponent((c.campaign_logo||c.project_logo)!)}`} alt="" style={{ width:40,height:40,borderRadius:9,objectFit:"cover",flexShrink:0 }} />
+                                    <img src={imageSrc((c.campaign_logo||c.project_logo)!)} alt="" style={{ width:40,height:40,borderRadius:9,objectFit:"cover",flexShrink:0 }} />
                                   )}
                                   <div>
                                     <div style={{ fontSize:"15px", fontWeight:600, color:t1 }}>{c.title}</div>
@@ -2066,7 +2067,7 @@ export default function AdminPage() {
                                                               {isShot ? (
                                                                 <div style={{ display: "flex", gap: 8, alignItems: "center", flex: 1, minWidth: 0 }}>
                                                                   <a href={value} target="_blank" rel="noopener noreferrer" style={{ flexShrink: 0 }}>
-                                                                    <img src={/\.blob\.vercel-storage\.com\//i.test(value) ? value : `/api/image-proxy?url=${encodeURIComponent(value)}`} alt=""
+                                                                    <img src={/\.blob\.vercel-storage\.com\//i.test(value) ? value : imageSrc(value)} alt=""
                                                                       style={{ width: 48, height: 36, objectFit: "cover", borderRadius: 4, border: "1px solid " + bdr, display: "block", cursor: "zoom-in" }} />
                                                                   </a>
                                                                   <div style={{ flex: 1, minWidth: 0 }}>
@@ -2780,7 +2781,7 @@ export default function AdminPage() {
             <div style={{ display:"flex", alignItems:"center", gap:"14px", marginBottom:"16px", paddingBottom:"16px", borderBottom:"1px solid "+bdr }}>
               <div style={{ width:56, height:56, borderRadius:11, background:surf2, border:"1px solid "+bdr, flexShrink:0, overflow:"hidden", display:"flex", alignItems:"center", justifyContent:"center" }}>
                 {(editForm as any).logo_url
-                  ? <img src={String((editForm as any).logo_url).startsWith("http") ? `/api/image-proxy?url=${encodeURIComponent((editForm as any).logo_url)}` : (editForm as any).logo_url} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }} onError={e=>(e.currentTarget.style.display="none")} />
+                  ? <img src={String((editForm as any).logo_url).startsWith("http") ? imageSrc((editForm as any).logo_url) : (editForm as any).logo_url} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }} onError={e=>(e.currentTarget.style.display="none")} />
                   : <span style={{ fontSize:20, fontWeight:700, color:t3, fontFamily:mono }}>{(editing.name||"?").slice(0,1).toUpperCase()}</span>}
               </div>
               <div>

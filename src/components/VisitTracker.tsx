@@ -1,12 +1,14 @@
 "use client"
-// Cookieless page-visit tracker. Fires one /api/track call per path per browser
-// session (sessionStorage-guarded) so DB writes stay minimal; the server also
-// dedupes per device/path/day. Reuses the same anonymous device id as Lens AI —
-// no cookies, no PII.
+// Cookieless page-visit tracker. Each device records each path at most once per
+// day (localStorage-guarded, matching the server's device/path/day key). Paths
+// are queued and sent together in ONE request when the tab is hidden or closed,
+// so a whole browsing session costs one server call instead of one per page.
+// Reuses the same anonymous device id as Lens AI — no cookies, no PII.
 import { useEffect } from "react"
 import { usePathname } from "next/navigation"
 
 const DEVICE_KEY = "arclens-device-id"
+const QUEUE_KEY  = "arclens-track-queue"
 
 function deviceId(): string {
   try {
@@ -21,24 +23,47 @@ function deviceId(): string {
   } catch { return "" }
 }
 
+function readQueue(): string[] {
+  try { const q = JSON.parse(localStorage.getItem(QUEUE_KEY) || "[]"); return Array.isArray(q) ? q : [] }
+  catch { return [] }
+}
+
+function flush() {
+  const paths = readQueue()
+  if (!paths.length) return
+  const device = deviceId()
+  if (!device) return
+  const body = JSON.stringify({ device, paths: paths.slice(0, 20) })
+  let sent = false
+  try { sent = navigator.sendBeacon?.("/api/track", new Blob([body], { type: "application/json" })) ?? false } catch {}
+  if (!sent) fetch("/api/track", { method: "POST", headers: { "Content-Type": "application/json" }, body, keepalive: true }).catch(() => {})
+  try { localStorage.removeItem(QUEUE_KEY) } catch {}
+}
+
 export default function VisitTracker() {
   const pathname = usePathname()
+
   useEffect(() => {
     if (!pathname) return
-    // Dedupe on the CLIENT to match the server's (device, path, day) key: each
-    // device pings each path at most ONCE per day, across all tabs/sessions — so
-    // we never fire a call the server would just no-op. Minimal by construction.
     const day = new Date().toISOString().slice(0, 10)
     const key = "arclens-tracked:" + pathname + ":" + day
-    try { if (localStorage.getItem(key)) return; localStorage.setItem(key, "1") } catch {}
-    const id = deviceId()
-    if (!id) return
-    fetch("/api/track", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-arclens-device": id },
-      body: JSON.stringify({ path: pathname }),
-      keepalive: true,
-    }).catch(() => {})
+    try {
+      if (localStorage.getItem(key)) return
+      localStorage.setItem(key, "1")
+      const q = readQueue()
+      if (!q.includes(pathname)) localStorage.setItem(QUEUE_KEY, JSON.stringify([...q, pathname]))
+    } catch {}
   }, [pathname])
+
+  useEffect(() => {
+    const onHide = () => { if (document.visibilityState === "hidden") flush() }
+    document.addEventListener("visibilitychange", onHide)
+    window.addEventListener("pagehide", flush)
+    return () => {
+      document.removeEventListener("visibilitychange", onHide)
+      window.removeEventListener("pagehide", flush)
+    }
+  }, [])
+
   return null
 }

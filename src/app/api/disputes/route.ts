@@ -110,7 +110,7 @@ export async function GET(req: NextRequest) {
     for (const row of r.rows) open[row.metric] = Number(row.n)
     return NextResponse.json(
       { open },
-      { headers: { "Cache-Control": "public, s-maxage=30, stale-while-revalidate=60" } },
+      { headers: { "Cache-Control": "public, s-maxage=600, stale-while-revalidate=1800" } },
     )
   } catch (e: any) {
     console.error("[disputes GET]", e)

@@ -267,7 +267,7 @@ export default function ProjectPage() {
       if (data.success) {
         setReviewSuccess(true)
         setShowReviewForm(false)
-        fetch(`/api/reviews?project_id=${project?.id}`)
+        fetch(`/api/reviews?project_id=${project?.id}&fresh=${Date.now()}`, { cache: "no-store" })
           .then(r => r.json())
           .then(d => setReviews(d.reviews || []))
           .catch(() => {})

@@ -45,7 +45,7 @@ export async function GET(req: NextRequest) {
     const attestation = await readAttestation(subject!)
     return NextResponse.json(
       { configured: true, registry, chainId: ARC_CHAIN_ID, subject, slug: projectSlug, attestation },
-      { headers: { "Cache-Control": "public, s-maxage=30, stale-while-revalidate=120" } },
+      { headers: { "Cache-Control": "public, s-maxage=1800, stale-while-revalidate=3600" } },
     )
   } catch (err) {
     console.error("[attestation GET]", err)

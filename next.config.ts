@@ -43,6 +43,11 @@ const nextConfig: NextConfig = {
         source: "/(.*)",
         headers: securityHeaders,
       },
+      {
+        // Logo filenames are fixed per image, so browsers can keep them for a year
+        source: "/logos/:file*",
+        headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }],
+      },
     ]
   },
   // The block explorer pages were retired in favour of the official Arc explorer

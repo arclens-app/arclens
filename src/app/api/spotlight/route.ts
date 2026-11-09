@@ -84,7 +84,7 @@ export async function GET(req: NextRequest) {
       // cache (5 min, with a 15-min stale window) is invisible to viewers but
       // stops a fresh DB query on every single page render. Slight over-shoot
       // of an item's end-time by a few minutes is harmless.
-      headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=900" },
+      headers: { "Cache-Control": "public, s-maxage=1800, stale-while-revalidate=3600" },
     })
   } catch (e: any) {
     console.error("[spotlight GET]", e?.message || e)

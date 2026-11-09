@@ -75,7 +75,7 @@ export async function GET() {
         transactionsPerSecond,
         recentBlocks: blocks.slice(0, 4),
       },
-      { headers: { "Cache-Control": "public, max-age=10, s-maxage=15, stale-while-revalidate=30" } },
+      { headers: { "Cache-Control": "public, max-age=60, s-maxage=120, stale-while-revalidate=300" } },
     )
   } catch (error) {
     console.error("[arc-status]", error)

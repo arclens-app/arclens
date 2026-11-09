@@ -96,7 +96,7 @@ export async function GET(req: NextRequest) {
       [projectId]
     )
     return NextResponse.json({ reviews: result.rows }, {
-      headers: { "Cache-Control": "public, s-maxage=30, stale-while-revalidate=60" },
+      headers: { "Cache-Control": "public, s-maxage=600, stale-while-revalidate=1800" },
     })
   } catch {
     return NextResponse.json({ reviews: [] })

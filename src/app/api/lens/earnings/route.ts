@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
   if (!slug) return NextResponse.json({ error: "slug required" }, { status: 400 })
   try {
     return NextResponse.json(await getProjectEarnings(slug), {
-      headers: { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=180" },
+      headers: { "Cache-Control": "public, s-maxage=1800, stale-while-revalidate=3600" },
     })
   } catch (e: any) {
     console.error("[lens/earnings]", e?.message || e)

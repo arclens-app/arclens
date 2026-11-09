@@ -113,7 +113,7 @@ export async function GET(req: NextRequest) {
       stats:      statsRes.rows[0],
       reputation: repRes.rows[0] || null,
     }, {
-      headers: { "Cache-Control": creator ? "no-store" : "public, s-maxage=30, stale-while-revalidate=60" },
+      headers: { "Cache-Control": creator ? "no-store" : "public, s-maxage=600, stale-while-revalidate=1800" },
     })
   } catch {
     return NextResponse.json({ campaigns: [], stats: null, reputation: null })

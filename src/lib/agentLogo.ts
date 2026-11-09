@@ -13,7 +13,6 @@
 
 import { lookup } from "node:dns/promises"
 import { isIP } from "node:net"
-import { put } from "@vercel/blob"
 
 export const LOGO_MIN_PX = 180
 export const LOGO_RECOMMENDED_PX = 512
@@ -22,7 +21,6 @@ const MAX_REDIRECTS = 3
 const TIMEOUT_MS = 8000
 
 type Kind = "png" | "jpeg" | "webp"
-const MIME: Record<Kind, string> = { png: "image/png", jpeg: "image/jpeg", webp: "image/webp" }
 
 export type LogoCheck =
   | { ok: true; bytes: Uint8Array; kind: Kind; width: number; height: number }
@@ -145,17 +143,21 @@ export async function checkLogo(raw: string): Promise<LogoCheck> {
   return { ok: true, bytes, kind: info.kind, width, height }
 }
 
-/** Copy a checked logo into ArcLens Blob storage, like a web-form upload. */
+/** Copy a checked logo to imgbb, like a web-form upload (see /api/upload). */
 export async function storeLogo(logo: { bytes: Uint8Array; kind: Kind }): Promise<string | null> {
-  const token = process.env.BLOB_READ_WRITE_TOKEN
-  if (!token) return null
+  const key = process.env.IMGBB_API_KEY
+  if (!key) return null
   try {
-    const rand = Math.random().toString(36).slice(2, 10)
     const ext = logo.kind === "jpeg" ? "jpg" : logo.kind
-    const blob = await put(`uploads/${Date.now()}-${rand}.${ext}`, Buffer.from(logo.bytes), { access: "public", contentType: MIME[logo.kind], token })
-    return blob.url
+    const body = new URLSearchParams()
+    body.append("key", key)
+    body.append("image", Buffer.from(logo.bytes).toString("base64"))
+    body.append("name", `logo-${Date.now()}.${ext}`)
+    const res = await fetch("https://api.imgbb.com/1/upload", { method: "POST", body, signal: AbortSignal.timeout(20_000) })
+    const data = await res.json().catch(() => null) as { success?: boolean; data?: { url?: string; display_url?: string } } | null
+    return (res.ok && data?.success && (data.data?.display_url || data.data?.url)) || null
   } catch (e) {
-    console.error("[agentLogo] blob upload failed", e)
+    console.error("[agentLogo] imgbb upload failed", e)
     return null
   }
 }

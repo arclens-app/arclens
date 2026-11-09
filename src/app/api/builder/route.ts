@@ -147,7 +147,7 @@ export async function GET(req: NextRequest) {
         contractActivity,
         firstSeen,
       },
-    }, { headers: { "Cache-Control": isOwner ? "no-store" : "public, s-maxage=60, stale-while-revalidate=120" } })
+    }, { headers: { "Cache-Control": isOwner ? "no-store" : "public, s-maxage=600, stale-while-revalidate=1800" } })
   } catch (err) {
     console.error("[Builder GET]", err)
     return NextResponse.json({ error: "Server error" }, { status: 500 })
